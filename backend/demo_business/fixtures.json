@@ -1,0 +1,63 @@
+{
+  "schema_version": "serveflow-demo-business-v1",
+  "kind": "synthetic-local-demo",
+  "as_of": "2026-10-25T00:00:00Z",
+  "customers": [
+    {"customer_id": "demo-customer-a", "display_name": "演示客户A"},
+    {"customer_id": "demo-customer-b", "display_name": "演示客户B"}
+  ],
+  "orders": [
+    {"order_id": "DEMO-1001", "customer_id": "demo-customer-a", "order_type": "bundle", "currency": "CNY", "total_amount_minor": 169800, "payment_status": "paid", "record_updated_at": "2026-10-24T09:00:00Z"},
+    {"order_id": "DEMO-1002", "customer_id": "demo-customer-a", "order_type": "physical", "currency": "CNY", "total_amount_minor": 89900, "payment_status": "paid", "record_updated_at": "2026-10-24T09:10:00Z"},
+    {"order_id": "DEMO-1003", "customer_id": "demo-customer-a", "order_type": "digital", "currency": "CNY", "total_amount_minor": 3900, "payment_status": "paid", "record_updated_at": "2026-10-24T09:20:00Z"},
+    {"order_id": "DEMO-1004", "customer_id": "demo-customer-a", "order_type": "physical", "currency": "CNY", "total_amount_minor": 29900, "payment_status": "paid", "record_updated_at": "2026-10-24T09:30:00Z"},
+    {"order_id": "DEMO-1005", "customer_id": "demo-customer-b", "order_type": "physical", "currency": "CNY", "total_amount_minor": 69900, "payment_status": "paid", "record_updated_at": "2026-10-24T09:40:00Z"},
+    {"order_id": "DEMO-1006", "customer_id": "demo-customer-a", "order_type": "digital", "currency": "CNY", "total_amount_minor": 9900, "payment_status": "refunded", "record_updated_at": "2026-10-24T09:50:00Z"},
+    {"order_id": "DEMO-1007", "customer_id": "demo-customer-a", "order_type": "physical", "currency": "CNY", "total_amount_minor": 15900, "payment_status": "unpaid", "record_updated_at": "2026-10-24T10:00:00Z"},
+    {"order_id": "DEMO-1008", "customer_id": "demo-customer-a", "order_type": "physical", "currency": "CNY", "total_amount_minor": 49900, "payment_status": "paid", "record_updated_at": "2026-10-24T10:10:00Z"},
+    {"order_id": "DEMO-1009", "customer_id": "demo-customer-a", "order_type": "digital", "currency": "CNY", "total_amount_minor": 12900, "payment_status": "paid", "record_updated_at": "2026-10-24T10:20:00Z"},
+    {"order_id": "DEMO-1010", "customer_id": "demo-customer-a", "order_type": "digital", "currency": "CNY", "total_amount_minor": 3900, "payment_status": "paid", "record_updated_at": "2026-10-24T10:30:00Z"}
+  ],
+  "items": [
+    {"item_id": "I-1001-A", "order_id": "DEMO-1001", "name": "演示家庭中控屏", "item_type": "device", "quantity": 1, "unit_amount_minor": 159900},
+    {"item_id": "I-1001-B", "order_id": "DEMO-1001", "name": "演示桌面支架", "item_type": "accessory", "quantity": 1, "unit_amount_minor": 9900},
+    {"item_id": "I-1002", "order_id": "DEMO-1002", "name": "演示智能音箱预售款", "item_type": "device", "quantity": 1, "unit_amount_minor": 89900},
+    {"item_id": "I-1003", "order_id": "DEMO-1003", "name": "演示家庭云月度订阅", "item_type": "subscription", "quantity": 1, "unit_amount_minor": 3900},
+    {"item_id": "I-1004", "order_id": "DEMO-1004", "name": "演示环境传感器", "item_type": "device", "quantity": 1, "unit_amount_minor": 29900},
+    {"item_id": "I-1005", "order_id": "DEMO-1005", "name": "演示客户B专属设备", "item_type": "device", "quantity": 1, "unit_amount_minor": 69900},
+    {"item_id": "I-1006", "order_id": "DEMO-1006", "name": "演示数字内容包", "item_type": "digital_content", "quantity": 1, "unit_amount_minor": 9900},
+    {"item_id": "I-1007", "order_id": "DEMO-1007", "name": "演示智能插座套装", "item_type": "device", "quantity": 1, "unit_amount_minor": 15900},
+    {"item_id": "I-1008", "order_id": "DEMO-1008", "name": "演示室内摄像头", "item_type": "device", "quantity": 1, "unit_amount_minor": 49900},
+    {"item_id": "I-1009", "order_id": "DEMO-1009", "name": "演示团队协作季度包", "item_type": "subscription", "quantity": 1, "unit_amount_minor": 12900},
+    {"item_id": "I-1010", "order_id": "DEMO-1010", "name": "演示家庭云月度订阅", "item_type": "subscription", "quantity": 1, "unit_amount_minor": 3900}
+  ],
+  "payments": [
+    {"payment_id": "PAY-1001", "order_id": "DEMO-1001", "amount_minor": 169800, "status": "paid", "channel": "demo-wallet", "record_updated_at": "2026-10-24T09:00:00Z"},
+    {"payment_id": "PAY-1002", "order_id": "DEMO-1002", "amount_minor": 89900, "status": "paid", "channel": "demo-wallet", "record_updated_at": "2026-10-24T09:10:00Z"},
+    {"payment_id": "PAY-1003", "order_id": "DEMO-1003", "amount_minor": 3900, "status": "paid", "channel": "demo-store", "record_updated_at": "2026-10-24T09:20:00Z"},
+    {"payment_id": "PAY-1004", "order_id": "DEMO-1004", "amount_minor": 29900, "status": "paid", "channel": "demo-wallet", "record_updated_at": "2026-10-24T09:30:00Z"},
+    {"payment_id": "PAY-1005", "order_id": "DEMO-1005", "amount_minor": 69900, "status": "paid", "channel": "demo-wallet", "record_updated_at": "2026-10-24T09:40:00Z"},
+    {"payment_id": "PAY-1006", "order_id": "DEMO-1006", "amount_minor": 9900, "status": "refunded", "channel": "demo-store", "record_updated_at": "2026-10-24T09:50:00Z"},
+    {"payment_id": "PAY-1008", "order_id": "DEMO-1008", "amount_minor": 49900, "status": "paid", "channel": "demo-wallet", "record_updated_at": "2026-10-24T10:10:00Z"},
+    {"payment_id": "PAY-1009", "order_id": "DEMO-1009", "amount_minor": 12900, "status": "paid", "channel": "demo-store", "record_updated_at": "2026-10-24T10:20:00Z"},
+    {"payment_id": "PAY-1010", "order_id": "DEMO-1010", "amount_minor": 3900, "status": "paid", "channel": "demo-store", "record_updated_at": "2026-10-24T10:30:00Z"}
+  ],
+  "shipments": [
+    {"shipment_id": "SHIP-1001-A", "order_id": "DEMO-1001", "item_id": "I-1001-A", "status": "in_transit", "tracking_id": "DEMO-TRACK-1001-A", "estimated_delivery": "2026-10-27", "record_updated_at": "2026-10-24T09:00:00Z"},
+    {"shipment_id": "SHIP-1001-B", "order_id": "DEMO-1001", "item_id": "I-1001-B", "status": "awaiting_dispatch", "tracking_id": null, "estimated_delivery": null, "record_updated_at": "2026-10-24T09:00:00Z"},
+    {"shipment_id": "SHIP-1002", "order_id": "DEMO-1002", "item_id": "I-1002", "status": "preorder", "tracking_id": null, "estimated_delivery": null, "record_updated_at": "2026-10-24T09:10:00Z"},
+    {"shipment_id": "SHIP-1004", "order_id": "DEMO-1004", "item_id": "I-1004", "status": "delivered", "tracking_id": "DEMO-TRACK-1004", "estimated_delivery": null, "record_updated_at": "2026-10-24T09:30:00Z"},
+    {"shipment_id": "SHIP-1005", "order_id": "DEMO-1005", "item_id": "I-1005", "status": "delivered", "tracking_id": "DEMO-TRACK-1005", "estimated_delivery": null, "record_updated_at": "2026-10-24T09:40:00Z"},
+    {"shipment_id": "SHIP-1008", "order_id": "DEMO-1008", "item_id": "I-1008", "status": "delivery_disputed", "tracking_id": "DEMO-TRACK-1008", "estimated_delivery": null, "record_updated_at": "2026-10-24T10:10:00Z"}
+  ],
+  "entitlements": [
+    {"entitlement_id": "ENT-1003", "order_id": "DEMO-1003", "status": "activation_failed", "package_name": "演示家庭云月度订阅", "auto_renew": true, "expires_at": null, "record_updated_at": "2026-10-24T09:20:00Z"},
+    {"entitlement_id": "ENT-1006", "order_id": "DEMO-1006", "status": "revoked_after_refund", "package_name": "演示数字内容包", "auto_renew": false, "expires_at": null, "record_updated_at": "2026-10-24T09:50:00Z"},
+    {"entitlement_id": "ENT-1009", "order_id": "DEMO-1009", "status": "active", "package_name": "演示团队协作季度包", "auto_renew": true, "expires_at": "2027-01-20T00:00:00Z", "record_updated_at": "2026-10-24T10:20:00Z"},
+    {"entitlement_id": "ENT-1010", "order_id": "DEMO-1010", "status": "active", "package_name": "演示家庭云月度订阅", "auto_renew": false, "expires_at": "2026-11-20T00:00:00Z", "record_updated_at": "2026-10-24T10:30:00Z"}
+  ],
+  "refunds": [
+    {"refund_id": "REF-1004", "order_id": "DEMO-1004", "status": "pending_review", "amount_minor": null, "record_updated_at": "2026-10-24T09:30:00Z"},
+    {"refund_id": "REF-1006", "order_id": "DEMO-1006", "status": "completed", "amount_minor": 9900, "record_updated_at": "2026-10-24T09:50:00Z"}
+  ]
+}

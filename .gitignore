@@ -1,0 +1,40 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+!.env.demo.example
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+.venv
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Frontend artifacts
+node_modules/
+dist/
+coverage/
+
+# Private runtime data and logs
+data/
+*.db
+*.sqlite*
+*.db-wal
+*.db-shm
+*.db-journal
+*.log
+dump.rdb
+appendonlydir/
+.playwright-mcp/
+test-results/
+playwright-report/
+
+# Local editor / operating-system state
+.DS_Store
+.idea/
+.vscode/

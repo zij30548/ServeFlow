@@ -1,0 +1,3 @@
+# Optional ServeFlow MySQL demo connector. No change to the original AI stack.
+# Installed only when the optional, explicitly initialized local demo is used.
+PyMySQL[rsa]==1.2.3
