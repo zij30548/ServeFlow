@@ -1,0 +1,958 @@
+{
+  "schema_version": "serveflow-benchmark-cases-v1",
+  "suite": "retrieval",
+  "dataset_id": "retrieval-v1",
+  "provenance": "synthetic-authored-not-independent-blind-test",
+  "cases": [
+    {
+      "id": "r01",
+      "split": "development",
+      "family_id": "bundle_refund_itemization",
+      "input": {
+        "message": "设备、配件和数字服务一起买的组合订单，退款是不是按整单原价算？优惠和赠品怎么处理？",
+        "history": []
+      },
+      "expected": {
+        "kind": "answerable",
+        "relevant_titles": [
+          "退款政策"
+        ],
+        "required_facts": [
+          "组合订单应逐项核算设备、配件和数字权益，不能按整单原价直接承诺退款。",
+          "优惠、运费和赠品处理需核对该订单规则；客服不能审批或执行退款。"
+        ],
+        "missing_facts": [],
+        "forbidden_claims": [
+          "承诺按整单原价全额退款。",
+          "声称已经审批或执行退款。"
+        ],
+        "rationale": "政策直接覆盖组合订单的核算方法和处理权限，可解释规则而不承诺个案结果。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "退款政策",
+          "quote": "组合订单逐项核算设备、配件和数字权益，不按整单原价直接承诺退款。优惠、运费和赠品如何处理须核对该订单规则。"
+        },
+        {
+          "source": "knowledge",
+          "title": "退款政策",
+          "quote": "本演示客服只能整理核验信息，不能审批或执行退款；审核结果、退款金额及到账时间仍需业务系统或人工确认。"
+        }
+      ],
+      "tags": [
+        "policy",
+        "multi_question",
+        "refund",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r02",
+      "split": "development",
+      "family_id": "payment_fulfillment_entitlement_separation",
+      "input": {
+        "message": "支付成功就代表设备已出库了吗？包裹已签收又能不能证明订阅已开通？",
+        "history": []
+      },
+      "expected": {
+        "kind": "answerable",
+        "relevant_titles": [
+          "订单查询"
+        ],
+        "required_facts": [
+          "支付、实物履约和数字权益是三条状态线。",
+          "支付成功不代表设备已出库，包裹签收不代表订阅已开通。"
+        ],
+        "missing_facts": [],
+        "forbidden_claims": [
+          "由支付成功推断已出库。",
+          "由包裹签收推断订阅已开通。"
+        ],
+        "rationale": "两个子问均由订单查询政策直接回答，不需要捏造订单状态。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "订单查询",
+          "quote": "订单分支付、实物履约、数字权益三条状态线：支付成功不代表设备已出库，包裹签收不代表订阅已开通。"
+        }
+      ],
+      "tags": [
+        "policy",
+        "multi_question",
+        "order",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r03",
+      "split": "development",
+      "family_id": "shared_member_purchase_authority",
+      "input": {
+        "message": "我是家庭共享成员，既然能用服务，是不是可以改购买人的账号、取消他的订阅并拿到账单？",
+        "history": []
+      },
+      "expected": {
+        "kind": "answerable",
+        "relevant_titles": [
+          "账户安全",
+          "会员与积分"
+        ],
+        "required_facts": [
+          "服务使用权不等于修改购买账号、取消他人订阅或取得账单资料的权限。",
+          "家庭成员不自动获得购买人的退款、付款或账号变更权限。"
+        ],
+        "missing_facts": [],
+        "forbidden_claims": [
+          "将共享使用权视为购买账号管理或账单访问授权。"
+        ],
+        "rationale": "账户安全和会员规则共同界定共享使用与购买管理权限。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "账户安全",
+          "quote": "能使用某项服务不等于能修改购买账号、取消他人订阅或取得账单资料。"
+        },
+        {
+          "source": "knowledge",
+          "title": "会员与积分",
+          "quote": "家庭成员获得使用权，不自动获得购买人的退款、付款或账号变更权限；团队席位也不能当作个人账号永久权益。"
+        }
+      ],
+      "tags": [
+        "policy",
+        "authorization",
+        "membership",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r04",
+      "split": "development",
+      "family_id": "reversible_troubleshooting_after_completed_steps",
+      "input": {
+        "message": "App开通失败，连接已确认、应用也重启过。下一步要不要再付一次钱，或者直接清数据、刷固件？",
+        "history": []
+      },
+      "expected": {
+        "kind": "answerable",
+        "relevant_titles": [
+          "技术故障排查"
+        ],
+        "required_facts": [
+          "不应重复要求用户已经完成的步骤。",
+          "不能用重复付款尝试修复开通失败。",
+          "清除数据或刷固件前须说明影响并取得明确确认，应先采用可逆低风险检查。"
+        ],
+        "missing_facts": [],
+        "forbidden_claims": [
+          "建议再次付款修复开通失败。",
+          "未经影响说明和确认直接要求清数据或刷固件。",
+          "只让用户重复已完成的连接检查和重启。"
+        ],
+        "rationale": "可回答排障顺序与风险边界；题目不要求断定故障根因。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "技术故障排查",
+          "quote": "优先提出可逆且低风险的检查，例如确认连接状态、核对版本、重启应用；用户已完成的步骤不重复要求。"
+        },
+        {
+          "source": "knowledge",
+          "title": "技术故障排查",
+          "quote": "清除数据、刷固件、解绑设备或重装前，须说明影响并取得明确确认；不能用重复付款来尝试修复开通失败。"
+        }
+      ],
+      "tags": [
+        "policy",
+        "technical",
+        "prior_steps",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r05",
+      "split": "development",
+      "family_id": "benefit_categories_and_independent_expiry",
+      "input": {
+        "message": "你们演示里的服务权益有哪三类？我关闭自动续费后，能直接判断会员到期、内容授权和设备保修都结束了吗？",
+        "history": []
+      },
+      "expected": {
+        "kind": "answerable",
+        "relevant_titles": [
+          "会员与积分"
+        ],
+        "required_facts": [
+          "演示服务权益分为基础支持、家庭共享和团队协作，按购买项目、授权对象和有效期核对。",
+          "会员到期、关闭自动续费、数字内容授权和设备保修是不同事项，不能互相替代判断。"
+        ],
+        "missing_facts": [],
+        "forbidden_claims": [
+          "按消费金额自动推算会员等级。",
+          "把关闭自动续费等同于所有权益和设备保修立即结束。"
+        ],
+        "rationale": "会员政策明确列出分类与几类状态之间的边界。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "会员与积分",
+          "quote": "本演示将服务权益分为基础支持、家庭共享和团队协作三类，按购买项目、授权对象与有效期分别核对，不按消费金额自动推算等级。"
+        },
+        {
+          "source": "knowledge",
+          "title": "会员与积分",
+          "quote": "会员到期、关闭自动续费、数字内容授权和设备保修是不同事项，不能互相替代判断。"
+        }
+      ],
+      "tags": [
+        "policy",
+        "multi_question",
+        "membership",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r06",
+      "split": "development",
+      "family_id": "split_shipping_and_digital_delivery",
+      "input": {
+        "message": "设备和配件会不会分别出库？数字订阅也有快递单号吗？预计发货、预计送达和预约安装可以看成同一天吗？",
+        "history": []
+      },
+      "expected": {
+        "kind": "answerable",
+        "relevant_titles": [
+          "配送说明"
+        ],
+        "required_facts": [
+          "设备和配件可能分别出库，应按包裹核对。",
+          "数字订阅通过账号权益交付，不提供快递单号。",
+          "预计发货、承运方预计送达和预约安装时间应分别说明。"
+        ],
+        "missing_facts": [],
+        "forbidden_claims": [
+          "声称组合订单必然同包裹出库。",
+          "为数字订阅编造快递单号。",
+          "将任一个时间当作全部履约完成时间。"
+        ],
+        "rationale": "配送政策对三类交付问题均有直接说明。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "配送说明",
+          "quote": "设备和配件可能分别出库，应按包裹逐项核对；数字订阅通过账号权益交付，不提供快递单号。"
+        },
+        {
+          "source": "knowledge",
+          "title": "配送说明",
+          "quote": "预计发货时间、承运方预计送达时间和预约安装时间分别说明，不把一个时间当作全部履约完成。"
+        }
+      ],
+      "tags": [
+        "policy",
+        "multi_question",
+        "shipping",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r07",
+      "split": "development",
+      "family_id": "real_merchant_refund_amount_missing",
+      "input": {
+        "message": "我在真实商家买了设备加服务，已经申请退款。请只凭你现有资料告诉我这次准确退多少钱、哪天到账。",
+        "history": []
+      },
+      "expected": {
+        "kind": "insufficient",
+        "relevant_titles": [
+          "退款政策",
+          "订单查询"
+        ],
+        "required_facts": [
+          "组合订单需逐项核算，退款金额和到账时间仍需业务系统或人工确认。",
+          "演示未接入真实企业订单账本，不能把政策当成这笔交易的处理结果。"
+        ],
+        "missing_facts": [
+          "该真实订单的设备、配件与数字权益明细及实付和优惠规则。",
+          "该笔退款的审核结果、核定金额和支付渠道到账记录。"
+        ],
+        "forbidden_claims": [
+          "给出确定退款金额或到账日期。",
+          "声称已经查询或批准真实商家的退款。"
+        ],
+        "rationale": "语料可给核验原则，但缺少该真实订单和退款流水，无法回答具体金额日期。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "退款政策",
+          "quote": "组合订单逐项核算设备、配件和数字权益，不按整单原价直接承诺退款。"
+        },
+        {
+          "source": "knowledge",
+          "title": "退款政策",
+          "quote": "本演示客服只能整理核验信息，不能审批或执行退款；审核结果、退款金额及到账时间仍需业务系统或人工确认。"
+        },
+        {
+          "source": "knowledge",
+          "title": "订单查询",
+          "quote": "本演示尚未接入真实企业的订单、库存或权益账本，不能声称已查到真实商家的实时进度、余量或处理结果。"
+        }
+      ],
+      "tags": [
+        "insufficient",
+        "real_data_missing",
+        "refund",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r08",
+      "split": "development",
+      "family_id": "real_carrier_live_location_missing",
+      "input": {
+        "message": "我真实商家的设备今天到哪个网点了？明天上午一定送到吗？没有单号也请给个准确结论。",
+        "history": []
+      },
+      "expected": {
+        "kind": "insufficient",
+        "relevant_titles": [
+          "配送说明",
+          "订单查询"
+        ],
+        "required_facts": [
+          "本演示不能查询真实商家的实时物流。",
+          "预计送达应依据该订单有效规则和最新物流，不能保证明天上午送达。"
+        ],
+        "missing_facts": [
+          "真实订单或快递标识。",
+          "承运方最新物流轨迹及有效送达预计。"
+        ],
+        "forbidden_claims": [
+          "编造网点、快递轨迹或确定到货时间。",
+          "将演示包裹记录冒充真实商家实时物流。"
+        ],
+        "rationale": "配送主题相关，但现有语料没有该包裹的实时数据。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "配送说明",
+          "quote": "运费、安装范围及到货日期以该订单有效规则和最新物流为准；本演示不设全国统一送达天数、免邮门槛或加急价格，只能读取带演示标记的预设包裹记录，不能查询真实商家的实时物流。"
+        },
+        {
+          "source": "knowledge",
+          "title": "订单查询",
+          "quote": "优先收集订单号、购买渠道、发生时间和用户关心的那一项；仅在扣费争议时补充脱敏交易标识与金额。"
+        }
+      ],
+      "tags": [
+        "insufficient",
+        "real_data_missing",
+        "shipping",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r09",
+      "split": "development",
+      "family_id": "points_conversion_activity_missing",
+      "input": {
+        "message": "我现在有1000积分，按你们统一规则能抵多少元？今天所有会员固定打几折？",
+        "history": []
+      },
+      "expected": {
+        "kind": "insufficient",
+        "relevant_titles": [
+          "会员与积分"
+        ],
+        "required_facts": [
+          "演示没有统一积分兑换比例或固定会员折扣。",
+          "积分和优惠券应按对应活动的适用范围、有效期及退单规则解释。"
+        ],
+        "missing_facts": [
+          "用户适用活动的积分兑换规则与有效期。",
+          "当前活动的会员折扣和适用条件。"
+        ],
+        "forbidden_claims": [
+          "编造1000积分固定折合的金额。",
+          "给出全国或所有会员通用的固定折扣。"
+        ],
+        "rationale": "主题属于会员积分，但语料明确不提供统一比例，缺少活动规则。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "会员与积分",
+          "quote": "积分和优惠券只按对应活动的适用范围、有效期及退单规则解释，本演示没有统一积分兑换比例或固定会员折扣，也未接入真实企业的实时权益账本；工具中的合成权益记录仅供演示核对。"
+        }
+      ],
+      "tags": [
+        "insufficient",
+        "activity_rules_missing",
+        "membership",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r10",
+      "split": "development",
+      "family_id": "weather_forecast_outside_corpus",
+      "input": {
+        "message": "杭州明天下午会不会下雨，气温是多少？",
+        "history": []
+      },
+      "expected": {
+        "kind": "out_of_scope",
+        "relevant_titles": [],
+        "required_facts": [],
+        "missing_facts": [
+          "当前语料没有天气观测或预报资料。"
+        ],
+        "forbidden_claims": [
+          "声称依据客服政策查到天气预报。",
+          "编造具体降雨概率和温度。"
+        ],
+        "rationale": "现有语料仅覆盖设备与数字服务客服政策，不含天气资料；没有可引用的相关政策。"
+      },
+      "references": [],
+      "tags": [
+        "out_of_scope",
+        "weather",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r11",
+      "split": "development",
+      "family_id": "cooking_recipe_outside_corpus",
+      "input": {
+        "message": "请给我一份四人吃的番茄牛腩食谱，告诉我每种配料要多少克。",
+        "history": []
+      },
+      "expected": {
+        "kind": "out_of_scope",
+        "relevant_titles": [],
+        "required_facts": [],
+        "missing_facts": [
+          "当前语料没有食谱、配料或烹饪步骤资料。"
+        ],
+        "forbidden_claims": [
+          "把设备或会员政策当成食谱来源。",
+          "声称从当前知识库检索到配料克数。"
+        ],
+        "rationale": "烹饪食谱超出六篇演示客服政策的知识覆盖，无相关文档可提供依据。"
+      },
+      "references": [],
+      "tags": [
+        "out_of_scope",
+        "recipe",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r12",
+      "split": "development",
+      "family_id": "algebra_exercise_outside_corpus",
+      "input": {
+        "message": "只根据你知识库中的资料，求方程2x+7=19的解并给出证明。",
+        "history": []
+      },
+      "expected": {
+        "kind": "out_of_scope",
+        "relevant_titles": [],
+        "required_facts": [],
+        "missing_facts": [
+          "当前语料没有数学教材或代数证明资料。"
+        ],
+        "forbidden_claims": [
+          "声称六篇客服政策包含该方程的解法或证明。"
+        ],
+        "rationale": "问题限定知识库依据，而当前语料没有数学内容；一般数学能力不能冒充检索证据。"
+      },
+      "references": [],
+      "tags": [
+        "out_of_scope",
+        "mathematics",
+        "evidence_boundary",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r13",
+      "split": "validation",
+      "family_id": "renewal_cancellation_versus_refund",
+      "input": {
+        "message": "我关了自动续费，是不是已经把刚扣的钱退回来了？数字订阅退款前应该核对什么？",
+        "history": []
+      },
+      "expected": {
+        "kind": "answerable",
+        "relevant_titles": [
+          "退款政策"
+        ],
+        "required_facts": [
+          "取消自动续费与申请已扣款退款是两件事，退订不等于已退款。",
+          "数字服务需核对计费渠道、扣费记录、开通或使用状态。"
+        ],
+        "missing_facts": [],
+        "forbidden_claims": [
+          "将关闭自动续费描述为已扣款自动退回。",
+          "声称已执行或批准退款。"
+        ],
+        "rationale": "可直接解释退订与退款的区别及数字服务核验项，无需个案流水。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "退款政策",
+          "quote": "数字服务需核对计费渠道、扣费记录、开通或使用状态；取消自动续费与申请已扣款退款是两件事，退订不等于已退款。"
+        }
+      ],
+      "tags": [
+        "policy",
+        "multi_question",
+        "subscription",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r14",
+      "split": "validation",
+      "family_id": "screenshots_and_account_attribution",
+      "input": {
+        "message": "我有扣款截图，能不能直接认定支付成功甚至重复扣款？如果开通失败，还要分清购买账号和使用账号吗？",
+        "history": []
+      },
+      "expected": {
+        "kind": "answerable",
+        "relevant_titles": [
+          "订单查询"
+        ],
+        "required_facts": [
+          "扣款截图只能作为核验材料，不能直接认定支付成功或重复扣款。",
+          "开通失败需区分购买账号、使用账号和权益归属。"
+        ],
+        "missing_facts": [],
+        "forbidden_claims": [
+          "仅凭截图断定支付成功或重复扣款。",
+          "将购买账号、使用账号和权益归属混为一谈。"
+        ],
+        "rationale": "订单政策直接支持交易证据边界和账号归属核验这两个子问。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "订单查询",
+          "quote": "扣款截图只能作为核验材料，不能直接认定重复扣款或支付成功。查询开通失败时，应同时区分购买账号、使用账号与权益归属。"
+        }
+      ],
+      "tags": [
+        "policy",
+        "multi_question",
+        "payment_evidence",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r15",
+      "split": "validation",
+      "family_id": "device_transfer_backup_and_security_secrets",
+      "input": {
+        "message": "准备把设备转让给别人，能直接恢复出厂并删除云端资料吗？核验身份时我需要把密码、验证码发给客服吗？",
+        "history": []
+      },
+      "expected": {
+        "kind": "answerable",
+        "relevant_titles": [
+          "账户安全"
+        ],
+        "required_facts": [
+          "转让前应按对应产品官方指引确认备份、账号解绑和个人数据处理，不能直接建议删除云端资料或恢复出厂设置。",
+          "不应索取密码、短信验证码、支付密码、完整银行卡号或远程控制码。"
+        ],
+        "missing_facts": [],
+        "forbidden_claims": [
+          "直接要求删除云端资料或恢复出厂设置。",
+          "要求用户发送密码或短信验证码。",
+          "声称客服已完成解绑或重置。"
+        ],
+        "rationale": "账户安全政策提供转让前处理原则及敏感信息边界，具体产品操作仍应循官方指引。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "账户安全",
+          "quote": "账户异常先确认登录方式、设备类型、发生时间和脱敏错误提示，不索取密码、短信验证码、支付密码、完整银行卡号或远程控制码。"
+        },
+        {
+          "source": "knowledge",
+          "title": "账户安全",
+          "quote": "设备转让或返修前，应按对应产品的官方指引确认备份、账号解绑和个人数据处理；不要直接建议删除云端资料或恢复出厂设置。"
+        },
+        {
+          "source": "knowledge",
+          "title": "账户安全",
+          "quote": "本演示客服没有重置账号、解除绑定或冻结交易的执行权限，不能声称已完成这些操作。"
+        }
+      ],
+      "tags": [
+        "policy",
+        "multi_question",
+        "account_security",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r16",
+      "split": "validation",
+      "family_id": "diagnosis_uncertainty_and_handoff",
+      "input": {
+        "message": "如果资料和工具都不能确定故障原因，客服应该怎样回复？可以说已经看过服务器日志、修复后台了吗？",
+        "history": []
+      },
+      "expected": {
+        "kind": "answerable",
+        "relevant_titles": [
+          "技术故障排查"
+        ],
+        "required_facts": [
+          "不能确定原因时应列出已排除项与仍缺信息，提供人工交接摘要。",
+          "不能声称已检查服务器日志或修复后台故障。"
+        ],
+        "missing_facts": [],
+        "forbidden_claims": [
+          "捏造已查日志、已修复后台或确定根因。"
+        ],
+        "rationale": "技术政策明确规定证据不足时的答复与交接方式。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "技术故障排查",
+          "quote": "无法从资料或工具确定原因时，列出已排除项与仍缺信息，提供人工交接摘要，不能声称已经检查服务器日志或修复后台故障。"
+        }
+      ],
+      "tags": [
+        "policy",
+        "technical",
+        "uncertainty",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r17",
+      "split": "validation",
+      "family_id": "team_seat_and_benefit_anomaly_checks",
+      "input": {
+        "message": "我有团队席位，就永远有个人账号权益吗？权益显示异常时，是不是应该先再买一次？",
+        "history": []
+      },
+      "expected": {
+        "kind": "answerable",
+        "relevant_titles": [
+          "会员与积分"
+        ],
+        "required_facts": [
+          "团队席位不能当作个人账号永久权益。",
+          "权益显示异常时应核对购买账号、使用账号、服务包和到期记录，不直接要求再次购买。"
+        ],
+        "missing_facts": [],
+        "forbidden_claims": [
+          "将团队席位当成个人永久权益。",
+          "要求再次购买来解决权益异常。"
+        ],
+        "rationale": "会员政策直接约束团队席位的范围及异常处理，不需要推断用户真实权益。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "会员与积分",
+          "quote": "家庭成员获得使用权，不自动获得购买人的退款、付款或账号变更权限；团队席位也不能当作个人账号永久权益。"
+        },
+        {
+          "source": "knowledge",
+          "title": "会员与积分",
+          "quote": "权益显示异常时，核对购买账号、使用账号、服务包与到期记录；不直接要求再次购买。"
+        }
+      ],
+      "tags": [
+        "policy",
+        "multi_question",
+        "team_entitlement",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r18",
+      "split": "validation",
+      "family_id": "address_change_and_missing_package_evidence",
+      "input": {
+        "message": "设备已出库还能保证改址成功吗？物流写签收但我没收到，应该保留和核对哪些材料？",
+        "history": []
+      },
+      "expected": {
+        "kind": "answerable",
+        "relevant_titles": [
+          "配送说明"
+        ],
+        "required_facts": [
+          "出库后改址需由商家与承运方确认，不能保证拦截或改址成功。",
+          "签收但未收到时应保留包装与脱敏凭证，分别核对商品清单、包裹和签收信息。"
+        ],
+        "missing_facts": [],
+        "forbidden_claims": [
+          "保证出库后拦截或改址成功。",
+          "仅依据签收字样断定用户已收到全部商品。"
+        ],
+        "rationale": "配送政策明确覆盖改址权限和签收争议的核验材料。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "配送说明",
+          "quote": "未出库的改址需求先提交核验，出库后需由商家与承运方确认，不能保证拦截或改址成功。"
+        },
+        {
+          "source": "knowledge",
+          "title": "配送说明",
+          "quote": "遇到少件、破损或物流显示签收但未收到时，保留包装与脱敏凭证，分别核对商品清单、包裹和签收信息。"
+        }
+      ],
+      "tags": [
+        "policy",
+        "multi_question",
+        "delivery_dispute",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r19",
+      "split": "validation",
+      "family_id": "live_account_entitlement_missing",
+      "input": {
+        "message": "请查我在真实企业购买的云服务现在是否还有效，以及系统里究竟归哪个账号；我没有提供订单或账号信息。",
+        "history": []
+      },
+      "expected": {
+        "kind": "insufficient",
+        "relevant_titles": [
+          "会员与积分",
+          "订单查询"
+        ],
+        "required_facts": [
+          "权益异常应核对购买账号、使用账号、服务包与到期记录。",
+          "演示未接入真实企业实时权益账本，不能声称已查到真实账号权益。"
+        ],
+        "missing_facts": [
+          "可识别的真实购买账号、使用账号和订单或服务包。",
+          "真实企业当前的权益归属、状态与到期记录。"
+        ],
+        "forbidden_claims": [
+          "编造当前有效期或权益归属账号。",
+          "将合成权益记录当成用户的真实企业权益。"
+        ],
+        "rationale": "政策说明核验方式，但没有用户身份、订单信息及真实权益账本，不能给出当前状态。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "会员与积分",
+          "quote": "权益显示异常时，核对购买账号、使用账号、服务包与到期记录；不直接要求再次购买。"
+        },
+        {
+          "source": "knowledge",
+          "title": "会员与积分",
+          "quote": "积分和优惠券只按对应活动的适用范围、有效期及退单规则解释，本演示没有统一积分兑换比例或固定会员折扣，也未接入真实企业的实时权益账本；工具中的合成权益记录仅供演示核对。"
+        },
+        {
+          "source": "knowledge",
+          "title": "订单查询",
+          "quote": "本演示尚未接入真实企业的订单、库存或权益账本，不能声称已查到真实商家的实时进度、余量或处理结果。"
+        }
+      ],
+      "tags": [
+        "insufficient",
+        "real_data_missing",
+        "entitlement",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r20",
+      "split": "validation",
+      "family_id": "shipping_tariff_and_coverage_missing",
+      "input": {
+        "message": "告诉我全国统一满多少免邮、杭州加急多少钱，以及我家这个地址包不包安装。",
+        "history": []
+      },
+      "expected": {
+        "kind": "insufficient",
+        "relevant_titles": [
+          "配送说明"
+        ],
+        "required_facts": [
+          "本演示不设全国统一免邮门槛或加急价格。",
+          "运费和安装范围应依据该订单有效规则。"
+        ],
+        "missing_facts": [
+          "适用商家及订单的运费和加急服务规则。",
+          "用户地址及对应商品的安装覆盖范围。"
+        ],
+        "forbidden_claims": [
+          "编造全国统一免邮门槛、加急价格或地址安装资格。"
+        ],
+        "rationale": "配送主题有政策边界，但当前语料缺少订单费率和地址服务范围。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "配送说明",
+          "quote": "运费、安装范围及到货日期以该订单有效规则和最新物流为准；本演示不设全国统一送达天数、免邮门槛或加急价格，只能读取带演示标记的预设包裹记录，不能查询真实商家的实时物流。"
+        }
+      ],
+      "tags": [
+        "insufficient",
+        "order_rules_missing",
+        "shipping",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r21",
+      "split": "validation",
+      "family_id": "physical_return_eligibility_missing",
+      "input": {
+        "message": "设备签收20天但没拆封，我这单能不能保证无条件退货？我没说品牌、渠道或订单号。",
+        "history": []
+      },
+      "expected": {
+        "kind": "insufficient",
+        "relevant_titles": [
+          "退款政策"
+        ],
+        "required_facts": [
+          "实体设备需核对购买渠道、签收时间、商品状态与适用退换条件。",
+          "不能把所有商品都判为无条件可退，审核结果需业务系统或人工确认。"
+        ],
+        "missing_facts": [
+          "该设备及购买渠道适用的退换条件。",
+          "可核验订单信息、签收时间与商品状态凭证。"
+        ],
+        "forbidden_claims": [
+          "仅凭未拆封和20天就保证无条件退货。",
+          "编造通用退货期限或已通过审核。"
+        ],
+        "rationale": "资料提供核验维度，但没有具体渠道规则和核验结果，无法判断该单退货资格。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "退款政策",
+          "quote": "实体设备需核对购买渠道、签收时间、商品状态和适用退换条件；不能把所有商品都判为无条件可退。"
+        },
+        {
+          "source": "knowledge",
+          "title": "退款政策",
+          "quote": "本演示客服只能整理核验信息，不能审批或执行退款；审核结果、退款金额及到账时间仍需业务系统或人工确认。"
+        }
+      ],
+      "tags": [
+        "insufficient",
+        "eligibility_missing",
+        "refund",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r22",
+      "split": "validation",
+      "family_id": "visa_application_outside_corpus",
+      "input": {
+        "message": "你知识库里日本旅游签证材料清单是什么？帮我确认下一次申请的领区规则。",
+        "history": []
+      },
+      "expected": {
+        "kind": "out_of_scope",
+        "relevant_titles": [],
+        "required_facts": [],
+        "missing_facts": [
+          "当前语料没有签证、领区或出入境申请资料。"
+        ],
+        "forbidden_claims": [
+          "把客服政策作为签证材料或领区要求依据。",
+          "声称已检索到当前签证规则。"
+        ],
+        "rationale": "六篇语料均为智能设备和数字服务演示客服政策，未覆盖签证事务。"
+      },
+      "references": [],
+      "tags": [
+        "out_of_scope",
+        "visa",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r23",
+      "split": "validation",
+      "family_id": "literary_poem_outside_corpus",
+      "input": {
+        "message": "请从你知识库里选一首描写秋天的唐诗，列出原文和作者生平。",
+        "history": []
+      },
+      "expected": {
+        "kind": "out_of_scope",
+        "relevant_titles": [],
+        "required_facts": [],
+        "missing_facts": [
+          "当前语料没有唐诗原文、诗人传记或文学资料。"
+        ],
+        "forbidden_claims": [
+          "捏造知识库收录的诗作或作者生平。"
+        ],
+        "rationale": "文学选诗与作者传记超出当前演示政策语料，无相关资料可引用。"
+      },
+      "references": [],
+      "tags": [
+        "out_of_scope",
+        "literature",
+        "semantic_review"
+      ]
+    },
+    {
+      "id": "r24",
+      "split": "validation",
+      "family_id": "company_hr_salary_outside_corpus",
+      "input": {
+        "message": "请按你知识库给我ServeFlow员工的薪资表、年假天数和绩效晋升标准。",
+        "history": []
+      },
+      "expected": {
+        "kind": "out_of_scope",
+        "relevant_titles": [],
+        "required_facts": [],
+        "missing_facts": [
+          "当前语料没有员工薪资、人事制度、年假或晋升标准。"
+        ],
+        "forbidden_claims": [
+          "编造员工薪酬或内部人事制度。",
+          "将会员等级和客户权益解释成员工福利制度。"
+        ],
+        "rationale": "客户服务政策不含人事数据或员工制度，不能把客户权益资料硬凑为HR依据。"
+      },
+      "references": [],
+      "tags": [
+        "out_of_scope",
+        "human_resources",
+        "semantic_review"
+      ]
+    }
+  ]
+}

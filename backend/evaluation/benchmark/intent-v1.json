@@ -1,0 +1,917 @@
+{
+  "schema_version": "serveflow-benchmark-cases-v1",
+  "suite": "intent",
+  "dataset_id": "intent-v1",
+  "provenance": "synthetic-authored-not-independent-blind-test",
+  "cases": [
+    {
+      "id": "i01",
+      "split": "development",
+      "family_id": "order_warehouse_queue",
+      "input": {
+        "message": "昨天下的那单一直写着受理中，帮我看看是还等商家接单，还是已经进仓库备货了？",
+        "history": []
+      },
+      "expected": {
+        "intent": "order_status",
+        "rationale": "用户要区分订单受理与备货阶段，未询问包裹运输或要求修改订单。"
+      },
+      "tags": ["colloquial", "fulfillment_stage"]
+    },
+    {
+      "id": "i02",
+      "split": "development",
+      "family_id": "order_manual_review",
+      "input": {
+        "message": "我问前一笔，人工审核过了没有？",
+        "history": [
+          {"role": "user", "content": "列表里有一笔团购订单在审核，另有一笔普通订单待付款。"},
+          {"role": "assistant", "content": "你希望确认哪一笔订单的处理情况？"}
+        ]
+      },
+      "expected": {
+        "intent": "order_status",
+        "rationale": "前一笔指历史中的团购订单，当前仅查询订单审核状态。"
+      },
+      "tags": ["context", "reference_resolution", "review_status"]
+    },
+    {
+      "id": "i03",
+      "split": "validation",
+      "family_id": "order_closed_confirmation",
+      "input": {
+        "message": "不用再撤一次，我只想确认它现在是不是已经关闭。",
+        "history": [
+          {"role": "user", "content": "我已经在页面提交了撤销那笔未付款订单的操作。"},
+          {"role": "assistant", "content": "目前还没有核验这笔订单的最终状态。"}
+        ]
+      },
+      "expected": {
+        "intent": "order_status",
+        "rationale": "撤销操作已提交，用户明确排除再次操作，当前只确认订单是否关闭。"
+      },
+      "tags": ["context", "negation", "status_vs_action"]
+    },
+    {
+      "id": "i04",
+      "split": "validation",
+      "family_id": "order_custom_production",
+      "input": {
+        "message": "订的刻字水杯现在做到哪道工序了？订单详情只显示制作中，想知道刻字有没有完成。",
+        "history": []
+      },
+      "expected": {
+        "intent": "order_status",
+        "rationale": "关注定制订单的制作进展，目标是订单履约阶段而非配送轨迹。"
+      },
+      "tags": ["custom_goods", "fulfillment_stage"]
+    },
+    {
+      "id": "i05",
+      "split": "validation",
+      "family_id": "order_preorder_acceptance",
+      "input": {
+        "message": "预售那单定金早就付了，页面却还写待确认，这笔预订到底有没有被系统接收呀？",
+        "history": []
+      },
+      "expected": {
+        "intent": "order_status",
+        "rationale": "支付作为已完成背景，用户要求确认预售订单是否受理，没有提出扣款异常。"
+      },
+      "tags": ["colloquial", "preorder", "payment_as_background"]
+    },
+    {
+      "id": "i06",
+      "split": "development",
+      "family_id": "logistics_false_delivery_scan",
+      "input": {
+        "message": "运单写本人签收，可我一整天都在家，门口也没东西，能查查快件到底交给谁了吗？",
+        "history": []
+      },
+      "expected": {
+        "intent": "logistics",
+        "rationale": "用户核查快件签收去向，核心是配送记录和实际收件不符。"
+      },
+      "tags": ["delivery_exception", "colloquial"]
+    },
+    {
+      "id": "i07",
+      "split": "development",
+      "family_id": "logistics_pickup_stagnation",
+      "input": {
+        "message": "就是这件，三天连下一站都没有，卡在哪个网点了？",
+        "history": [
+          {"role": "user", "content": "快递公司已经揽收我的包裹，轨迹最后一条是离开寄件站。"},
+          {"role": "assistant", "content": "你想核实这件包裹后续的运输轨迹吗？"}
+        ]
+      },
+      "expected": {
+        "intent": "logistics",
+        "rationale": "历史已明确快递揽收，当前追问运输停滞位置。"
+      },
+      "tags": ["context", "tracking_gap", "reference_resolution"]
+    },
+    {
+      "id": "i08",
+      "split": "validation",
+      "family_id": "logistics_unexpected_pickup_station",
+      "input": {
+        "message": "说好送上门，快件却被放到驿站了；先别改地址，我想知道为什么没有按约派送。",
+        "history": []
+      },
+      "expected": {
+        "intent": "logistics",
+        "rationale": "用户询问配送方式不符的原因，并明确排除修改地址的操作诉求。"
+      },
+      "tags": ["negation", "delivery_exception", "logistics_vs_request"]
+    },
+    {
+      "id": "i09",
+      "split": "validation",
+      "family_id": "logistics_local_arrival_estimate",
+      "input": {
+        "message": "包裹到本市分拨中心了，我明早要带走，今晚还有机会送到小区吗？",
+        "history": []
+      },
+      "expected": {
+        "intent": "logistics",
+        "rationale": "包裹已进入运输链路，用户要估计末端送达时间。"
+      },
+      "tags": ["arrival_estimate", "colloquial"]
+    },
+    {
+      "id": "i10",
+      "split": "validation",
+      "family_id": "logistics_transit_detour",
+      "input": {
+        "message": "对，怎么又绕去隔壁省了？我想核实这段运输是不是走错线路。",
+        "history": [
+          {"role": "user", "content": "运单先到过我所在城市，随后又出现了外省转运中心的扫描记录。"},
+          {"role": "assistant", "content": "你关注的是运单轨迹里的这次跨省转运吗？"}
+        ]
+      },
+      "expected": {
+        "intent": "logistics",
+        "rationale": "当前沿用历史中的运单轨迹，询问包裹转运线路异常。"
+      },
+      "tags": ["context", "transit_exception", "colloquial"]
+    },
+    {
+      "id": "i11",
+      "split": "development",
+      "family_id": "refund_unopened_return",
+      "input": {
+        "message": "买的料理机还没拆封，家里人已经买了一台，我想退回去把货款拿回来，要先办什么？",
+        "history": []
+      },
+      "expected": {
+        "intent": "refund",
+        "rationale": "明确希望退还商品并收回货款，主意图是退货退款流程。"
+      },
+      "tags": ["return_process", "colloquial"]
+    },
+    {
+      "id": "i12",
+      "split": "development",
+      "family_id": "refund_bank_processing",
+      "input": {
+        "message": "那退回的这笔钱现在卡在哪一步？银行卡里还看不到。",
+        "history": [
+          {"role": "user", "content": "售后页面说退款已由商家提交，目前是银行处理中。"},
+          {"role": "assistant", "content": "你要继续核实这笔售后款项的退回进度吗？"}
+        ]
+      },
+      "expected": {
+        "intent": "refund",
+        "rationale": "历史确定资金属于售后退款，当前核查退回进度，不是新支付失败。"
+      },
+      "tags": ["context", "refund_progress", "refund_vs_payment"]
+    },
+    {
+      "id": "i13",
+      "split": "validation",
+      "family_id": "refund_wrong_size_no_exchange",
+      "input": {
+        "message": "鞋码不合适，但我不换别的码了，准备把鞋寄回并退掉这笔货款，寄回前需要登记吗？",
+        "history": []
+      },
+      "expected": {
+        "intent": "refund",
+        "rationale": "用户否定换货，明确选择退货并返还货款，询问退款所需前置步骤。"
+      },
+      "tags": ["negation", "return_process", "refund_vs_exchange"]
+    },
+    {
+      "id": "i14",
+      "split": "validation",
+      "family_id": "refund_application_review",
+      "input": {
+        "message": "这份申请还在等谁审核，能核实一下吗？",
+        "history": [
+          {"role": "user", "content": "破损商品的仅退款申请已经上传了照片，售后单连续几天显示待审核。"},
+          {"role": "assistant", "content": "目前讨论的是这份仅退款售后申请。"}
+        ]
+      },
+      "expected": {
+        "intent": "refund",
+        "rationale": "这份申请指历史中的仅退款售后单，查询退款审核而非原订单状态。"
+      },
+      "tags": ["context", "refund_review", "refund_vs_order_status"]
+    },
+    {
+      "id": "i15",
+      "split": "validation",
+      "family_id": "refund_return_received_unpaid",
+      "input": {
+        "message": "退货仓库上周就签了收，可售后一直没把钱退给我，退款这边还缺哪个环节？",
+        "history": []
+      },
+      "expected": {
+        "intent": "refund",
+        "rationale": "退货运输已完成，当前要求核实未返还货款的售后流程。"
+      },
+      "tags": ["refund_progress", "delivery_as_background"]
+    },
+    {
+      "id": "i16",
+      "split": "development",
+      "family_id": "invoice_tax_document_eligibility",
+      "input": {
+        "message": "财务让我交带单位税号的增值税票，订单里只有收据，这单能出符合报销要求的发票吗？",
+        "history": []
+      },
+      "expected": {
+        "intent": "invoice",
+        "rationale": "用户询问订单能否开具指定税务发票，核心是开票资格与票种。"
+      },
+      "tags": ["tax_document", "invoice_eligibility"]
+    },
+    {
+      "id": "i17",
+      "split": "development",
+      "family_id": "invoice_tax_number_correction",
+      "input": {
+        "message": "那张票的税号少了一位，请告诉我怎样作废重开。",
+        "history": [
+          {"role": "user", "content": "我拿到了这次采购的公司发票，但财务检查后说信息有误。"},
+          {"role": "assistant", "content": "具体是哪项发票信息需要更正？"}
+        ]
+      },
+      "expected": {
+        "intent": "invoice",
+        "rationale": "当前请求修正已开发票的税号并重开，属于发票处理。"
+      },
+      "tags": ["context", "invoice_correction", "reference_resolution"]
+    },
+    {
+      "id": "i18",
+      "split": "validation",
+      "family_id": "invoice_delivery_email",
+      "input": {
+        "message": "购机的电子票发到旧邮箱了，我收不到，请把这张发票重新投递到我确认的新邮箱。",
+        "history": []
+      },
+      "expected": {
+        "intent": "invoice",
+        "rationale": "操作对象是已开的电子发票，目标是重新接收票据，不是修改账户邮箱。"
+      },
+      "tags": ["invoice_delivery", "invoice_vs_account"]
+    },
+    {
+      "id": "i19",
+      "split": "validation",
+      "family_id": "invoice_authenticity_verification",
+      "input": {
+        "message": "不是要查付款记录，我需要核验商家给的发票真伪，该用票面上哪些信息去查？",
+        "history": []
+      },
+      "expected": {
+        "intent": "invoice",
+        "rationale": "用户明确排除支付记录，要求了解税务发票的查验方式。"
+      },
+      "tags": ["negation", "invoice_verification", "invoice_vs_payment"]
+    },
+    {
+      "id": "i20",
+      "split": "validation",
+      "family_id": "invoice_file_retrieval",
+      "input": {
+        "message": "对，就这张，在哪里能取到它的原始文件给财务？",
+        "history": [
+          {"role": "user", "content": "采购单旁边显示已开票，我需要留存那张电子发票。"},
+          {"role": "assistant", "content": "你说的是这笔采购订单对应的电子发票吗？"}
+        ]
+      },
+      "expected": {
+        "intent": "invoice",
+        "rationale": "它指历史中已开具的电子发票，当前要获取发票文件。"
+      },
+      "tags": ["context", "invoice_download", "reference_resolution"]
+    },
+    {
+      "id": "i21",
+      "split": "development",
+      "family_id": "payment_debited_order_unpaid",
+      "input": {
+        "message": "银行短信说钱已经扣走，订单却还让我付款，这笔支付怎么没对上？",
+        "history": []
+      },
+      "expected": {
+        "intent": "payment_issue",
+        "rationale": "核心是扣款与订单支付确认不一致，尚未提出退款或退货诉求。"
+      },
+      "tags": ["payment_reconciliation", "payment_vs_order_status", "colloquial"]
+    },
+    {
+      "id": "i22",
+      "split": "development",
+      "family_id": "payment_wallet_false_insufficiency",
+      "input": {
+        "message": "选的就是余额支付，可它还说余额不足，明明余额比应付金额多呀。",
+        "history": [
+          {"role": "user", "content": "我在结算一笔小额订单，账户钱包显示有足够可用余额。"},
+          {"role": "assistant", "content": "你结算时选择的付款方式是什么？"}
+        ]
+      },
+      "expected": {
+        "intent": "payment_issue",
+        "rationale": "用户报告付款余额校验异常导致结算受阻，属于支付问题。"
+      },
+      "tags": ["context", "payment_rejection", "colloquial"]
+    },
+    {
+      "id": "i23",
+      "split": "validation",
+      "family_id": "payment_duplicate_settled_charge",
+      "input": {
+        "message": "我只确认过一回购买，信用卡账上却有两条同商户同金额的已入账交易，想核对是不是多收了一笔。",
+        "history": []
+      },
+      "expected": {
+        "intent": "payment_issue",
+        "rationale": "用户核查同次购买出现两笔已入账扣款的支付异常，未要求退货。"
+      },
+      "tags": ["duplicate_charge", "charge_reconciliation"]
+    },
+    {
+      "id": "i24",
+      "split": "validation",
+      "family_id": "payment_amount_mismatch",
+      "input": {
+        "message": "结算确认页写实付八十九元，实际支付凭证却是一百零九元；我不是问发票，想弄清这二十元差额。",
+        "history": []
+      },
+      "expected": {
+        "intent": "payment_issue",
+        "rationale": "用户质疑实扣金额与确认金额不符，并排除发票问题，主意图是支付差额核对。"
+      },
+      "tags": ["negation", "amount_mismatch", "payment_vs_invoice"]
+    },
+    {
+      "id": "i25",
+      "split": "validation",
+      "family_id": "payment_card_channel_unavailable",
+      "input": {
+        "message": "换到银行卡也没用，每次确认付款都弹支付通道暂不可用，别的商户刷这张卡是正常的。",
+        "history": [
+          {"role": "user", "content": "这笔订单一直无法完成结账，钱包付款不成功。"},
+          {"role": "assistant", "content": "你也可以说明切换付款渠道后的现象，便于定位支付故障。"}
+        ]
+      },
+      "expected": {
+        "intent": "payment_issue",
+        "rationale": "异常发生在付款通道，当前聚焦交易无法完成而非应用闪退或登录失败。"
+      },
+      "tags": ["context", "payment_channel", "payment_rejection"]
+    },
+    {
+      "id": "i26",
+      "split": "development",
+      "family_id": "security_unknown_device_session",
+      "input": {
+        "message": "设备列表冒出一台我从没用过的平板，还显示在线，怎么先把这个陌生设备踢出去保护账号？",
+        "history": []
+      },
+      "expected": {
+        "intent": "account_security",
+        "rationale": "发现未知在线设备并要求保护账户，属于疑似未授权访问的安全处置。"
+      },
+      "tags": ["unauthorized_access", "session_revocation", "colloquial"]
+    },
+    {
+      "id": "i27",
+      "split": "development",
+      "family_id": "security_unauthorized_phone_change",
+      "input": {
+        "message": "没有，那不是我换的号码，先帮我防止别人继续控制这个账号。",
+        "history": [
+          {"role": "user", "content": "我收到通知，账号绑定的手机号变成了一个不认识的号码。"},
+          {"role": "assistant", "content": "这次绑定信息变更是你本人操作的吗？"}
+        ]
+      },
+      "expected": {
+        "intent": "account_security",
+        "rationale": "用户否认绑定信息变更为本人操作，当前要阻止账户被他人控制。"
+      },
+      "tags": ["context", "negation", "unauthorized_change"]
+    },
+    {
+      "id": "i28",
+      "split": "validation",
+      "family_id": "security_unknown_purchase",
+      "input": {
+        "message": "我能正常进账户，但有人用我的账号向陌生地址下了单，先告诉我怎样保护账号，别只查那笔订单。",
+        "history": []
+      },
+      "expected": {
+        "intent": "account_security",
+        "rationale": "登录正常且明确以保护被冒用账户为目标，异常订单只是安全风险证据。"
+      },
+      "tags": ["negation", "unauthorized_purchase", "security_vs_order_status", "security_vs_login"]
+    },
+    {
+      "id": "i29",
+      "split": "validation",
+      "family_id": "security_unrequested_password_change",
+      "input": {
+        "message": "不是我点的，得赶紧阻止这次改密，免得账号被拿走。",
+        "history": [
+          {"role": "user", "content": "邮箱收到一封正在申请修改账户密码的通知。"},
+          {"role": "assistant", "content": "你刚才是否发起过这次密码修改？"}
+        ]
+      },
+      "expected": {
+        "intent": "account_security",
+        "rationale": "用户否认主动改密并担忧账户接管，诉求是阻止未授权变更。"
+      },
+      "tags": ["context", "negation", "account_takeover_risk"]
+    },
+    {
+      "id": "i30",
+      "split": "validation",
+      "family_id": "security_lost_logged_in_phone",
+      "input": {
+        "message": "旧手机丢了，上面还保持着账号登录，我担心捡到的人看到资料，怎么让那部手机上的会话失效？",
+        "history": []
+      },
+      "expected": {
+        "intent": "account_security",
+        "rationale": "因遗失已登录设备而要求撤销会话，目的是保护账户资料安全。"
+      },
+      "tags": ["lost_device", "session_revocation", "privacy_protection"]
+    },
+    {
+      "id": "i31",
+      "split": "development",
+      "family_id": "login_authentication_loop",
+      "input": {
+        "message": "输完正确密码就转圈，转完又回到登录框，一直进不去个人中心，咋排查？",
+        "history": []
+      },
+      "expected": {
+        "intent": "technical_login",
+        "rationale": "用户报告身份认证循环导致无法进入账户，没有账户被盗迹象。"
+      },
+      "tags": ["authentication_loop", "colloquial"]
+    },
+    {
+      "id": "i32",
+      "split": "development",
+      "family_id": "login_fresh_code_rejected",
+      "input": {
+        "message": "刚收到就填了，还是提示校验码无效，登录这步过不了。",
+        "history": [
+          {"role": "user", "content": "短信能正常收到，但输入动态码后认证总失败。"},
+          {"role": "assistant", "content": "你输入的是刚获取且尚未使用的动态码吗？"}
+        ]
+      },
+      "expected": {
+        "intent": "technical_login",
+        "rationale": "用户报告刚收到的动态码仍被登录认证拒绝，属于登录流程故障。"
+      },
+      "tags": ["context", "verification_failure", "code_received"]
+    },
+    {
+      "id": "i33",
+      "split": "validation",
+      "family_id": "login_qr_confirmation_not_applied",
+      "input": {
+        "message": "手机扫了电脑上的登录二维码，也按了允许登录，电脑却还停在等待扫描，这个扫码认证怎么没生效？",
+        "history": []
+      },
+      "expected": {
+        "intent": "technical_login",
+        "rationale": "扫码确认未使电脑完成身份认证，问题限定在登录链路。"
+      },
+      "tags": ["qr_authentication", "cross_device"]
+    },
+    {
+      "id": "i34",
+      "split": "validation",
+      "family_id": "login_immediate_session_expiry",
+      "input": {
+        "message": "不是怀疑被人盗号，设备都是我的；问题是每次刚验证通过就说会话过期，马上把我退回认证页。",
+        "history": []
+      },
+      "expected": {
+        "intent": "technical_login",
+        "rationale": "用户排除未授权访问，明确报告登录会话立即失效的认证故障。"
+      },
+      "tags": ["negation", "session_expiry", "login_vs_security"]
+    },
+    {
+      "id": "i35",
+      "split": "validation",
+      "family_id": "login_magic_link_failure",
+      "input": {
+        "message": "新发来的也一样，点开只说登录链接不可用，还没到账号首页。",
+        "history": [
+          {"role": "user", "content": "我用邮箱里的免密链接登录，点击后一直无法认证。"},
+          {"role": "assistant", "content": "重新获取一封登录邮件后，链接是否仍有相同问题？"}
+        ]
+      },
+      "expected": {
+        "intent": "technical_login",
+        "rationale": "历史说明免密认证场景，当前确认新登录链接仍失效，无法完成登录。"
+      },
+      "tags": ["context", "magic_link", "authentication_failure"]
+    },
+    {
+      "id": "i36",
+      "split": "development",
+      "family_id": "crash_cart_open_exit",
+      "input": {
+        "message": "一点购物车，整个客户端就自己关掉了，重新打开也照样，根本看不到购物车页面。",
+        "history": []
+      },
+      "expected": {
+        "intent": "technical_crash",
+        "rationale": "打开页面导致客户端进程退出，主意图是应用崩溃排查。"
+      },
+      "tags": ["client_exit", "reproducible_failure"]
+    },
+    {
+      "id": "i37",
+      "split": "development",
+      "family_id": "crash_image_zoom",
+      "input": {
+        "message": "关掉后台再打开也没用，还是一放大图片就直接退回手机桌面。",
+        "history": [
+          {"role": "user", "content": "浏览商品图册时，双指放大照片会让应用退出。"},
+          {"role": "assistant", "content": "重开客户端后，这个现象是否仍能复现？"}
+        ]
+      },
+      "expected": {
+        "intent": "technical_crash",
+        "rationale": "历史中的图片缩放触发闪退仍复现，当前继续处理应用崩溃。"
+      },
+      "tags": ["context", "mobile_crash", "reproducible_failure"]
+    },
+    {
+      "id": "i38",
+      "split": "validation",
+      "family_id": "crash_help_page_render_error",
+      "input": {
+        "message": "打开帮助中心就出现 ERR_RENDER_09，整页空着，别的页面还能用，麻烦看看这个报错。",
+        "history": []
+      },
+      "expected": {
+        "intent": "technical_crash",
+        "rationale": "普通业务页面发生渲染错误并空白，属于应用页面故障。"
+      },
+      "tags": ["error_code", "render_failure"]
+    },
+    {
+      "id": "i39",
+      "split": "validation",
+      "family_id": "crash_address_page_freeze",
+      "input": {
+        "message": "不是进不去账号，登录已经成功了；一点地址管理就白屏，所有按钮都不响应。",
+        "history": []
+      },
+      "expected": {
+        "intent": "technical_crash",
+        "rationale": "明确排除登录失败，问题是认证后页面白屏与界面无响应。"
+      },
+      "tags": ["negation", "ui_freeze", "crash_vs_login"]
+    },
+    {
+      "id": "i40",
+      "split": "validation",
+      "family_id": "crash_desktop_draft_save",
+      "input": {
+        "message": "只在保存草稿时整扇窗口突然消失，重开能正常登录，但草稿还是存不上。",
+        "history": [
+          {"role": "user", "content": "桌面客户端编辑评价时遇到了异常退出。"},
+          {"role": "assistant", "content": "退出发生在什么操作之后，重新启动是否正常？"}
+        ]
+      },
+      "expected": {
+        "intent": "technical_crash",
+        "rationale": "保存操作稳定触发桌面客户端退出，用户在描述故障而非请求代存草稿。"
+      },
+      "tags": ["context", "desktop_crash", "action_trigger"]
+    },
+    {
+      "id": "i41",
+      "split": "development",
+      "family_id": "handoff_live_staff_conversation",
+      "input": {
+        "message": "这段对话能接给值班的真人同事吗？我想直接跟工作人员说明。",
+        "history": []
+      },
+      "expected": {
+        "intent": "human_handoff",
+        "rationale": "用户明确要求由真人工作人员接续对话，主意图是人工接管。"
+      },
+      "tags": ["explicit_handoff", "colloquial"]
+    },
+    {
+      "id": "i42",
+      "split": "development",
+      "family_id": "handoff_stop_automated_session",
+      "input": {
+        "message": "先停一下自动回复，把聊天接给一个真人来继续吧。",
+        "history": [
+          {"role": "user", "content": "前面那些说明我已经看过了。"},
+          {"role": "assistant", "content": "我可以再解释一次处理步骤。"}
+        ]
+      },
+      "expected": {
+        "intent": "human_handoff",
+        "rationale": "用户要求停止自动回复并让真人继续处理，没有提出新的业务操作。"
+      },
+      "tags": ["context", "explicit_handoff", "automation_rejection"]
+    },
+    {
+      "id": "i43",
+      "split": "validation",
+      "family_id": "handoff_supervisor_review",
+      "input": {
+        "message": "请把这段会话交给你们当班主管，我需要由主管本人接着沟通。",
+        "history": []
+      },
+      "expected": {
+        "intent": "human_handoff",
+        "rationale": "用户指定主管本人接管会话，属于人工升级而非泛泛表达不满。"
+      },
+      "tags": ["supervisor", "explicit_handoff"]
+    },
+    {
+      "id": "i44",
+      "split": "validation",
+      "family_id": "handoff_language_matching",
+      "input": {
+        "message": "我想跟会粤语的人工同事沟通，请把会话交给这样一位工作人员。",
+        "history": []
+      },
+      "expected": {
+        "intent": "human_handoff",
+        "rationale": "用户以语言偏好指定人工工作人员接续会话，核心是人工接管。"
+      },
+      "tags": ["language_preference", "explicit_handoff"]
+    },
+    {
+      "id": "i45",
+      "split": "validation",
+      "family_id": "handoff_human_voice_callback",
+      "input": {
+        "message": "那就安排人工电话回访吧，我要跟真人通话，由他继续处理这件事。",
+        "history": [
+          {"role": "user", "content": "打字不方便，我想改用语音把情况讲清楚。"},
+          {"role": "assistant", "content": "你希望由人工通过电话与你沟通吗？"}
+        ]
+      },
+      "expected": {
+        "intent": "human_handoff",
+        "rationale": "当前要求以人工电话回访接续处理，指定真人沟通而不是一般功能操作。"
+      },
+      "tags": ["context", "voice_callback", "explicit_handoff"]
+    },
+    {
+      "id": "i46",
+      "split": "development",
+      "family_id": "request_cancel_unpaid_order",
+      "input": {
+        "message": "刚拍的那笔还没付钱，我买错了，请把这张待付款单撤掉。",
+        "history": []
+      },
+      "expected": {
+        "intent": "request",
+        "rationale": "用户要求撤销未付款订单，是明确订单操作，没有退款或查单诉求。"
+      },
+      "tags": ["order_mutation", "cancellation", "colloquial"]
+    },
+    {
+      "id": "i47",
+      "split": "development",
+      "family_id": "request_remove_gift_wrap",
+      "input": {
+        "message": "去掉礼品包装，商品照常保留。",
+        "history": [
+          {"role": "user", "content": "我在订单里选了免费礼品包装，现在想调整这个选项。"},
+          {"role": "assistant", "content": "这笔订单的礼品包装是否还需要保留？"}
+        ]
+      },
+      "expected": {
+        "intent": "request",
+        "rationale": "当前要求修改订单包装选项，既不是退货退款，也不是物流查询。"
+      },
+      "tags": ["context", "order_mutation", "packaging_option"]
+    },
+    {
+      "id": "i48",
+      "split": "validation",
+      "family_id": "request_add_packaging_note",
+      "input": {
+        "message": "给这笔还没出库的订单补一条备注：外箱不要印商品名称。",
+        "history": []
+      },
+      "expected": {
+        "intent": "request",
+        "rationale": "用户请求添加包装备注，未询问订单进度或包裹配送。"
+      },
+      "tags": ["order_mutation", "order_note"]
+    },
+    {
+      "id": "i49",
+      "split": "validation",
+      "family_id": "request_change_product_variant",
+      "input": {
+        "message": "保留数量，把这一件的颜色改成深蓝就行。",
+        "history": [
+          {"role": "user", "content": "尚未支付的订单里有一件浅灰色外套，我想改选款式参数。"},
+          {"role": "assistant", "content": "这件外套的数量和颜色分别需要怎样调整？"}
+        ]
+      },
+      "expected": {
+        "intent": "request",
+        "rationale": "用户明确要求修改未付款订单的商品颜色，属于订单变更操作。"
+      },
+      "tags": ["context", "order_mutation", "product_variant"]
+    },
+    {
+      "id": "i50",
+      "split": "validation",
+      "family_id": "request_correct_recipient_phone",
+      "input": {
+        "message": "不是账户绑定手机号有问题，是订单收件电话填错了一位；请修改这单的收件电话，地址不用动。",
+        "history": []
+      },
+      "expected": {
+        "intent": "request",
+        "rationale": "用户要求更正订单收件信息，明确排除账户手机号问题且未报告安全风险。"
+      },
+      "tags": ["negation", "order_mutation", "recipient_details", "request_vs_security"]
+    },
+    {
+      "id": "i51",
+      "split": "development",
+      "family_id": "greeting_midday_salutation",
+      "input": {
+        "message": "午安，先来打个招呼～",
+        "history": []
+      },
+      "expected": {
+        "intent": "greeting",
+        "rationale": "消息仅为午间问候，没有业务问题或操作请求。"
+      },
+      "tags": ["salutation", "colloquial"]
+    },
+    {
+      "id": "i52",
+      "split": "development",
+      "family_id": "greeting_evening_no_task",
+      "input": {
+        "message": "没啥要处理的，来跟你说声晚上好。",
+        "history": [
+          {"role": "assistant", "content": "欢迎来到客服会话，有什么事情需要协助？"}
+        ]
+      },
+      "expected": {
+        "intent": "greeting",
+        "rationale": "用户明确没有待办诉求，当前只进行晚间问候。"
+      },
+      "tags": ["context", "negation", "salutation"]
+    },
+    {
+      "id": "i53",
+      "split": "validation",
+      "family_id": "greeting_weekend_wishes",
+      "input": {
+        "message": "哈喽，祝你周末愉快呀！",
+        "history": []
+      },
+      "expected": {
+        "intent": "greeting",
+        "rationale": "消息由招呼和周末祝愿组成，没有具体客服任务。"
+      },
+      "tags": ["salutation", "social_wish", "colloquial"]
+    },
+    {
+      "id": "i54",
+      "split": "validation",
+      "family_id": "greeting_first_visit",
+      "input": {
+        "message": "今天头回来这里，向值班的小伙伴问个好。",
+        "history": []
+      },
+      "expected": {
+        "intent": "greeting",
+        "rationale": "用户说明初次来访并致意，没有要求查询或转接值班人员。"
+      },
+      "tags": ["first_visit", "salutation", "greeting_vs_handoff"]
+    },
+    {
+      "id": "i55",
+      "split": "validation",
+      "family_id": "greeting_returning_visitor",
+      "input": {
+        "message": "哈哈，又见面啦，先跟你问个好！",
+        "history": [
+          {"role": "assistant", "content": "欢迎回来，很高兴再次见到你。"}
+        ]
+      },
+      "expected": {
+        "intent": "greeting",
+        "rationale": "当前回应再次见面的社交问候，历史中没有待解决业务事项。"
+      },
+      "tags": ["context", "returning_visitor", "salutation"]
+    },
+    {
+      "id": "i56",
+      "split": "development",
+      "family_id": "other_nonsensical_statement",
+      "input": {
+        "message": "紫色的螺丝会唱歌，月亮住在抽屉里。",
+        "history": []
+      },
+      "expected": {
+        "intent": "other",
+        "rationale": "内容是无明确交际任务的无意义陈述，无法归入给定客服业务或问候意图。"
+      },
+      "tags": ["nonsense", "no_task"]
+    },
+    {
+      "id": "i57",
+      "split": "development",
+      "family_id": "other_acknowledge_explanation",
+      "input": {
+        "message": "收到，我先看看。",
+        "history": [
+          {"role": "assistant", "content": "以上就是这次说明的全部内容，你可以先阅读。"}
+        ]
+      },
+      "expected": {
+        "intent": "other",
+        "rationale": "当前只是确认收到说明，没有新增业务诉求，也没有问候或评价服务质量。"
+      },
+      "tags": ["context", "acknowledgement", "no_task"]
+    },
+    {
+      "id": "i58",
+      "split": "validation",
+      "family_id": "other_unrelated_factual_statement",
+      "input": {
+        "message": "三角形有三条边。",
+        "history": []
+      },
+      "expected": {
+        "intent": "other",
+        "rationale": "消息仅为与客服业务无关的事实陈述，不含问题、问候或操作请求。"
+      },
+      "tags": ["off_topic", "statement", "no_task"]
+    },
+    {
+      "id": "i59",
+      "split": "validation",
+      "family_id": "other_abandoned_utterance",
+      "input": {
+        "message": "嗯……那个……算了。",
+        "history": []
+      },
+      "expected": {
+        "intent": "other",
+        "rationale": "用户未表达可判定的需求且已放弃继续表述，不应凭空补全意图。"
+      },
+      "tags": ["incomplete", "withdrawn", "colloquial"]
+    },
+    {
+      "id": "i60",
+      "split": "validation",
+      "family_id": "other_accidental_input_withdrawal",
+      "input": {
+        "message": "刚才那条是孩子乱按的，没有事情要咨询。",
+        "history": [
+          {"role": "user", "content": "啊啊哦哦咕咕"},
+          {"role": "assistant", "content": "还没有看明白这条消息，你可以说明需要什么帮助。"}
+        ]
+      },
+      "expected": {
+        "intent": "other",
+        "rationale": "用户解释无意义输入来自误触并明确没有咨询事项，当前没有可路由的业务意图。"
+      },
+      "tags": ["context", "negation", "accidental_input", "no_task"]
+    }
+  ]
+}

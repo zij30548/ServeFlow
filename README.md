@@ -116,6 +116,49 @@ npm run build
 
 真实MySQL集成测试需要显式设置独立测试库，否则跳过；不得使用用户正式库。当前前端没有单独的lint／typecheck脚本。
 
+## 量化评测的离线准备
+
+[评测工具](backend/evaluation/benchmark.py)提供题集校验、文件哈希冻结、结果模板和离线计分，不读取`.env`、不连接数据库、不发送模型请求，也不会修改正式对话流程。
+
+| 题集 | 开发集 | 验证集 | 范围 |
+| --- | ---: | ---: | --- |
+| 意图 | 24 | 36 | 12个核心类别，每类2道开发题、3道验证题 |
+| 检索 | 12 | 12 | 每组6道可答、3道资料不足、3道未收录 |
+| 业务任务 | 6 | 6 | 拆单、退款未知项、权益、跨客户边界、多轮及干扰指令 |
+
+题目是按当前演示政策和合成订单编写的评测样本，不是模型训练数据，也不是独立人类盲测。开发与验证按场景族分组，验证题不用于调参；资料只有6篇，订单只有10笔，成绩不能代表真实企业的整体客服效果。验证集对编写者可见；精确去重也不能证明不存在语义相似。两组共享源政策和订单事实，例如`t05`与`t11`使用同一订单做无权限／有权限对照，不能称为订单事实也独立留出。
+
+在`backend/`下执行：
+
+```sh
+.venv/bin/python -B -m evaluation.benchmark validate
+.venv/bin/python -B -m evaluation.benchmark freeze \
+  --output data/benchmarks/preparation-v1/manifest.json
+.venv/bin/python -B -m evaluation.benchmark verify \
+  --manifest data/benchmarks/preparation-v1/manifest.json
+```
+
+冻结清单只表示离线准备：授权与实际模型请求数均为0，完整真实请求尚未冻结。文件变化会导致核验失败，已有输出不能覆盖；新建目录不会获得模型额度。
+
+以下命令创建**空的受控结果模板**，不会执行题目：
+
+```sh
+.venv/bin/python -B -m evaluation.benchmark template \
+  --manifest data/benchmarks/preparation-v1/manifest.json \
+  --suite intent --split development --arm fusion \
+  --output data/benchmarks/preparation-v1/controlled-intent.json
+.venv/bin/python -B -m evaluation.benchmark score \
+  --manifest data/benchmarks/preparation-v1/manifest.json \
+  --results data/benchmarks/preparation-v1/controlled-intent.json \
+  --output data/benchmarks/preparation-v1/controlled-intent-report.json
+```
+
+空模板的题目全部标为未执行；受控结果和历史输出回放均不代表新的真实模型质量成绩。工具目前拒绝导入声称为实时模型验收的结果。输出默认私有权限，放在被Git忽略的`backend/data/`中；数据与结果契约见[样本目录](backend/evaluation/benchmark/)及[计分实现](backend/evaluation/benchmark_metrics.py)。
+
+分类报告Accuracy和固定标签集的Macro-F1；检索报告Hit@1、Hit@3、MRR、前三条资料覆盖及未收录问题的误命中；完整任务保留实际角色与工具执行观测，先检查必需角色和工具是否出现，再逐项复核证据、覆盖、条件、缺失、状态、引用和权限，不能靠回答关键词自动判通过。工具名出现也不证明执行者具备权限，权限仍须单独核对。失败、取消、未知结果和未执行项保留在计划题分母；执行及必要观测均合格、但未复核的任务标为待核。耗时使用记录值的P50/P95，用量缺失记为未知。
+
+对照计划是“仅LLM／三路融合”和“直接向量检索／改写召回重排”。当前任务题只准备当前版本基线，不能据此声称修复后提升。真实评测开始前仍须固定完整请求、执行顺序、持久发送台账和新一批明确调用额度。原有`/eval/run`不是本离线工具的执行入口，不应把其混合汇总通过率当作独立任务解决率。
+
 ## 当前限制
 
 - 非思考兼容修复已完成离线检查，完整真实问答仍待复验；尚不能保证查单、退款和政策回复在任意表述下稳定正确。
