@@ -45,11 +45,15 @@ def test_coarse_and_fine_scores_choose_the_same_group_together():
 
 
 def test_pattern_can_still_refine_within_the_winning_group():
-    intent, confidence, sources = vote(
-        make_recognizer(),
-        (IntentCategory.TECHNICAL, 0.8),
-        (IntentCategory.OTHER, 0.0),
-        (IntentCategory.TECHNICAL_LOGIN, 0.5),
+    # Same-group refinement is retained, now backed by an active symptom rather
+    # than a naked, potentially negated keyword supplied by a test double.
+    recognizer = make_recognizer()
+    pattern = recognizer._pattern_recognize("账号无法登录")
+    assert pattern["refinement_allowed"] is True
+    intent, confidence, sources = recognizer._vote(
+        {"intent": IntentCategory.TECHNICAL, "confidence": 0.8},
+        {"intent": IntentCategory.OTHER, "confidence": 0.0},
+        pattern,
     )
 
     assert intent is IntentCategory.TECHNICAL_LOGIN

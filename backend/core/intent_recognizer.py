@@ -29,6 +29,9 @@ from core.safe_diagnostics import record_llm_failure
 
 logger = logging.getLogger(__name__)
 
+# Explicit policy identity for future freezes; old trial protocols stay intact.
+INTENT_POLICY_VERSION = "three-way-intent-v2-scoped-refinement"
+
 
 class IntentCategory(Enum):
     QUERY      = "query"       # 查询信息
@@ -265,6 +268,16 @@ class IntentRecognizer:
 如果用户问题能匹配细粒度业务意图，请优先返回细粒度意图，而不是宽泛大类。
 例如退款优先返回 refund，发票优先返回 invoice，登录故障优先返回 technical_login。
 
+粗细类别规则：
+- query 下：订单受理、制作、关闭或履约状态为 order_status；包裹运输、配送和到货为 logistics。
+- billing 下：退货、退款申请和退款进度为 refund；票据开具、获取和查验为 invoice；实际支付或扣款差额、重复交易、付款失败为 payment_issue。
+- technical 下：登录、认证、会话失效为 technical_login；其他页面报错、白屏、闪退为 technical_crash。
+- account 下：盗号、未授权变更、遗失设备会话撤销为 account_security。
+- escalation 下：明确要求人工、主管或负责人本人接管并继续沟通处理为 human_handoff；仅提及这些角色不代表要求转接。
+能确定子类时输出子类；只有现有信息无法区分子类时保留粗类，不凭空补全。
+区分排除话题与故障现象：用户明确否认咨询某事时，不以被否认的词分类；没有收到退款、不能登录等仍是对应事项的故障。
+结合历史解析指代，以当前实际诉求为准；不要把旧话题或引用文字当成当前请求。示例中的粗类只说明业务域，不覆盖上述细类规则。
+
 示例:
 {examples}
 
@@ -309,8 +322,11 @@ class IntentRecognizer:
     async def _embedding_recognize(self, message: str) -> Dict[str, Any]:
         """策略 2：Embedding 向量相似度匹配。"""
         try:
+            active = self._active_intent_text(message)
+            if not active.strip():
+                return {"intent": IntentCategory.OTHER, "confidence": 0.0, "source": "local-ngram"}
             templates, msg_vec, source = await self._embedding.vectors(
-                self._clean_text(message), _TEMPLATES, self._local_embedding)
+                active, _TEMPLATES, self._local_embedding)
 
             best_cat, best_score = IntentCategory.OTHER, 0.0
             for cat, vecs in templates.items():
@@ -325,7 +341,7 @@ class IntentRecognizer:
 
     def _pattern_recognize(self, message: str) -> Dict[str, Any]:
         """策略 3：关键词模式匹配（同步，零延迟兜底）。"""
-        msg = message.lower()
+        msg = self._active_intent_text(message)
         specific_patterns = {
             IntentCategory.HUMAN_HANDOFF: ["转人工", "人工客服", "找人工"],
             IntentCategory.ORDER_STATUS: ["订单状态", "发货了吗", "处理到哪", "order status"],
@@ -348,12 +364,23 @@ class IntentRecognizer:
             IntentCategory.ACCOUNT:    ["密码", "邮箱", "账户", "password"],
         }
 
+        # Strong, scoped combinations may justify a subtype. Bare nouns still
+        # contribute their original weak vote, but have no refinement authority.
+        strong = self._specific_evidence(msg)
+        if len(strong) == 1:
+            best_cat = next(iter(strong))
+            _, score = self._best_pattern_match(msg, {best_cat: specific_patterns[best_cat]})
+            return {"intent": best_cat, "confidence": max(0.5, score),
+                    "refinement_allowed": True}
+
         best_cat, best_score = self._best_pattern_match(msg, specific_patterns)
         if best_cat != IntentCategory.OTHER:
-            return {"intent": best_cat, "confidence": best_score}
+            return {"intent": best_cat, "confidence": best_score,
+                    "refinement_allowed": False}
 
         best_cat, best_score = self._best_pattern_match(msg, generic_patterns)
-        return {"intent": best_cat, "confidence": best_score}
+        return {"intent": best_cat, "confidence": best_score,
+                "refinement_allowed": False}
 
     # ── 投票合并 ──────────────────────────────────────────────────────────────
 
@@ -400,9 +427,15 @@ class IntentRecognizer:
         )
         pat_intent = pat.get("intent", IntentCategory.OTHER)
         pat_conf = float(pat.get("confidence", 0.0) or 0.0)
+        # Local character similarity alone cannot silently replace a winning
+        # coarse LLM label with a subtype. Keep it unless scoped evidence agrees.
+        llm_intent = llm.get("intent", IntentCategory.OTHER)
+        if (llm_intent in _GENERIC_INTENTS and llm_intent == best_group
+                and best in _SPECIFIC_INTENTS):
+            best = llm_intent
         if (best in _GENERIC_INTENTS and pat_intent in _SPECIFIC_INTENTS
                 and _INTENT_GROUPS.get(pat_intent, pat_intent) == best_group
-                and pat_conf >= 0.5 and best_score < 0.8):
+                and pat.get("refinement_allowed") is True and pat_conf >= 0.5):
             source_scores["refined_by_pattern"] = pat_conf
             return pat_intent, max(best_score, pat_conf), source_scores
         if best_score < self.threshold:
@@ -460,7 +493,7 @@ class IntentRecognizer:
         return UrgencyLevel.LOW
 
     def _cache_key(self, message: str, history: Optional[List[Dict[str, str]]] = None) -> str:
-        payload = {"message": self._clean_text(message)}
+        payload = {"message": self._clean_text(message), "intent_policy_version": INTENT_POLICY_VERSION}
         if history:
             payload["history"] = [
                 {
@@ -477,13 +510,100 @@ class IntentRecognizer:
         return list(dict.fromkeys(value.strip() for value in values if value and value.strip()))
 
     @staticmethod
+    def _active_intent_text(message: str) -> str:
+        """Mask explicit topic/request exclusions, preserving nearby assertions.
+
+        This intentionally covers a finite grammar, not general negation. In
+        particular, negative symptoms such as 没收到退款 / 无法登录 stay intact.
+        The original full message still goes to the LLM for context reasoning.
+        """
+        text = IntentRecognizer._clean_text(message).lower()
+        topics = (r"退货退款|退款|退货|发票|开票|抬头|税号|物流|快递|配送|运单|"
+                  r"订单状态|订单进度|转人工|人工客服|人工|主管|负责人|经理|"
+                  r"登录故障|登录失败|不能登录|无法登录|登录|报错|崩溃|闪退|"
+                  r"扣款|支付失败|支付问题|支付|账户安全|账号安全")
+        topic_group = rf"(?:{topics})(?:\s*(?:或|和|及|、|与|/)\s*(?:{topics}))*"
+        verbs = r"(?:(?:在|再|先|现在|马上|立即|给我|帮我|要|想|需要|让|找|转接|转给|联系|安排|问|咨询|查询|查|核对|讨论|说|办理|申请|开|处理|要求|关于)\s*){0,4}"
+        exclusion = (r"(?<!不是)(?<!并非)(?<!不)"
+                     r"(?:并不是|不是|并非|不需要|不想|不用|不要|不必|无需|无须|先别|暂不|别)\s*")
+        text = re.sub(exclusion + verbs + topic_group, " ", text)
+        # Directly declining handoff is a request exclusion, unlike 不能登录.
+        text = re.sub(r"(?<!不是)(?<!并非)(?<!不)不(?:转人工|找人工|转接人工|找主管)", " ", text)
+        english_topics = r"(?:invoices?|refunds?|shipping|delivery|order status|human (?:agents?|support)|supervisors?)"
+        english_exclusion = (
+            r"\b(?:not (?:asking|inquiring)(?: about| for)?|not interested in|"
+            r"(?:do not|don't|dont) (?:want|need|request)|no need (?:for|to))\s+"
+            r"(?:(?:to|a|an|the|any|ask|about|for|request|check|process|issue)\s+){0,4}"
+        )
+        text = re.sub(english_exclusion + english_topics + r"\b", " ", text)
+        text = re.sub(
+            r"\b(?:do not|don't|dont) (?:transfer|connect|handoff)\s+(?:me\s+)?(?:to\s+)?(?:a\s+|an\s+|the\s+)?"
+            r"(?:human(?: agent| support)?|supervisor)\b", " ", text)
+        return text
+
+    @staticmethod
+    def _specific_evidence(text: str) -> set[IntentCategory]:
+        """Unambiguous lexical combinations eligible for same-group refinement.
+
+        These are bounded heuristics, not calibrated probabilities. Competing
+        strong subtopics deliberately withhold refinement authority.
+        """
+        clause = r"[^，。！？；\n]"
+        directive = r"(?:请(?!问|解释|说明|告诉)|麻烦|帮我|给我|我(?:要|想|需要|希望)|希望|要求)"
+        linking = r"(?:(?:帮我|给我|把(?:这段|本次|当前)?(?:会话|对话)|把我|由|让|直接|马上|立刻)\s*){0,3}"
+        patterns = {
+            IntentCategory.HUMAN_HANDOFF: [
+                rf"{directive}\s*{linking}(?:转接|转给|交给|接通|找|联系|安排){clause}{{0,8}}(?:人工(?:客服|同事)?|真人|主管|负责人)",
+                rf"{directive}\s*{linking}(?:人工(?:客服|同事)?|真人|主管|负责人){clause}{{0,8}}(?:接管|接着(?:沟通|处理)|继续(?:沟通|处理)|回访)",
+                rf"(?:^|[，。！？；\n])\s*(?:{directive}\s*)?(?:转人工|找人工)(?:\s|[，。！？；\n]|$)",
+                r"(?:^|[.;!?\n])\s*(?:please\s+|i (?:want|need) (?:you )?to\s+)?(?:transfer|connect|handoff)\b.{0,24}\b(?:human|supervisor|agent)\b",
+            ],
+            IntentCategory.PAYMENT_ISSUE: [
+                rf"(?:支付|付款|扣款|交易)(?:通道)?{clause}{{0,12}}(?:失败|不可用|不成功|被拒|无法完成)",
+                rf"(?:重复|多收|多扣){clause}{{0,8}}(?:款|钱|费|交易)",
+                r"(?:实付|实扣|实际支付|实际扣款|支付凭证|支付金额|扣款金额|付款金额)[^。！？\n]{0,96}(?:差额|不一致|不符|对不上|金额不对|多扣|多收|比[^。！？\n]{0,16}[高低多少])",
+                r"\b(?:payment failed|charged twice|duplicate charge|payment amount mismatch)\b",
+            ],
+            IntentCategory.REFUND: [
+                rf"(?:申请|办理|查询|核对|检查|想|要|准备){clause}{{0,8}}(?:退款|退货)",
+                rf"(?:退款|退货){clause}{{0,16}}(?:申请|进度|审核|到账|没收到|未收到|没到账|未到账|流程|规则|多久|什么时候)",
+                r"\b(?:request|apply for|not received)\b.{0,12}\brefund\b|\brefund\b.{0,16}\b(?:pending|not received|not arrived)\b",
+            ],
+            IntentCategory.INVOICE: [
+                rf"(?:开具|补开|重开|开|下载|获取|领取|查验|核验|重发|查询|修改|更改){clause}{{0,12}}(?:发票|抬头|税号)",
+                rf"(?:发票|抬头|税号){clause}{{0,14}}(?:开具|下载|在哪|哪里|怎么|如何|没收到|收不到|真伪|查验|修改)",
+                r"\b(?:issue|download|check|request)\b.{0,12}\binvoice\b",
+            ],
+            IntentCategory.ORDER_STATUS: [rf"(?:订单|预订|预购){clause}{{0,18}}(?:状态|进展|受理|制作|关闭|发货了吗|处理到哪)"],
+            IntentCategory.LOGISTICS: [rf"(?:物流|快递|配送|运单|包裹){clause}{{0,16}}(?:在哪|哪里|到哪|多久|什么时候|进度|状态|不更新|延误|路线|派送)"],
+            IntentCategory.ACCOUNT_SECURITY: [
+                rf"(?:账号|账户){clause}{{0,12}}(?:被盗|盗用|冒用|异常登录|未授权)",
+                rf"(?:丢失|丢了|遗失){clause}{{0,20}}(?:登录|会话)",
+            ],
+            IntentCategory.TECHNICAL_LOGIN: [
+                r"不能登录|无法登录|登不上|\bcannot log in\b",
+                rf"登录{clause}{{0,12}}(?:失败|报错|401|过期|失效|不可用)",
+                rf"(?:验证码|登录链接|免密链接){clause}{{0,12}}(?:收不到|没收到|不可用|失败|失效)",
+            ],
+            IntentCategory.TECHNICAL_CRASH: [rf"(?:页面|应用|客户端|窗口|系统|界面){clause}{{0,12}}(?:崩溃|闪退|白屏|无响应|报错|500)"],
+        }
+        # Quoted handoff terminology and definitions are not a current request.
+        # Keep quoted error messages intact for the other symptom classifiers.
+        handoff_text = re.sub(r'“[^”\n]*”|「[^」\n]*」|"[^"\n]*"|(?<!\w)\x27[^\x27\n]*\x27(?!\w)', " ", text)
+        return {intent for intent, expressions in patterns.items()
+                if any(re.search(expression, handoff_text if intent is IntentCategory.HUMAN_HANDOFF else text)
+                       for expression in expressions)}
+
+    @staticmethod
     def _best_pattern_match(
         message: str,
         patterns: Dict[IntentCategory, List[str]],
     ) -> tuple[IntentCategory, float]:
         best_cat, best_score = IntentCategory.OTHER, 0.0
         for cat, kws in patterns.items():
-            hits = sum(1 for kw in kws if kw in message)
+            hits = sum(1 for kw in kws if (
+                bool(re.search(rf"(?<![a-z0-9_]){re.escape(kw)}(?![a-z0-9_])", message))
+                if kw.isascii() and any(char.isalpha() for char in kw) else kw in message))
             if not hits:
                 continue
             # 单个明确业务关键词就给可用置信度；多个关键词命中时提高置信度。
