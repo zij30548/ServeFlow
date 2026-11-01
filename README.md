@@ -197,6 +197,25 @@ npm run build
 
 复核包含冻结标签比对、台账链及24份输出哈希核验；额外离线检查发现24份文本均符合基本三字段JSON形式，该附核不改变预先冻结的生产解析计分口径。评阅由Codex辅助完成，不是独立人类盲评。完整私有证据位于本机被Git忽略的`backend/data/benchmarks/intent-development-v1/`，包括原文、逐题指标、授权与计数；源码仓库只保留汇总。原有失败试验和台账未修改，36道意图验证题、检索题与完整任务题尚未真实执行。
 
+### 意图验证集的独立执行准备
+
+[验证执行工具](backend/evaluation/intent_validation.py)固定使用原36道验证题及原顺序，不修改题目、标签、提示、模型参数或融合权重。每题仍共享一次LLM观察，分别计算仅LLM与三路融合；每类3题，最多36次物理请求。准备与受控测试不代表真实模型成绩。
+
+```sh
+cd backend
+.venv/bin/python -B -m evaluation.intent_validation prepare \
+  --offline-manifest data/benchmarks/preparation-v1/manifest.json
+.venv/bin/python -B -m evaluation.intent_validation verify
+.venv/bin/python -B -m evaluation.intent_validation status
+.venv/bin/python -B -m evaluation.intent_validation report
+```
+
+以上命令不发送模型请求。验证批次固定在`backend/data/benchmarks/intent-validation-v1/`，准备时授权0、调用0；`prepare`还会只读核验原24题批次已封存，并关联旧协议、台账及全部观察文件的哈希。旧文件不改写，旧24次额度不续用。只有取得验证批次的新授权并单独登记，`run`才能发送；本轮已完成离线执行准备，真实验证尚待授权，不能把计划36次写成已获授权。
+
+[验证台账](backend/evaluation/validation_ledger.py)复用原台账的锁、发送前持久占额、不可覆盖操作及结果哈希检查，单独绑定36项身份，不放宽旧24次上限。每题最多一次；失败、已发送取消与不确定尝试占额，执行异常暂停，不自动重试或通过重建目录恢复额度。报告保留失败、未知和未执行项，共享用量只计一次；受控输出不能混入真实成绩。验证题虽未用于调参，但对编写者可见，且同一题仅测一次，仍不能视为独立盲测或总体准确率证明。
+
+本次执行准备的定向离线回归共466项通过，覆盖题集与计分、两批台账／执行器、传输、意图识别及非思考参数；新增执行测试禁用网络，只用受控响应。没有修改业务流程，未重复前端构建。
+
 ## 当前限制
 
 - 非思考兼容修复已完成离线检查，完整真实问答仍待复验；尚不能保证查单、退款和政策回复在任意表述下稳定正确。
