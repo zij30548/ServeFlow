@@ -123,6 +123,26 @@ def _record(case_id, status, *, predicted=None, latency=None, usage=None, arm=Fa
 
 
 class ValidationTrial:
+    # Narrow extension points for another fixed, independently authorized batch.
+    # The original validation defaults and prepare/verify contract stay fixed.
+    batch = BATCH
+    max_requests = MAX_REQUESTS
+    split = "validation"
+    authorization_schema = "serveflow-intent-validation-authorization-v1"
+    observation_schema = "serveflow-intent-validation-observation-v1"
+    report_schema = "serveflow-intent-validation-report-v1"
+    stop_schema = "serveflow-intent-validation-stop-v1"
+    report_limitations = [
+        "36 authored validation cases; visible to dataset authors, not independent human blind evaluation",
+        "shared observation ablation, not independent A/B", "production parser retained",
+        "shared usage counted once; per-arm resources unknown", "single measurement; no stability claim"]
+
+    def _cases(self):
+        return validation_cases()
+
+    def _configuration(self, *, secret=False):
+        return _configuration(secret=secret)
+
     def __init__(self, root=TRIAL_ROOT, development_root=base.TRIAL_ROOT):
         self.root = Path(root).absolute()
         self.development_root = Path(development_root).absolute()
@@ -224,9 +244,9 @@ class ValidationTrial:
         state = self._ledger(protocol).status()
         if state["attempts"] or state["pending"] or state["paused"] or (self.root / "stopped.json").exists():
             _fail("cannot_authorize_started_trial")
-        value = {"schema_version": "serveflow-intent-validation-authorization-v1", "batch": BATCH,
+        value = {"schema_version": self.authorization_schema, "batch": self.batch,
                  "protocol_sha256": bench.sha256(base._path(self.root, "protocol.json")),
-                 "root_binding_sha256": base._root_hash(self.root), "max_requests": MAX_REQUESTS,
+                 "root_binding_sha256": base._root_hash(self.root), "max_requests": self.max_requests,
                  "user_authorization_reference": reference.strip(), "created_at": base._now(),
                  "initial_ledger_chain_hash": state["chain_hash"]}
         base._write(self.root, "authorization.json", value)
@@ -238,8 +258,8 @@ class ValidationTrial:
             _fail("explicit_authorization_required")
         value = bench.read_json(path)
         if (type(value) is not dict or set(value) != APPROVAL_FIELDS
-                or value["schema_version"] != "serveflow-intent-validation-authorization-v1" or value["batch"] != BATCH
-                or type(value["max_requests"]) is not int or value["max_requests"] != MAX_REQUESTS
+                or value["schema_version"] != self.authorization_schema or value["batch"] != self.batch
+                or type(value["max_requests"]) is not int or value["max_requests"] != self.max_requests
                 or value["protocol_sha256"] != bench.sha256(base._path(self.root, "protocol.json"))
                 or value["root_binding_sha256"] != base._root_hash(self.root)
                 or type(value["user_authorization_reference"]) is not str
@@ -262,8 +282,8 @@ class ValidationTrial:
             if result["output_sha256"] != bench.sha256(path):
                 _fail("observation_hash_changed")
             value = bench.read_json(path)
-            if (type(value) is not dict or value.get("schema_version") != "serveflow-intent-validation-observation-v1"
-                    or value.get("batch") != BATCH or value.get("protocol_sha256") != protocol_hash
+            if (type(value) is not dict or value.get("schema_version") != self.observation_schema
+                    or value.get("batch") != self.batch or value.get("protocol_sha256") != protocol_hash
                     or value.get("operation_id") != operation_id or value.get("case_id") != operation["case_id"]
                     or value.get("payload_sha256") != operation["payload_sha256"]
                     or value.get("request_bytes_sha256") != operation["request_bytes_sha256"]
@@ -324,7 +344,7 @@ class ValidationTrial:
             from core.intent_recognizer import IntentCategory
             llm = {"intent": IntentCategory.OTHER, "confidence": 0.0, "failed": True}
         fusion = None if error_code else await base._local_fusion(recognizer, case, llm)
-        output = {"schema_version": "serveflow-intent-validation-observation-v1", "batch": BATCH,
+        output = {"schema_version": self.observation_schema, "batch": self.batch,
                   "evidence_kind": kind, "protocol_sha256": bench.sha256(base._path(self.root, "protocol.json")),
                   "operation_id": operation["operation_id"], "case_id": operation["case_id"],
                   "payload_sha256": operation["payload_sha256"], "request_bytes_sha256": guard.request_bytes_sha256,
@@ -345,7 +365,7 @@ class ValidationTrial:
     def _stop(self):
         try:
             base._write(self.root, "stopped.json", {
-                "schema_version": "serveflow-intent-validation-stop-v1", "error_code": "execution_stopped",
+                "schema_version": self.stop_schema, "error_code": "execution_stopped",
                 "recorded_at": base._now()})
         except (OSError, ValueError):
             pass
@@ -358,8 +378,8 @@ class ValidationTrial:
         if state["paused"] or state["pending"] or (self.root / "stopped.json").exists():
             _fail("trial_paused")
         self._sealed(protocol, ledger, "controlled-transport" if delegate_factory is not None else "live-model")
-        config = _configuration(secret=True)
-        for operation, case in zip(protocol["operations"], validation_cases()):
+        config = self._configuration(secret=True)
+        for operation, case in zip(protocol["operations"], self._cases()):
             if (self.root / "stopped.json").exists():
                 _fail("trial_paused")
             if operation["operation_id"] in state["completed"]:
@@ -420,7 +440,7 @@ class ValidationTrial:
                                      usage={**value["response"]["usage"], "physical_requests": 1}))
         if len(kinds) > 1:
             _fail("mixed_or_unknown_evidence")
-        scores = {arm: score_intent(validation_cases(), rows) for arm, rows in records.items()}
+        scores = {arm: score_intent(self._cases(), rows) for arm, rows in records.items()}
         matrix = dict.fromkeys(("both_correct", "llm_only_correct", "fusion_only_correct", "both_incorrect",
                                 "execution_unknown", "not_executed"), 0)
         paired = []
@@ -434,16 +454,14 @@ class ValidationTrial:
             paired.append({"case_id": first["case_id"], "outcome": key})
         if ledger.status()["chain_hash"] != state["chain_hash"]:
             _fail("ledger_changed_during_report")
-        return {"schema_version": "serveflow-intent-validation-report-v1", "batch": BATCH, "split": "validation",
+        return {"schema_version": self.report_schema, "batch": self.batch, "split": self.split,
                 "evidence_kind": ("controlled-shared-observation" if kinds == {"controlled-transport"}
                                   else "live-shared-observation" if kinds == {"live-model"}
                                   else "pending-send" if state["attempts"] else "not-run"),
                 "protocol_sha256": bench.sha256(base._path(self.root, "protocol.json")), "ledger": state,
                 "scores": scores, "paired_counts": matrix, "paired_cases": paired,
                 "shared_resources": aggregate_resources(resources), "observation_sha256": hashes,
-                "limits": ["36 authored validation cases; visible to dataset authors, not independent human blind evaluation",
-                           "shared observation ablation, not independent A/B", "production parser retained",
-                           "shared usage counted once; per-arm resources unknown", "single measurement; no stability claim"]}
+                "limits": deepcopy(self.report_limitations)}
 
 
 def main(argv=None):

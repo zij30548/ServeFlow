@@ -1,0 +1,445 @@
+{
+  "schema_version": "serveflow-intent-recheck-cases-v2",
+  "dataset_id": "intent-recheck-v2",
+  "provenance": "synthetic-authored-not-independent-blind-test",
+  "cases": [
+    {
+      "id": "i24",
+      "partition": "seen_regression",
+      "input": {
+        "message": "结算确认页写实付八十九元，实际支付凭证却是一百零九元；我不是问发票，想弄清这二十元差额。",
+        "history": []
+      },
+      "expected": {
+        "intent": "payment_issue",
+        "rationale": "用户质疑实扣金额与确认金额不符，并排除发票问题，主意图是支付差额核对。"
+      },
+      "tags": [
+        "seen_case",
+        "original_i24",
+        "historical_failure_regression"
+      ]
+    },
+    {
+      "id": "i43",
+      "partition": "seen_regression",
+      "input": {
+        "message": "请把这段会话交给你们当班主管，我需要由主管本人接着沟通。",
+        "history": []
+      },
+      "expected": {
+        "intent": "human_handoff",
+        "rationale": "用户指定主管本人接管会话，属于人工升级而非泛泛表达不满。"
+      },
+      "tags": [
+        "seen_case",
+        "original_i43",
+        "historical_failure_regression"
+      ]
+    },
+    {
+      "id": "n01",
+      "partition": "new_challenge",
+      "input": {
+        "message": "票据不用查，收银确认页是二百六十元，银行卡实际扣了二百七十八元；我只想核验这笔付款为什么多了十八元。",
+        "history": []
+      },
+      "expected": {
+        "intent": "payment_issue",
+        "rationale": "用户明确排除票据查询，要求核对实扣与确认金额的差额，属于支付金额异常。"
+      },
+      "tags": [
+        "topic_negation",
+        "amount_mismatch",
+        "payment_vs_invoice"
+      ]
+    },
+    {
+      "id": "n02",
+      "partition": "new_challenge",
+      "input": {
+        "message": "我暂时不申请退钱，只想查同一次购买为什么在借记卡上出现了两笔已入账扣款。",
+        "history": []
+      },
+      "expected": {
+        "intent": "payment_issue",
+        "rationale": "用户排除退款申请，当前只核查同次购买的重复入账交易，属于支付异常。"
+      },
+      "tags": [
+        "topic_negation",
+        "duplicate_charge",
+        "payment_vs_refund"
+      ]
+    },
+    {
+      "id": "n03",
+      "partition": "new_challenge",
+      "input": {
+        "message": "报销用的电子票已经开好，可我一直没有收到邮件；请核对这张发票是否发出，并重新发送给我。",
+        "history": []
+      },
+      "expected": {
+        "intent": "invoice",
+        "rationale": "当前核验和重发的对象是已开电子发票；未收到邮件是票据交付问题，不是排除发票话题。"
+      },
+      "tags": [
+        "negative_symptom",
+        "invoice_delivery",
+        "invoice_vs_account"
+      ]
+    },
+    {
+      "id": "n04",
+      "partition": "new_challenge",
+      "input": {
+        "message": "售后审核显示已同意退还货款，钱仍没回到原支付账户，帮我查一下退回进度。",
+        "history": []
+      },
+      "expected": {
+        "intent": "refund",
+        "rationale": "款项已明确属于售后退款，当前查询返还进度，不能因为提到支付账户而归为新付款异常。"
+      },
+      "tags": [
+        "negative_symptom",
+        "refund_progress",
+        "refund_vs_payment"
+      ]
+    },
+    {
+      "id": "n05",
+      "partition": "new_challenge",
+      "input": {
+        "message": "短信验证通过后又让我重新认证，来回循环，始终到不了登录后的首页；这是登录过程哪里出了问题？",
+        "history": []
+      },
+      "expected": {
+        "intent": "technical_login",
+        "rationale": "故障限定在认证循环和未能完成登录，不涉及已登录后的普通页面故障。"
+      },
+      "tags": [
+        "negative_symptom",
+        "authentication_loop",
+        "login_vs_crash"
+      ]
+    },
+    {
+      "id": "n06",
+      "partition": "new_challenge",
+      "input": {
+        "message": "麻烦安排值班负责人来接续这段会话，我希望由负责人本人处理后面的沟通。",
+        "history": []
+      },
+      "expected": {
+        "intent": "human_handoff",
+        "rationale": "用户明确要求负责人本人接续沟通，属于人工接管，而非询问负责人信息。"
+      },
+      "tags": [
+        "explicit_handoff",
+        "supervisor_takeover",
+        "coarse_to_fine"
+      ]
+    },
+    {
+      "id": "n07",
+      "partition": "new_challenge",
+      "input": {
+        "message": "I'd like a human support specialist to take over this conversation now, please.",
+        "history": []
+      },
+      "expected": {
+        "intent": "human_handoff",
+        "rationale": "用户明确请求真人客服接管当前会话，属于转人工。"
+      },
+      "tags": [
+        "english",
+        "explicit_handoff",
+        "coarse_to_fine"
+      ]
+    },
+    {
+      "id": "n08",
+      "partition": "new_challenge",
+      "input": {
+        "message": "“转人工”这几个字是我测试键盘时随手输入的，没有要接通谁，也没有事情需要处理。",
+        "history": []
+      },
+      "expected": {
+        "intent": "other",
+        "rationale": "用户解释文字只是输入测试并明确无业务诉求，引用转人工术语不构成接管请求。"
+      },
+      "tags": [
+        "quotation",
+        "topic_negation",
+        "no_task",
+        "handoff_vs_other"
+      ]
+    },
+    {
+      "id": "n09",
+      "partition": "new_challenge",
+      "input": {
+        "message": "主管说月底前要交报销凭证，我现在只想取得上次购买的电子发票文件，不用联系主管。",
+        "history": []
+      },
+      "expected": {
+        "intent": "invoice",
+        "rationale": "主管要求是背景，当前唯一诉求是取得电子发票，且明确排除联系主管。"
+      },
+      "tags": [
+        "person_mention",
+        "topic_negation",
+        "invoice_vs_handoff"
+      ]
+    },
+    {
+      "id": "n10",
+      "partition": "new_challenge",
+      "input": {
+        "message": "那张票已经处理好了，不用再查；现在要核对刚才付款为什么被扣了两次。",
+        "history": [
+          {
+            "role": "user",
+            "content": "之前那张电子发票的抬头需要更正。"
+          },
+          {
+            "role": "assistant",
+            "content": "我们刚才讨论的是这张电子发票的抬头问题。"
+          }
+        ]
+      },
+      "expected": {
+        "intent": "payment_issue",
+        "rationale": "历史发票问题已明确结束，当前新诉求是重复扣款，不能从旧话题继续分类为发票。"
+      },
+      "tags": [
+        "context",
+        "topic_switch",
+        "resolved_history",
+        "payment_vs_invoice"
+      ]
+    },
+    {
+      "id": "n11",
+      "partition": "new_challenge",
+      "input": {
+        "message": "旧售后已经结束。这次只确认新订的相册有没有开始制作，不要取消这笔新订单。",
+        "history": [
+          {
+            "role": "user",
+            "content": "上一笔售后款项已经退回了。"
+          },
+          {
+            "role": "assistant",
+            "content": "上一笔退款事项已经结束，你可以说明接下来要核对的内容。"
+          }
+        ]
+      },
+      "expected": {
+        "intent": "order_status",
+        "rationale": "用户将旧退款与当前新订单分开，当前查询新订单制作阶段，明确不要求取消。"
+      },
+      "tags": [
+        "context",
+        "topic_switch",
+        "order_fulfillment",
+        "status_vs_action"
+      ]
+    },
+    {
+      "id": "n12",
+      "partition": "new_challenge",
+      "input": {
+        "message": "商品不用退，也不要求返款；请把这张待付款订单里餐盘的数量从两套改成一套。",
+        "history": []
+      },
+      "expected": {
+        "intent": "request",
+        "rationale": "当前要求修改未付款订单的商品数量，退货与退款已被排除。"
+      },
+      "tags": [
+        "topic_negation",
+        "order_mutation",
+        "request_vs_refund"
+      ]
+    },
+    {
+      "id": "n13",
+      "partition": "new_challenge",
+      "input": {
+        "message": "商家已经出库，先别查接单情况；我想知道快件现在停在哪个转运站，为什么整天没有新扫描。",
+        "history": []
+      },
+      "expected": {
+        "intent": "logistics",
+        "rationale": "当前核对包裹运输位置和轨迹停滞，商家接单与出库是已知背景。"
+      },
+      "tags": [
+        "topic_negation",
+        "tracking_gap",
+        "logistics_vs_order_status"
+      ]
+    },
+    {
+      "id": "n14",
+      "partition": "new_challenge",
+      "input": {
+        "message": "我自己登录一直正常，但账户里突然多了一个不认识的已登录设备；我想让那个设备退出，防止别人继续看我的资料。",
+        "history": []
+      },
+      "expected": {
+        "intent": "account_security",
+        "rationale": "用户以未授权设备和隐私风险为由要求撤销会话，属于账户安全，不是自身无法登录。"
+      },
+      "tags": [
+        "negative_symptom",
+        "unrecognized_session",
+        "security_vs_login"
+      ]
+    },
+    {
+      "id": "n15",
+      "partition": "new_challenge",
+      "input": {
+        "message": "认证已经完成，只有打开售后记录页才整片白屏，刷新后也一样；请排查这个页面故障，不是登录问题。",
+        "history": []
+      },
+      "expected": {
+        "intent": "technical_crash",
+        "rationale": "用户明确登录成功，问题发生在普通业务页面渲染，属于页面故障。"
+      },
+      "tags": [
+        "topic_negation",
+        "post_login_failure",
+        "crash_vs_login"
+      ]
+    },
+    {
+      "id": "n16",
+      "partition": "new_challenge",
+      "input": {
+        "message": "早呀，今天也向客服小伙伴说声好！",
+        "history": []
+      },
+      "expected": {
+        "intent": "greeting",
+        "rationale": "消息仅包含问候和致意，没有查询、操作或转接诉求。"
+      },
+      "tags": [
+        "salutation",
+        "guard_case"
+      ]
+    },
+    {
+      "id": "n17",
+      "partition": "new_challenge",
+      "input": {
+        "message": "这次订阅买重了，还没开始使用，我想撤掉这份订阅并退回已支付的费用，应该从哪里申请？",
+        "history": []
+      },
+      "expected": {
+        "intent": "refund",
+        "rationale": "用户要求返还已支付的订阅费用，撤订是退款流程的一部分，主诉求为退款。"
+      },
+      "tags": [
+        "refund_request",
+        "subscription",
+        "guard_case"
+      ]
+    },
+    {
+      "id": "n18",
+      "partition": "new_challenge",
+      "input": {
+        "message": "不是打听退款到账时间，我要把已开票据上的抬头改为公司全称，应该怎么提交更正？",
+        "history": []
+      },
+      "expected": {
+        "intent": "invoice",
+        "rationale": "用户排除退款查询，明确要求更正已开票据抬头，属于发票事项。"
+      },
+      "tags": [
+        "topic_negation",
+        "invoice_correction",
+        "invoice_vs_refund"
+      ]
+    },
+    {
+      "id": "n19",
+      "partition": "new_challenge",
+      "input": {
+        "message": "I am not requesting an invoice. Checkout showed 46 yuan, but my bank statement shows 64 yuan for this purchase. Please reconcile the difference.",
+        "history": []
+      },
+      "expected": {
+        "intent": "payment_issue",
+        "rationale": "用户否认开票请求并核对同次购买确认金额与银行扣款金额的差异，属于支付异常。"
+      },
+      "tags": [
+        "english",
+        "topic_negation",
+        "amount_mismatch",
+        "payment_vs_invoice"
+      ]
+    },
+    {
+      "id": "n20",
+      "partition": "new_challenge",
+      "input": {
+        "message": "对，就按刚才说的，让那位负责人本人接着和我沟通吧。",
+        "history": [
+          {
+            "role": "user",
+            "content": "我希望改由值班负责人来接管这次沟通。"
+          },
+          {
+            "role": "assistant",
+            "content": "你是希望由这位负责人本人继续与你沟通吗？"
+          }
+        ]
+      },
+      "expected": {
+        "intent": "human_handoff",
+        "rationale": "那位负责人由历史明确指向接管会话的值班负责人，当前确认要求本人继续沟通，属于人工接管。"
+      },
+      "tags": [
+        "context",
+        "reference_resolution",
+        "explicit_handoff"
+      ]
+    },
+    {
+      "id": "n21",
+      "partition": "new_challenge",
+      "input": {
+        "message": "新收到的一次性验证码也填进去了，可页面还是反复要求验证身份，账号始终进不去。",
+        "history": []
+      },
+      "expected": {
+        "intent": "technical_login",
+        "rationale": "用户提供新的验证码后仍无法完成身份认证，诉求是登录故障，不是未授权账户变更。"
+      },
+      "tags": [
+        "negative_symptom",
+        "verification_failure",
+        "login_vs_security"
+      ]
+    },
+    {
+      "id": "n22",
+      "partition": "new_challenge",
+      "input": {
+        "message": "这条消息仅用于测通输入框，不用查询订单，也不用办理任何业务。",
+        "history": []
+      },
+      "expected": {
+        "intent": "other",
+        "rationale": "用户明确无查询或业务操作需求，只说明输入测试，应保守归为无业务意图。"
+      },
+      "tags": [
+        "no_task",
+        "topic_negation",
+        "guard_case"
+      ]
+    }
+  ]
+}
