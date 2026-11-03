@@ -336,4 +336,3 @@ def test_stop_marker_blocks_restart_without_spending(tmp_path, monkeypatch, name
     execute.assert_not_called()
     assert trial.ledger(p).status()["attempts"] == 0
     assert tree(trial.root) == before
-
