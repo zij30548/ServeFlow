@@ -47,6 +47,7 @@ def isolated(monkeypatch):
     monkeypatch.setattr(engine, "offline_data_proof", lambda: {"kind": "controlled-proof"})
     monkeypatch.setattr(module, "_artifacts", lambda: {"controlled-source": "a" * 64})
     monkeypatch.setattr(module, "archived_proof", lambda: {"prior": "b" * 64})
+    monkeypatch.setattr(module, "data_binding", lambda: canonical_payload_hash({"kind": "controlled-fixture"}))
     monkeypatch.setattr(engine, "_mysql_url", lambda: None)
 
 
@@ -223,3 +224,23 @@ def test_bad_archives_stop_without_repair(tmp_path, monkeypatch, damage):
     before = tree(tmp_path)
     with pytest.raises(base.TrialError): ORIGINAL_ARCHIVE()
     assert tree(tmp_path) == before
+
+
+def test_preflight_identity_is_frozen_and_runtime_data_swap_rejected(tmp_path, monkeypatch):
+    trial, p = prepared(tmp_path)
+    assert p['data_proof_sha256'] == canonical_payload_hash({'kind':'controlled-fixture'})
+    base._write(trial.root,'data-proof.json',{'kind':'different-controlled-database'})
+    with pytest.raises(base.TrialError,match='task_recheck_data_identity_changed'):
+        trial.verify()
+    assert trial.ledger(p).status()['attempts'] == 0
+
+
+def test_changed_preflight_proof_is_rejected_before_secret_or_model(tmp_path,monkeypatch):
+    trial,p=prepared(tmp_path)
+    trial.authorize('Controlled test fixture only',confirmed=True)
+    monkeypatch.setattr(module,'data_binding',lambda:'f'*64)
+    data=AsyncMock();monkeypatch.setattr(engine,'build_live_data',data)
+    with pytest.raises(base.TrialError,match='task_recheck_protocol_changed'):
+        asyncio.run(trial.execute())
+    data.assert_not_called()
+    assert trial.ledger(p).status()['attempts'] == 0

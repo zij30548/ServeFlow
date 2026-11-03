@@ -29,6 +29,7 @@ BATCH = "serveflow-task-e2e-v2-routing-fix"
 CANDIDATE = "shared-domain-evidence-routing-fix"
 OLD_RECHECK = bench.BACKEND_ROOT / "data/benchmarks/intent-recheck-v2"
 OLD_TASK = engine.ROOT
+DATA_PREFLIGHT = bench.BACKEND_ROOT / "data/benchmarks/task-e2e-v2-data/preflight-v1.json"
 OLD_RECHECK_PROTOCOL = "31725961e8448cf07c1e64b08f846e9cbdeb80befae8ea4d75a2cfdc771291de"
 OLD_RECHECK_JOURNAL = "18b8dbc09fb47b2e3e10335616fc430e224bb543d8d32e4bd7249752a05c50e3"
 OLD_RECHECK_AUTHORIZATION = "2952aa08ac04238544eba018243271cde5924db82bdfd977f8bb97ba44dbccb7"
@@ -39,7 +40,20 @@ EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 PROTOCOL_FIELDS = {"schema_version", "batch", "candidate", "created_at", "git_head", "root_binding_sha256", "artifacts",
     "cases_sha256", "dependencies", "model", "base_url", "messages_url", "limits", "http_limits", "policy",
     "phase_parameters", "agent_parameters", "plan", "initial_intent_requests", "offline_data_proof", "prior_proof",
-    "authorized_model_requests", "proposed_model_requests", "effective_environment"}
+    "authorized_model_requests", "proposed_model_requests", "effective_environment", "data_proof_sha256"}
+
+
+def data_binding():
+    """Bind the explicit isolated data preflight, never a credential or URL."""
+    value = bench.read_json(base._path(DATA_PREFLIGHT.parent, DATA_PREFLIGHT.name))
+    if (type(value) is not dict or set(value) != {"model_requests", "data_proof", "order_checks"}
+            or type(value["model_requests"]) is not int or value["model_requests"] != 0
+            or value["order_checks"] != {"own_order_amount": True, "cross_customer_denied": True}
+            or type(value["data_proof"]) is not dict
+            or value["data_proof"].get("schema_version") != "serveflow-task-live-data-v1"
+            or value["data_proof"].get("mysql", {}).get("literal_schema_grants") is not True):
+        base._fail("task_recheck_data_preflight_required")
+    return canonical_payload_hash(value["data_proof"])
 
 
 def effective_environment():
@@ -189,6 +203,7 @@ class TaskRecheck(engine.TaskTrial):
             "phase_parameters": deepcopy(engine.PHASE_PARAMETERS), "agent_parameters": deepcopy(engine.AGENT_PARAMETERS),
             "plan": engine._plan(values), "initial_intent_requests": initial, "offline_data_proof": engine.offline_data_proof(),
             "prior_proof": archived_proof(), "effective_environment": effective_environment(),
+            "data_proof_sha256": data_binding(),
             "authorized_model_requests": 0, "proposed_model_requests": 168}
         protocol = json.loads(json.dumps(protocol))
         self.root.mkdir(mode=0o700, parents=True)
@@ -209,7 +224,7 @@ class TaskRecheck(engine.TaskTrial):
                 or type(p["authorized_model_requests"]) is not int or p["authorized_model_requests"] != 0
                 or type(p["proposed_model_requests"]) is not int or p["proposed_model_requests"] != 168
                 or p["dependencies"] != engine._dependencies() or p["plan"] != engine._plan(engine.cases())
-                or p["effective_environment"] != effective_environment()):
+                or p["effective_environment"] != effective_environment() or p["data_proof_sha256"] != data_binding()):
             base._fail("task_recheck_protocol_changed")
         if (p["artifacts"] != _artifacts() or p["cases_sha256"] != bench.sha256(engine.CASES_PATH)
                 or p["offline_data_proof"] != engine.offline_data_proof() or p["prior_proof"] != archived_proof()):
@@ -224,7 +239,17 @@ class TaskRecheck(engine.TaskTrial):
                 base._fail("task_initial_requests_changed")
         self.ledger(p).status()
         self._sealed(p)
+        actual = base._path(self.root, "data-proof.json")
+        if actual.exists() and canonical_payload_hash(bench.read_json(actual)) != p["data_proof_sha256"]:
+            base._fail("task_recheck_data_identity_changed")
         return p
+
+    async def preflight(self):
+        p = self.verify()
+        result = await super().preflight()
+        if result["ready"] and canonical_payload_hash(result["data_proof"]) != p["data_proof_sha256"]:
+            base._fail("task_recheck_data_identity_changed")
+        return result
 
     def report(self):
         return {**super().report(), "batch": BATCH, "candidate": CANDIDATE,
