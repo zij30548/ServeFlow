@@ -173,7 +173,8 @@ def supervise(command, *, root: Path, deadline_s=900):
     expected = [[sys.executable, "-B", "-u", "-m", module, "_worker"]
                 for module in ("evaluation.task_trial", "evaluation.task_recheck", "evaluation.task_repair",
                                "evaluation.retrieval_trial", "evaluation.task_business_regression",
-                               "evaluation.task_observation_recheck", "evaluation.task_deadline_recheck")]
+                               "evaluation.task_observation_recheck", "evaluation.task_deadline_recheck",
+                               "evaluation.quality_trial")]
     if (os.name != "posix" or not hasattr(os, "killpg") or not hasattr(os, "O_NOFOLLOW")
             or not hasattr(os, "O_DIRECTORY")):
         raise SupervisorError("supervisor_posix_required")
@@ -182,7 +183,11 @@ def supervise(command, *, root: Path, deadline_s=900):
     if (type(command) is not list or command not in expected or not os.path.isabs(sys.executable)
             or not os.path.isfile(sys.executable) or not os.access(sys.executable, os.X_OK)):
         raise SupervisorError("supervisor_fixed_worker_required")
-    if type(deadline_s) not in (int, float) or not math.isfinite(deadline_s) or not 0 < deadline_s <= 900:
+    # Four fixed arms contain four times the old 12-case plan. Only that
+    # explicit worker may opt into its separately frozen 3600s outer boundary;
+    # model/network stage deadlines and every old worker's 900s stay unchanged.
+    maximum = 3600 if command == [sys.executable, "-B", "-u", "-m", "evaluation.quality_trial", "_worker"] else 900
+    if type(deadline_s) not in (int, float) or not math.isfinite(deadline_s) or not 0 < deadline_s <= maximum:
         raise SupervisorError("supervisor_deadline_invalid")
     root_fd = _open_root(root)
     process = None

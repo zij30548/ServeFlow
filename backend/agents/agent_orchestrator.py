@@ -179,6 +179,9 @@ class AgentResponse:
     policy_evidence: Optional[PolicyEvidence] = field(default=None, repr=False)
     order_evidence: Optional[OrderEvidence] = field(default=None, repr=False)
     diagnostic_evidence: Optional[DiagnosticEvidence] = field(default=None, repr=False)
+    # Evaluation subclasses may retain unverified order prose independently
+    # from typed policy/diagnostic channels. Production never sets this field.
+    free_order_content: Optional[str] = field(default=None, repr=False)
 
 
 @dataclass
@@ -191,6 +194,7 @@ class AgentCallResult:
     policy_evidence: Optional[PolicyEvidence] = field(default=None, repr=False)
     order_evidence: Optional[OrderEvidence] = field(default=None, repr=False)
     diagnostic_evidence: Optional[DiagnosticEvidence] = field(default=None, repr=False)
+    free_order_content: Optional[str] = field(default=None, repr=False)
 
 
 class AgentCallError(RuntimeError):
@@ -227,14 +231,17 @@ class Request:
 
 def _project_business_result(req, *, order=None, policy=None, diagnostic=None,
                              require_order=False, require_policy=False,
-                             require_diagnostic=False, incomplete=False):
+                             require_diagnostic=False, incomplete=False,
+                             free_order_content=None):
     """Present only typed tool evidence; model prose is never a record source.
 
     Requirements are per-role during execution and per-request when composing.
     A missing role/result cannot be hidden by a successful sibling role.
     """
     blocks = []
-    if order is not None:
+    if free_order_content is not None:
+        blocks.append(free_order_content)
+    elif order is not None:
         blocks.append(render_order_evidence(order))
     if diagnostic is not None:
         blocks.append(render_diagnostic_evidence(diagnostic))
@@ -264,7 +271,8 @@ def _project_business_result(req, *, order=None, policy=None, diagnostic=None,
         complete = False
     return AgentCallResult("\n\n".join(blocks), status="success" if complete else "partial",
                            order_evidence=order, policy_evidence=policy,
-                           diagnostic_evidence=diagnostic)
+                           diagnostic_evidence=diagnostic,
+                           free_order_content=free_order_content)
 
 
 @dataclass
@@ -335,6 +343,26 @@ class BaseAgent:
         self._shared_tools = {name: spec for name, spec in (tools or {}).items()
                               if spec.allowed_agents is None or self.agent_type.value in spec.allowed_agents}
 
+    def _force_fresh_order_read(self) -> bool:
+        """Protected runtime policy; production always requires a current read."""
+        return True
+
+    def _project_order_content(self) -> bool:
+        """Production order facts are always rendered by the program."""
+        return True
+
+    def _previous_order_evidence(self, req: Request, order_id: str):
+        """Production does not recover facts from text or retain order records."""
+        return None
+
+    def _remember_order_evidence(self, req: Request, order_id: str, evidence):
+        """A no-op outside a trusted, isolated evaluation runtime."""
+        return None
+
+    def _previous_order_context(self, evidence):
+        """Production never injects retained records into a model request."""
+        return None
+
     async def handle(self, req: Request) -> AgentResponse:
         t0 = time.monotonic()
         if self.agent_type in (AgentType.TECHNICAL, AgentType.BILLING):
@@ -366,6 +394,7 @@ class BaseAgent:
                 policy_evidence=call_result.policy_evidence,
                 order_evidence=call_result.order_evidence,
                 diagnostic_evidence=call_result.diagnostic_evidence,
+                free_order_content=call_result.free_order_content,
             )
         except asyncio.CancelledError:
             elapsed = (time.monotonic() - t0) * 1000
@@ -426,15 +455,17 @@ class BaseAgent:
         observed_codes = set(re.findall(r"(?<![A-Za-z0-9])(?:401|403|404|500)(?![A-Za-z0-9])", req.message))
         diagnostic_code = next(iter(observed_codes)) if len(observed_codes) == 1 else None
         order_sources, diagnostic_sources, policy_sources = [], [], []
+        current_order_read = False
         required_tools = []
 
-        def business_result(*, incomplete=False):
+        def business_result(*, incomplete=False, free_order_content=None):
             projected = _project_business_result(
                 req, order=merge_order_evidence(order_sources) if order_sources else None,
                 policy=merge_policy_evidence(policy_sources, mixed=mixed_policy) if policy_sources else None,
                 diagnostic=merge_diagnostic_evidence(diagnostic_sources) if diagnostic_sources else None,
                 require_order=order_required, require_policy=policy_required,
                 require_diagnostic=diagnostic_required, incomplete=incomplete,
+                free_order_content=free_order_content,
             )
             projected.tools_used = list(tools_used)
             projected.tool_traces = list(tool_traces)
@@ -459,7 +490,17 @@ class BaseAgent:
                     return business_result(incomplete=True)
                 order_required = False
             else:
-                required_tools.append("read_demo_order")
+                if self._force_fresh_order_read():
+                    required_tools.append("read_demo_order")
+                else:
+                    previous = self._previous_order_evidence(req, selection.order_id)
+                    if previous is not None:
+                        order_sources.append(previous)
+                        previous_context = self._previous_order_context(previous)
+                        if previous_context is not None:
+                            # This is explicitly historical context, never a
+                            # forged native result or a newly executed query.
+                            messages[-1]["content"] += "\n\n" + previous_context
         if diagnostic_required:
             required_tools.append("lookup_error_code" if diagnostic_code else "build_diagnostic_plan")
         if policy_required:
@@ -507,6 +548,14 @@ class BaseAgent:
                     content = extract_text_content(resp.content).strip()
                     if not content:
                         raise AgentCallError("模型未返回有效回复", tools_used, tool_traces)
+                    if order_required:
+                        # The order target/identity checks above are common to
+                        # every runtime. A free-summary experiment does not
+                        # turn its prose into OrderEvidence or repair it.
+                        return business_result(
+                            incomplete=getattr(resp, "stop_reason", None) == "max_tokens",
+                            free_order_content=content if not self._project_order_content() else None,
+                        )
                     return AgentCallResult(
                         content=content,
                         tools_used=list(tools_used),
@@ -629,16 +678,27 @@ class BaseAgent:
                         policy_sources.append(extract_policy_evidence(result, mixed=mixed_policy)
                                               if call_success else PolicyEvidence(status="unavailable", mixed=mixed_policy))
                     if order_required and name == "read_demo_order":
-                        order_sources.append(extract_order_evidence(
+                        current_order = extract_order_evidence(
                             result, expected_order_id=selection.order_id,
                             trusted_customer_id=req.demo_customer_id,
-                        ))
+                        )
+                        # The first current attempt supersedes a retained old
+                        # result, including failure. Preserve every current
+                        # result after that: conflicting duplicate reads must
+                        # fail the original merge instead of selecting the last.
+                        if not current_order_read:
+                            order_sources.clear()
+                            current_order_read = True
+                        order_sources.append(current_order)
+                        self._remember_order_evidence(
+                            req, selection.order_id, merge_order_evidence(order_sources))
                     if diagnostic_required and name in {"lookup_error_code", "build_diagnostic_plan"}:
                         diagnostic_sources.append(extract_diagnostic_evidence(name, result))
                 messages.append({"role": "user", "content": tool_results})
                 if required_tool:
                     required_tools.pop(0)
-                if not required_tools and (policy_required or order_required or diagnostic_required):
+                if (not required_tools and (policy_required or order_required or diagnostic_required)
+                        and (not order_required or (self._project_order_content() and order_sources))):
                     # This path ends with deterministic presentation of the
                     # actual local tool result. It does not claim a second
                     # model continuation or let free-form actor text add facts.
@@ -897,10 +957,43 @@ class ResponseComposer:
     async def compose(self, req: Request, responses: List[AgentResponse]) -> str:
         return (await self.compose_result(req, responses)).content
 
+    def _project_order_content(self) -> bool:
+        return True
+
+    async def _compose_free_order_result(self, req: Request, responses: List[AgentResponse]) -> AgentCallResult:
+        """Protected experiment path: preserve free prose, not unchecked facts.
+
+        Only order prose may be summarized. Policy and diagnostic outputs keep
+        the exact same typed presentation as the production path. No model
+        output is converted into retained record evidence here.
+        """
+        orders = [r.order_evidence for r in responses if r.success and r.order_evidence is not None]
+        policies = [r.policy_evidence for r in responses if r.success and r.policy_evidence is not None]
+        diagnostics = [r.diagnostic_evidence for r in responses if r.success and r.diagnostic_evidence is not None]
+        free_responses = [replace(r, content=r.free_order_content, order_evidence=None,
+                                  policy_evidence=None, diagnostic_evidence=None)
+                          for r in responses if r.success and r.free_order_content is not None]
+        free = await self._compose_text_result(req, free_responses)
+        projected = _project_business_result(
+            req, order=merge_order_evidence(orders) if orders else None,
+            policy=merge_policy_evidence(policies, mixed=has_record_question(req.message)) if policies else None,
+            diagnostic=merge_diagnostic_evidence(diagnostics) if diagnostics else None,
+            require_order=True,
+            require_policy=requires_policy_evidence(req.message, req.history),
+            require_diagnostic=(any(r.agent_type is AgentType.TECHNICAL for r in responses)
+                or req.intent in {IntentCategory.TECHNICAL, IntentCategory.TECHNICAL_LOGIN, IntentCategory.TECHNICAL_CRASH}
+                or bool(AgentOrchestrator._domain_evidence(req.message)[AgentType.TECHNICAL])),
+            incomplete=(free.status != "success" or any(not r.success or r.status != "success" for r in responses)),
+            free_order_content=free.content if free_responses else "订单答复本次未完成，不能推断业务状态。",
+        )
+        return projected
+
     async def compose_result(self, req: Request, responses: List[AgentResponse]) -> AgentCallResult:
         grounded_record = needs_order_evidence(req.message, req.history)
         if (grounded_record or any(r.order_evidence is not None or r.diagnostic_evidence is not None for r in responses)) and not any(
                 r.agent_type is AgentType.ESCALATION for r in responses):
+            if grounded_record and not self._project_order_content():
+                return await self._compose_free_order_result(req, responses)
             # Mixed record/policy/diagnosis requests retain each evidence channel.
             # A second language-model summary could reintroduce unsupported
             # refund conditions, so it is deliberately not used on this path.
@@ -934,6 +1027,9 @@ class ResponseComposer:
             if responses and not any(r.success for r in responses):
                 status = "failed"
             return AgentCallResult(render_policy_evidence(evidence), status=status, policy_evidence=evidence)
+        return await self._compose_text_result(req, responses)
+
+    async def _compose_text_result(self, req: Request, responses: List[AgentResponse]) -> AgentCallResult:
         successful = [response for response in responses if response.success and response.content.strip()]
         status = "success" if len(successful) == len(responses) and all(r.status == "success" for r in successful) else "partial"
         if not successful:

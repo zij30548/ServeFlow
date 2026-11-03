@@ -111,6 +111,25 @@ def test_normal_exit_uses_only_fixed_worker_group_no_logs_and_no_stop_receipt(fa
     assert_ledger(root)
 
 
+def test_quality_worker_alone_admits_four_arm_outer_deadline(fake):
+    root, _, _, _, sends, starts, _ = fake
+    command = [sys.executable, "-B", "-u", "-m", "evaluation.quality_trial", "_worker"]
+    assert supervisor.supervise(command, root=root, deadline_s=3600) == {
+        "exit_code": 0, "timed_out": False, "cancelled": False}
+    assert starts[0][0] == command and len(starts) == 1 and not sends
+    assert_ledger(root)
+
+
+@pytest.mark.parametrize("module", ["evaluation.task_trial", "evaluation.task_deadline_recheck", "evaluation.quality_trial"])
+def test_new_plan_does_not_raise_old_worker_or_arbitrary_deadlines(fake, module):
+    root, _, _, _, _, starts, _ = fake
+    command = [sys.executable, "-B", "-u", "-m", module, "_worker"]
+    with pytest.raises(supervisor.SupervisorError, match="deadline_invalid"):
+        supervisor.supervise(command, root=root, deadline_s=3601 if module == "evaluation.quality_trial" else 901)
+    assert not starts
+    assert_ledger(root)
+
+
 def test_ordinary_nonzero_worker_exit_is_not_restarted_or_rewritten(fake):
     root, clock, state, _, sends, starts, _ = fake
     state["process"] = FakeProcess(clock, [2])

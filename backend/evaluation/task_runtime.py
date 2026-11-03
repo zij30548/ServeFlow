@@ -31,13 +31,13 @@ def _result(value):
         "request_id": value.request_id, "error_code": value.error_code}
 
 
-async def build_runtime(sdk, data):
+async def build_runtime(sdk, data, *, orchestrator_factory=AgentOrchestrator):
     skills = SkillManager(str(bench.BACKEND_ROOT / "skills"), max_prompt_chars=5000)
     skills.load()
     if skills.errors:
         raise ValueError("eval_skills_invalid")
-    orc = AgentOrchestrator("unused-client-replaced-before-use", base_url=str(sdk.base_url),
-                            model=base.MODEL, skill_manager=skills)
+    orc = orchestrator_factory("unused-client-replaced-before-use", base_url=str(sdk.base_url),
+                              model=base.MODEL, skill_manager=skills)
     originals = {id(orc._intent_recognizer.client): orc._intent_recognizer.client,
                  id(orc._composer._client): orc._composer._client}
     try:
@@ -78,11 +78,12 @@ async def build_runtime(sdk, data):
         await asyncio.gather(*(client.close() for client in originals.values()))
 
 
-async def execute_case(case, sdk, data, *, ensure_healthy):
+async def execute_case(case, sdk, data, *, ensure_healthy, runtime_factory=build_runtime,
+                       frame_case_id=None):
     """Run all actual user turns, carrying actual assistant replies and state."""
     from demo_business.store import load_fixture
     started = time.perf_counter()
-    orc, manager = await build_runtime(sdk, data)
+    orc, manager = await runtime_factory(sdk, data)
     history, state, turns, calls, blockers, roles, tools, traces = [], {}, [], [], [], [], [], []
     judge = SingleAttemptJudge(BoundClient(sdk, "judge"), base.MODEL, timeout_s=8)
     for number, question in enumerate(case["turns"], 1):
@@ -96,7 +97,10 @@ async def execute_case(case, sdk, data, *, ensure_healthy):
         selection = resolve_order_id(req.message, req.history)
         capture = CaptureTools(case["id"], number, call_context=lambda role: context(agent=role),
                                expected_order_id=selection.order_id if selection.status == "resolved" else None)
-        frame = Frame(case["id"], f"turn-{number}", evidence_guard=capture.assert_send_allowed)
+        # Trial identity is transport metadata only. Keep arm labels out of
+        # prompts, histories, request IDs and the original question/rubric.
+        frame = Frame(frame_case_id if frame_case_id is not None else case["id"],
+                      f"turn-{number}", evidence_guard=capture.assert_send_allowed)
         capture.install(orc)
         try:
             with context(frame):
