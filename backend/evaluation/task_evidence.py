@@ -19,6 +19,7 @@ import time
 from agents.tools import AgentToolSpec
 from core.llm_utils import extract_text_content
 from core.provider_options import nonthinking_options
+from core.model_deadline import await_model
 from demo_business.store import CUSTOMER_IDS, SOURCE, TABLE_COLUMNS, validate_fixture
 from evaluation.evaluator import JudgeOutputError, LLMJudge, QualityScores
 
@@ -547,10 +548,10 @@ class SingleAttemptJudge(LLMJudge):
                                  error="judge_input_limit", attempts=0, error_type="input_limit")
         stop = None
         try:
-            reply = await asyncio.wait_for(self._client.messages.create(
+            reply = await await_model(self._client.messages.create(
                 model=self._model, max_tokens=4096, temperature=0.0,
                 messages=[{"role": "user", "content": prompt}],
-                **nonthinking_options(self._client, self._model)), timeout=self._timeout)
+                **nonthinking_options(self._client, self._model)), timeout_s=self._timeout)
             stop = getattr(reply, "stop_reason", None)
             if stop == "max_tokens":
                 raise JudgeOutputError("truncated", "judge_truncated")

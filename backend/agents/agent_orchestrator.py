@@ -43,6 +43,7 @@ from core.intent_recognizer import IntentCategory, IntentRecognizer, UrgencyLeve
 from core.llm_utils import extract_text_content
 from core.provider_options import nonthinking_options
 from core.safe_diagnostics import record_llm_failure
+from core.model_deadline import await_model
 from core.policy_grounding import (
     PolicyEvidence, extract_policy_evidence, has_record_question,
     merge_policy_evidence, render_policy_evidence, requires_policy_evidence,
@@ -491,9 +492,9 @@ class BaseAgent:
                 if required_tool:
                     request_kwargs["tool_choice"] = {"type": "tool", "name": required_tool}
                 request_kwargs.update(nonthinking_options(self._client, self._model))
-                resp = await asyncio.wait_for(
+                resp = await await_model(
                     self._client.messages.create(**request_kwargs),
-                    timeout=max(1, _env_float("ECHOMIND_LLM_TIMEOUT_S", 15)),
+                    timeout_s=max(1, _env_float("ECHOMIND_LLM_TIMEOUT_S", 15)),
                 )
                 tool_uses = [block for block in (resp.content or []) if self._block_type(block) == "tool_use"]
                 if not tool_uses:
@@ -960,13 +961,13 @@ class ResponseComposer:
         started = time.monotonic()
         phase = "composer.transport"
         try:
-            response = await asyncio.wait_for(self._client.messages.create(
+            response = await await_model(self._client.messages.create(
                 model=self._model,
                 max_tokens=_env_int("ECHOMIND_COMPOSER_MAX_TOKENS", 1000),
                 temperature=_env_float("ECHOMIND_COMPOSER_TEMPERATURE", 0.1),
                 messages=[{"role": "user", "content": prompt}],
                 **nonthinking_options(self._client, self._model),
-            ), timeout=max(1, _env_float("ECHOMIND_COMPOSER_TIMEOUT_S", 8)))
+            ), timeout_s=max(1, _env_float("ECHOMIND_COMPOSER_TIMEOUT_S", 8)))
             phase = "composer.extract"
             content = extract_text_content(response.content).strip()
             if content:

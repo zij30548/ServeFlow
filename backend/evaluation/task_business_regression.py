@@ -306,6 +306,9 @@ class BusinessRegression(repair.TaskRepair):
     def make_transport(self, *args, **kwargs):
         return engine.TaskHTTPTransport(*args, **kwargs)
 
+    async def run_case(self, case, sdk, data, *, ensure_healthy):
+        return await engine.execute_case(case, sdk, data, ensure_healthy=ensure_healthy)
+
     def ledger(self, protocol):
         return BusinessTaskBudget(self.root / "ledger", bench.sha256(base._path(self.root, "protocol.json")), protocol["plan"])
 
@@ -450,7 +453,7 @@ class BusinessRegression(repair.TaskRepair):
                     healthy()
                     ledger.start_case(case["id"], lease=lease)
                     with base._quiet_clients():
-                        result = await engine.execute_case(case, sdk, data, ensure_healthy=healthy)
+                        result = await self.run_case(case, sdk, data, ensure_healthy=healthy)
                     result.update({"protocol_sha256": bench.sha256(self.root / "protocol.json"),
                         "evidence_kind": transport.kind, "data_proof_sha256": proof_hash,
                         "order_projection": projection_checks(case, result),

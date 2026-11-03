@@ -26,6 +26,7 @@ from anthropic import AsyncAnthropic
 from core.llm_utils import extract_text_content
 from core.provider_options import nonthinking_options
 from core.safe_diagnostics import record_llm_failure
+from core.model_deadline import await_model
 
 logger = logging.getLogger(__name__)
 
@@ -293,13 +294,13 @@ class IntentRecognizer:
         started = time.monotonic()
         phase = "intent.transport"
         try:
-            resp = await asyncio.wait_for(self.client.messages.create(
+            resp = await await_model(self.client.messages.create(
                 model=self.model,
                 max_tokens=256,
                 temperature=0.1,
                 messages=[{"role": "user", "content": prompt}],
                 **nonthinking_options(self.client, self.model),
-            ), timeout=max(0.1, float(os.getenv("ECHOMIND_INTENT_TIMEOUT_S", "8"))))
+            ), timeout_s=max(0.1, float(os.getenv("ECHOMIND_INTENT_TIMEOUT_S", "8"))))
             phase = "intent.parse"
             raw = extract_text_content(resp.content)
             s, e = raw.find("{"), raw.rfind("}") + 1

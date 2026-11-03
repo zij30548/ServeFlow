@@ -7,7 +7,7 @@ the actual send boundary. The existing one-send HTTP guard remains unchanged.
 from __future__ import annotations
 
 import asyncio
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 import hashlib
@@ -218,15 +218,30 @@ class TaskHTTPTransport(httpx.AsyncBaseTransport):
     def _physical_timing(self, queued_at, queue_ms, admission_ms, guard):
         return None
 
+    def _physical_diagnostics(self):
+        return {}
+
+    def _failure_code(self, error, admission_error, guard):
+        if admission_error is not None:
+            return admission_error
+        return ("cancelled" if isinstance(error, asyncio.CancelledError)
+                else base._error(guard.failure_code) if guard and guard.failure_code else "protocol")
+
     async def _seal_physical(self, *args, timing_started_at=None, **kwargs):
         self._seal(*args, **kwargs)
 
     async def _seal_after_error(self, *args, **kwargs):
         await self._seal_physical(*args, **kwargs)
 
+    @asynccontextmanager
+    async def _request_slot(self):
+        """Default historical slot timing; explicit evaluators may observe it."""
+        async with self._slots:
+            yield
+
     async def handle_async_request(self, request):
         queued_at = time.perf_counter()
-        async with self._slots:
+        async with self._request_slot():
             frame, operation, guard, started = CURRENT.get(), None, None, time.perf_counter()
             queue_ms = max(0.0, (started - queued_at) * 1000)
             admission_ms = 0.0
@@ -298,10 +313,7 @@ class TaskHTTPTransport(httpx.AsyncBaseTransport):
                            timing_started_at=queued_at)
                 return response
             except BaseException as error:
-                code = admission_error
-                if code is None:
-                    code = ("cancelled" if isinstance(error, asyncio.CancelledError)
-                            else base._error(guard.failure_code) if guard and guard.failure_code else "protocol")
+                code = self._failure_code(error, admission_error, guard)
                 if code not in {"auth", "quota", "rate_limit", "network", "timeout", "cancelled", "response_limit", "protocol", "storage_failure"}:
                     code = "protocol"
                 self._stop(code, evidence_error=evidence_error)
@@ -337,6 +349,13 @@ class TaskHTTPTransport(httpx.AsyncBaseTransport):
                            for number in timing.values())):
                 raise TrialTransportError("protocol")
             value["timing"] = {key: round(timing[key], 3) for key in sorted(TIMING_FIELDS)}
+        diagnostics = self._physical_diagnostics()
+        if (type(diagnostics) is not dict or set(diagnostics) - {"stage_deadline_reason"}
+                or ("stage_deadline_reason" in diagnostics and (
+                    type(diagnostics["stage_deadline_reason"]) is not str
+                    or diagnostics["stage_deadline_reason"] not in {"active", "overhead", "wall"}))):
+            raise TrialTransportError("protocol")
+        value.update(diagnostics)
         base._write(self.root, name, value)
         from evaluation import benchmark as bench
         self.budget.finish(operation["operation_id"], outcome, bench.sha256(self.root / name), error_code,

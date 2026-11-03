@@ -547,6 +547,33 @@ v5已按同12题固定执行，随后在e06意图阶段再次触发本地截止�
 
 v5源码`53f4ff543c820c2e1ed3fa80db5f461ae9a9cddc`，协议`7be51b9c3e825286b47d4fa69aafd10cc30e44bb9186bde2f9f9465a01c7b36f`，冻结86文件；36份业务源哈希`ac2187b2e3a028523444bab692feda0ba64e407fd3c7d7618c61f623616b440c`与v4相同。私有证据为`backend/data/benchmarks/task-business-v5-observation/`，包括逐次响应、分段计时、台账、五份review、`reviewed-paused-report.json`和`quantification-summary.json`。本轮两个独立批次共37次真实请求，35份HTTP200、2次已发送取消；不复用旧额度、不拼接两批最好答案。范围仅实际`Orchestrator.run()`＋独立MySQL合成记录＋临时本地Chroma，不包括网页、Redis／后台记忆或真实商家业务质量。业务修复已有五题适用证据，**完整端到端质量仍未收口**。
 
+### 阶段计时修复与消融准备（2026-11-04）
+
+v5的取消显示：核验约2.83秒和网络等待约5.16秒共同耗尽意图外层8秒。此次引入[模型阶段时钟](backend/core/model_deadline.py)：普通产品调用仍使用原`asyncio.wait_for`和原截止值；只有明确的新评测runner启用管理区间暂停。排slot、完整核验、封存管理从阶段有效时间中分离，网络／SDK处理／模型响应解析不能隐藏在暂停区。模型阶段预算仍为意图8秒、角色15秒、改写10秒、重排30秒、汇总／本批Judge8秒，HTTP网络Guard仍为8秒。
+
+排除的管理时间每次调用累计最多30秒，另有不可暂停的“原阶段预算＋30秒＋0.25秒”wall取消计时器及进程监督器。它不是无限延长请求；Python取消仍为协作式，极端不可协作清理／线程回收由监督器兜底。并行任务时钟隔离，跨Task、线程、过期上下文和未知scope均拒绝；网络在暂停区进入时，发送前断言会阻止预记与发送。用户取消保持取消，自己的阶段／管理／wall截止只记录白名单诊断，不补发、不退未知占额。
+
+六处模型等待接入统一入口，不改提示、工具、采样或业务规则。新[固定回归入口](backend/evaluation/task_deadline_recheck.py)只允许三个生产文件做精确的等待wrapper替换：通过Git旧源与归一化AST比较，任何提示、参数、其他业务逻辑或Skills变化均拒绝。v4／v5旧协议、台账、原始输出与成绩按原字节和Git版本只读绑定；不会修改旧哈希来迁就新代码。新回归必须独立冻结和登记适用授权，旧余额不续用。
+
+本轮完整后端1875项通过、10项外部集成跳过。包括生产默认行为对照、45项阶段时钟检查、新传输17项，以及真实意图／改写方法＋真实SDK序列化＋Mock上游的缩放复现：管理140ms、阶段预算100ms、网络25ms可以完成；实际网络或管理预算耗尽仍失败。上述是离线工程验证，不是模型质量提升；前端未改，未重复构建或浏览器验收。
+
+四组效果消融先固定[清单](backend/evaluation/benchmark/quality-ablation-v1.json)与[离线校验／汇总工具](backend/evaluation/quality_ablation.py)：A不强制重新读、自由订单总结；B每轮实查、自由总结；C不强制实查、取得证据后程序投影；D实查＋投影。关闭强制实查不能禁止模型自行查；四组均保留服务端身份、目标绑定、只读、角色白名单、政策保护和相同基础配置。共同主评分允许正确的自然总结，不要求逐字程序投影；fresh轨迹与投影一致性只作机制检查，不把“使用增强方法”本身记为效果提高。
+
+每臂固定12道已知题、13轮；分别统计完整12题正确处理、8道已支持查询／诊断答复任务、10道要求工具的任务及4道边界处理。正确拒绝退款或准备人工摘要不计实际退款／真人接入完成。未知、失败及未执行保留在各自完整分母，配对未完成时不计算提升百分点。该工具39项离线测试通过，仅读取受控结果，`runtime_arms_ready=false`、真实payload尚未冻结，没有`run/authorize`入口；设计／题目冻结不代表四臂已接线、已执行或已观察到提升。
+
+下面命令不发送模型请求；已有私有目录明确拒绝覆盖：
+
+```sh
+cd backend
+.venv/bin/python -B -m evaluation.quality_ablation prepare
+.venv/bin/python -B -m evaluation.quality_ablation verify
+.venv/bin/python -B -m evaluation.quality_ablation summary
+ORT_DISABLE_TELEMETRY=1 TOKENIZERS_PARALLELISM=false .venv/bin/python -B -m evaluation.task_deadline_recheck prepare
+ORT_DISABLE_TELEMETRY=1 TOKENIZERS_PARALLELISM=false .venv/bin/python -B -m evaluation.task_deadline_recheck verify
+```
+
+当前先验证新计时规则是否解除原固定回归阻塞，再接线并冻结四臂真实对照；不把不同执行合同的回归成绩当消融增益。原意图消融0增益、原检索基线与未收录误命中、v3／v4／v5的失败与未执行均保留。
+
 ## 当前限制
 
 - 原意图验证集34/36及历史失败保持不变；修复版本的2道已见回归＋22道新挑战本次均正确。仅LLM与融合结果相同，尚未证明融合增益或稳定泛化；完整客服回复仍待独立验收。

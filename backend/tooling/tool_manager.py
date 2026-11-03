@@ -28,6 +28,7 @@ from anthropic import AsyncAnthropic
 from core.llm_utils import extract_text_content
 from core.provider_options import nonthinking_options
 from core.safe_diagnostics import record_llm_failure
+from core.model_deadline import await_model
 
 logger = logging.getLogger(__name__)
 
@@ -327,11 +328,11 @@ class MCPToolManager:
         prompt = self._clean_text(prompt)
         started = time.monotonic()
         try:
-            resp = await asyncio.wait_for(self._client.messages.create(
+            resp = await await_model(self._client.messages.create(
                 model=self._model, max_tokens=512, temperature=0.3,
                 messages=[{"role": "user", "content": prompt}],
                 **nonthinking_options(self._client, self._model),
-            ), timeout=10)
+            ), timeout_s=10)
             raw = extract_text_content(resp.content)
             s, e = raw.find("["), raw.rfind("]") + 1
             queries = json.loads(raw[s:e])
@@ -418,11 +419,11 @@ class MCPToolManager:
 
         started = time.monotonic()
         try:
-            resp = await asyncio.wait_for(self._client.messages.create(
+            resp = await await_model(self._client.messages.create(
                 model=self._model, max_tokens=2048, temperature=0.0,
                 messages=[{"role": "user", "content": prompt}],
                 **nonthinking_options(self._client, self._model),
-            ), timeout=30)
+            ), timeout_s=30)
             if getattr(resp, "stop_reason", None) == "max_tokens":
                 raise ValueError("重排输出被截断")
             raw = extract_text_content(resp.content, separator="")
