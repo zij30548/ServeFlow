@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 import hashlib
+import inspect
 import json
 import math
 import time
@@ -111,8 +112,43 @@ def _response(raw):
             "usage": tokens}
 
 
+TIMING_FIELDS = frozenset({"queue_ms", "admission_ms", "network_ms", "cleanup_ms", "wall_ms"})
+
+
+class _ObservedIntentGuard(GuardedIntentTransport):
+    """Observe the unchanged one-send guard without changing its deadlines."""
+
+    def __init__(self, base_url, expected_payload_sha256, before_send, **kwargs):
+        self.network_ms = self.cleanup_ms = 0.0
+        self._network_started = None
+
+        def observed_admission():
+            value = before_send()
+            # The inherited guard still rejects an awaitable before_send. The
+            # runtime's actual admission/reservation callback is synchronous.
+            self._network_started = time.perf_counter()
+            return value
+
+        super().__init__(base_url, expected_payload_sha256, observed_admission, **kwargs)
+
+    async def _cleanup(self, response):
+        started = time.perf_counter()
+        if self._network_started is not None:
+            self.network_ms = max(0.0, (started - self._network_started) * 1000)
+        try:
+            return await super()._cleanup(response)
+        finally:
+            self.cleanup_ms = max(0.0, (time.perf_counter() - started) * 1000)
+
+
 class TaskHTTPTransport(httpx.AsyncBaseTransport):
-    """All stage facades share this physical-send gate and durable ledger."""
+    """All stage facades share this physical-send gate and durable ledger.
+
+    The default keeps its original inline verification inside before_send.
+    Only the explicit subclass offloads read-only admission verification.
+    """
+
+    _guard_type = None
 
     def __init__(self, base_url, root, budget, lease, verify_admission, *, delegate_factory=None):
         self.base_url = validated_endpoint(base_url)
@@ -171,20 +207,62 @@ class TaskHTTPTransport(httpx.AsyncBaseTransport):
                 raise TrialTransportError("protocol")
         return canonical_payload_hash(payload), hashlib.sha256(raw).hexdigest()
 
+    async def _prepare_admission(self):
+        """Optional async preflight; False preserves original inline checking.
+
+        An override returning True must have completed the exact configured
+        verify_admission callback, without reserving or sending anything.
+        """
+        return False
+
+    def _physical_timing(self, queued_at, queue_ms, admission_ms, guard):
+        return None
+
+    async def _seal_physical(self, *args, timing_started_at=None, **kwargs):
+        self._seal(*args, **kwargs)
+
+    async def _seal_after_error(self, *args, **kwargs):
+        await self._seal_physical(*args, **kwargs)
+
     async def handle_async_request(self, request):
+        queued_at = time.perf_counter()
         async with self._slots:
             frame, operation, guard, started = CURRENT.get(), None, None, time.perf_counter()
+            queue_ms = max(0.0, (started - queued_at) * 1000)
+            admission_ms = 0.0
+            received_response = None
+            received_hash = None
             admission_error = None
             evidence_error = None
             try:
                 payload_hash, wire_hash = self._validate(request, frame)
+                admission_started = time.perf_counter()
+                try:
+                    preverified = await self._prepare_admission()
+                    if type(preverified) is not bool:
+                        raise TrialTransportError("protocol")
+                except Exception as error:
+                    admission_error = getattr(error, "code", "storage_failure")
+                    raise
+                finally:
+                    admission_ms = max(0.0, (time.perf_counter() - admission_started) * 1000)
+                if preverified:
+                    # A caller can mutate an httpx.Request while verification
+                    # awaits a worker thread. Canonical equality alone is not
+                    # enough: the exact wire bytes must still match as well.
+                    if self._validate(request, frame) != (payload_hash, wire_hash):
+                        admission_error = "protocol"
+                        raise TrialTransportError("protocol")
                 def admit():
                     nonlocal operation, admission_error, evidence_error
                     try:
                         if self.fault or (self.root / "stopped.json").exists():
                             raise TrialTransportError("protocol")
-                        self.verify_admission()
-                        # Recheck after waiting for a slot and after synchronous
+                        if not preverified:
+                            self.verify_admission()
+                        elif self._validate(request, frame) != (payload_hash, wire_hash):
+                            raise TrialTransportError("protocol")
+                        # Recheck after waiting for a slot and after complete
                         # protocol checks. Another role may have latched a fault
                         # after this request's facade was entered.
                         if frame.evidence_guard is not None:
@@ -201,7 +279,8 @@ class TaskHTTPTransport(httpx.AsyncBaseTransport):
                     raise TrialTransportError("protocol")
                 # Hashes here are dynamic admission evidence, not a claim that
                 # unknown future native-tool messages were frozen in advance.
-                guard = GuardedIntentTransport(self.base_url, payload_hash, admit, transport=delegate)
+                guard_factory = self._guard_type or GuardedIntentTransport
+                guard = guard_factory(self.base_url, payload_hash, admit, transport=delegate)
                 response = await guard.handle_async_request(request)
                 raw = response.content
                 try:
@@ -211,8 +290,12 @@ class TaskHTTPTransport(httpx.AsyncBaseTransport):
                     parsed = {"content": [], "upstream_model": None, "stop_reason": None,
                               "usage": {"input_tokens": None, "output_tokens": None}}
                     outcome = "structure_failed"
-                self._seal(operation, frame, guard, parsed, outcome, None,
-                           (time.perf_counter() - started) * 1000, hashlib.sha256(raw).hexdigest())
+                received_response = parsed
+                received_hash = hashlib.sha256(raw).hexdigest()
+                await self._seal_physical(operation, frame, guard, parsed, outcome, None,
+                           (time.perf_counter() - started) * 1000, received_hash,
+                           timing=self._physical_timing(queued_at, queue_ms, admission_ms, guard),
+                           timing_started_at=queued_at)
                 return response
             except BaseException as error:
                 code = admission_error
@@ -224,15 +307,19 @@ class TaskHTTPTransport(httpx.AsyncBaseTransport):
                 self._stop(code, evidence_error=evidence_error)
                 if operation is not None:
                     try:
-                        self._seal(operation, frame, guard, {"content": [], "upstream_model": None,
-                            "stop_reason": None, "usage": {"input_tokens": None, "output_tokens": None}},
+                        await self._seal_after_error(operation, frame, guard,
+                            received_response if received_response is not None else {
+                                "content": [], "upstream_model": None, "stop_reason": None,
+                                "usage": {"input_tokens": None, "output_tokens": None}},
                             "cancelled" if code == "cancelled" else "execution_error", code,
-                            (time.perf_counter() - started) * 1000, None)
+                            (time.perf_counter() - started) * 1000, received_hash,
+                            timing=self._physical_timing(queued_at, queue_ms, admission_ms, guard),
+                            timing_started_at=queued_at)
                     except Exception:
                         pass  # Reservation remains occupied/unknown, never refunded.
                 raise TrialTransportError(code) from None
 
-    def _seal(self, operation, frame, guard, response, outcome, error_code, latency_ms, response_hash):
+    def _seal(self, operation, frame, guard, response, outcome, error_code, latency_ms, response_hash, *, timing=None):
         if operation is None:
             raise TrialTransportError("protocol")
         name = f"physical-{operation['attempt']:03d}.json"
@@ -244,7 +331,105 @@ class TaskHTTPTransport(httpx.AsyncBaseTransport):
             "http_status": guard.http_status if guard else None, "delegate_entered": bool(guard and guard.sent),
             "error_code": error_code, "outcome": outcome, "latency_ms": latency_ms,
             "response_sha256": response_hash, "response": response}
+        if timing is not None:
+            if (type(timing) is not dict or set(timing) != TIMING_FIELDS
+                    or any(type(number) not in (int, float) or not math.isfinite(number) or number < 0
+                           for number in timing.values())):
+                raise TrialTransportError("protocol")
+            value["timing"] = {key: round(timing[key], 3) for key in sorted(TIMING_FIELDS)}
         base._write(self.root, name, value)
         from evaluation import benchmark as bench
         self.budget.finish(operation["operation_id"], outcome, bench.sha256(self.root / name), error_code,
                            lease=self.lease)
+
+
+class ThreadedTaskHTTPTransport(TaskHTTPTransport):
+    """Read-only full verification off-loop; reserve and send remain on-loop.
+
+    Cancellation of to_thread does not terminate its read-only callback. Its
+    eventual completion cannot resume this canceled coroutine, reserve quota,
+    or send. No callback is skipped, cached or replaced with a partial check.
+
+    Optional physical timing is local elapsed observation: queue is the shared
+    request-slot wait; admission includes thread scheduling and full callback;
+    network runs after atomic admission through response read/error; cleanup
+    measures the unchanged bounded close; wall starts before the slot wait.
+    Parsing/scheduling/reservation overhead need not equal the phase sum. These
+    observations cannot establish a provider fault or remote processing time.
+    """
+
+    _guard_type = _ObservedIntentGuard
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not callable(self.verify_admission) or inspect.iscoroutinefunction(self.verify_admission):
+            raise TrialTransportError("protocol")
+        # Full verification reads this same ledger with nonblocking flock.
+        # Serializing it with on-loop sealing avoids falsely calling a local
+        # read/write race a storage failure. Waiting is asynchronous; network
+        # response reads and their original deadlines remain independent.
+        self._metadata_gate = asyncio.Lock()
+
+    async def _prepare_admission(self):
+        async with self._metadata_gate:
+            worker = asyncio.create_task(asyncio.to_thread(self.verify_admission))
+            try:
+                verified = await asyncio.shield(worker)
+                if inspect.isawaitable(verified):
+                    if inspect.iscoroutine(verified):
+                        verified.close()
+                    raise TrialTransportError("protocol")
+            except asyncio.CancelledError:
+                # to_thread cannot stop the actual reader. Reap it before
+                # releasing the metadata gate; never continue to reserve/send.
+                while not worker.done():
+                    try:
+                        await asyncio.shield(worker)
+                    except asyncio.CancelledError:
+                        continue
+                    except Exception:
+                        break
+                if not worker.cancelled():
+                    worker.exception()  # Consume a late validation exception.
+                raise
+        # No await separates this return, payload recheck and atomic reserve.
+        return True
+
+    async def _seal_physical(self, *args, timing_started_at=None, **kwargs):
+        async with self._metadata_gate:
+            if kwargs.get("timing") is not None and timing_started_at is not None:
+                # Include asynchronous metadata-gate wait, but never claim to
+                # measure this immutable record's own fsync/hash/ledger finish.
+                kwargs["timing"] = {**kwargs["timing"],
+                    "wall_ms": max(0.0, (time.perf_counter() - timing_started_at) * 1000)}
+            self._seal(*args, **kwargs)
+
+    async def _seal_after_error(self, *args, **kwargs):
+        # The body may be fully received before cancellation while waiting to
+        # seal. Preserve that known response with a canceled outcome. Repeated
+        # cancellation cannot turn it into a blank response or duplicate send.
+        finalizer = asyncio.create_task(self._seal_physical(*args, **kwargs))
+        while not finalizer.done():
+            try:
+                await asyncio.shield(finalizer)
+            except asyncio.CancelledError:
+                continue
+        return finalizer.result()
+
+    async def handle_async_request(self, request):
+        try:
+            return await super().handle_async_request(request)
+        except asyncio.CancelledError:
+            # The parent's historical queue wait is outside its try block.
+            # Only this explicit subclass adds the sticky queue-cancel stop.
+            self._stop("cancelled")
+            raise
+
+    def _physical_timing(self, queued_at, queue_ms, admission_ms, guard):
+        return {
+            "queue_ms": queue_ms,
+            "admission_ms": admission_ms,
+            "network_ms": guard.network_ms if guard is not None else 0.0,
+            "cleanup_ms": guard.cleanup_ms if guard is not None else 0.0,
+            "wall_ms": max(0.0, (time.perf_counter() - queued_at) * 1000),
+        }

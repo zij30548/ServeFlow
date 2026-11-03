@@ -320,6 +320,14 @@ def test_business_regression_is_an_explicit_allowed_command(fake):
     assert_ledger(root)
 
 
+def test_observation_recheck_is_an_explicit_allowed_command(fake):
+    root, _, _, _, sends, starts, _ = fake
+    command = [sys.executable, "-B", "-u", "-m", "evaluation.task_observation_recheck", "_worker"]
+    assert supervisor.supervise(command, root=root) == {"exit_code": 0, "timed_out": False, "cancelled": False}
+    assert starts[0][0] == command and len(starts) == 1 and not sends
+    assert_ledger(root)
+
+
 @pytest.mark.parametrize("module", ["evaluation.task_recheck_extra", "evaluation.task_repair_extra", "evaluation.retrieval_trial_extra", "evaluation.intent_recheck", "evaluation.task_trial; echo bad"])
 def test_second_worker_does_not_open_arbitrary_modules(fake, module):
     root, _, _, _, _, starts, _ = fake

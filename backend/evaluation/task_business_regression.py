@@ -279,11 +279,32 @@ def business_execution_checks(case, artifact):
 
 
 class BusinessRegression(repair.TaskRepair):
-    def __init__(self, root=ROOT):
-        self.root = Path(root).absolute()
+    # Fixed subclasses may select a new, separately authorized observation
+    # batch. No CLI/env switch can change the transport or evaluation policy.
+    root_path = ROOT
+    batch = BATCH
+    candidate = CANDIDATE
+    protocol_schema = "serveflow-task-business-protocol-v4"
+    authorization_schema = "serveflow-task-business-authorization-v4"
+    report_schema = "serveflow-task-business-report-v4"
+
+    def __init__(self, root=None):
+        self.root = Path(self.root_path if root is None else root).absolute()
         base._path(self.root, "protocol.json")
-        if self.root != ROOT and self.root.is_relative_to(bench.BACKEND_ROOT / "data/benchmarks"):
+        if self.root != self.root_path and self.root.is_relative_to(bench.BACKEND_ROOT / "data/benchmarks"):
             base._fail("fixed_task_business_root_required")
+
+    def artifact_proof(self):
+        return _artifacts()
+
+    def historical_proof(self):
+        return prior_proof()
+
+    def execution_policy(self):
+        return POLICY
+
+    def make_transport(self, *args, **kwargs):
+        return engine.TaskHTTPTransport(*args, **kwargs)
 
     def ledger(self, protocol):
         return BusinessTaskBudget(self.root / "ledger", bench.sha256(base._path(self.root, "protocol.json")), protocol["plan"])
@@ -297,16 +318,16 @@ class BusinessRegression(repair.TaskRepair):
             item = await base._capture({"id": case["id"], "input": {"message": case["turns"][0], "history": []}}, config["base_url"])
             item.pop("operation_id")
             initial.append(item)
-        protocol = {"schema_version": "serveflow-task-business-protocol-v4", "batch": BATCH, "candidate": CANDIDATE,
+        protocol = {"schema_version": self.protocol_schema, "batch": self.batch, "candidate": self.candidate,
             "created_at": base._now(), "git_head": subprocess.run(["git", "rev-parse", "HEAD"],
                 cwd=bench.BACKEND_ROOT, capture_output=True, text=True, check=True).stdout.strip(),
-            "root_binding_sha256": base._root_hash(self.root), "artifacts": _artifacts(),
+            "root_binding_sha256": base._root_hash(self.root), "artifacts": self.artifact_proof(),
             "cases_sha256": canonical_payload_hash({"cases": values}), "dependencies": engine._dependencies(),
             "model": base.MODEL, "base_url": config["base_url"], "messages_url": messages_url(config["base_url"]),
-            "limits": deepcopy(LIMITS), "http_limits": deepcopy(engine.HTTP_LIMITS), "policy": deepcopy(POLICY),
+            "limits": deepcopy(LIMITS), "http_limits": deepcopy(engine.HTTP_LIMITS), "policy": deepcopy(self.execution_policy()),
             "review_policy": deepcopy(REVIEW_POLICY), "phase_parameters": deepcopy(engine.PHASE_PARAMETERS),
             "agent_parameters": deepcopy(engine.AGENT_PARAMETERS), "plan": fixed_plan(), "initial_intent_requests": initial,
-            "offline_data_proof": engine.offline_data_proof(), "prior_proof": prior_proof(),
+            "offline_data_proof": engine.offline_data_proof(), "prior_proof": self.historical_proof(),
             "effective_environment": effective_environment(), "data_proof_sha256": repair.data_binding(),
             "authorized_model_requests": 0, "proposed_model_requests": MAX_REQUESTS}
         protocol = json.loads(json.dumps(protocol))
@@ -319,10 +340,10 @@ class BusinessRegression(repair.TaskRepair):
         p = bench.read_json(base._path(self.root, "protocol.json"))
         bench._exact(p, PROTOCOL_FIELDS, "task_business_protocol_fields")
         config, values = base._configuration(), cases()
-        if (p["schema_version"] != "serveflow-task-business-protocol-v4" or p["batch"] != BATCH or p["candidate"] != CANDIDATE
+        if (p["schema_version"] != self.protocol_schema or p["batch"] != self.batch or p["candidate"] != self.candidate
                 or p["root_binding_sha256"] != base._root_hash(self.root) or p["model"] != base.MODEL
                 or p["base_url"] != config["base_url"] or p["messages_url"] != messages_url(config["base_url"])
-                or p["limits"] != LIMITS or p["http_limits"] != engine.HTTP_LIMITS or p["policy"] != POLICY
+                or p["limits"] != LIMITS or p["http_limits"] != engine.HTTP_LIMITS or p["policy"] != self.execution_policy()
                 or p["review_policy"] != REVIEW_POLICY or p["dependencies"] != engine._dependencies()
                 or p["phase_parameters"] != json.loads(json.dumps(engine.PHASE_PARAMETERS))
                 or p["agent_parameters"] != json.loads(json.dumps(engine.AGENT_PARAMETERS))
@@ -331,8 +352,8 @@ class BusinessRegression(repair.TaskRepair):
                 or p["proposed_model_requests"] != MAX_REQUESTS or p["effective_environment"] != effective_environment()
                 or p["data_proof_sha256"] != repair.data_binding()):
             base._fail("task_business_protocol_changed")
-        if (p["artifacts"] != _artifacts() or p["cases_sha256"] != canonical_payload_hash({"cases": values})
-                or p["offline_data_proof"] != engine.offline_data_proof() or p["prior_proof"] != prior_proof()):
+        if (p["artifacts"] != self.artifact_proof() or p["cases_sha256"] != canonical_payload_hash({"cases": values})
+                or p["offline_data_proof"] != engine.offline_data_proof() or p["prior_proof"] != self.historical_proof()):
             base._fail("task_business_frozen_evidence_changed")
         if type(p["initial_intent_requests"]) is not list or len(p["initial_intent_requests"]) != 12:
             base._fail("task_business_initial_requests_changed")
@@ -358,7 +379,7 @@ class BusinessRegression(repair.TaskRepair):
         ledger = self.ledger(p)
         if ledger.status()["attempts"] or ledger.status()["active_case"]:
             base._fail("task_already_started")
-        value = {"schema_version": "serveflow-task-business-authorization-v4", "reference": reference,
+        value = {"schema_version": self.authorization_schema, "reference": reference,
             "recorded_at": base._now(), "protocol_sha256": bench.sha256(self.root / "protocol.json"),
             "root_binding_sha256": base._root_hash(self.root), "initial_chain_hash": ledger.initial_chain_hash,
             "max_requests": MAX_REQUESTS, "plan": p["plan"]}
@@ -369,7 +390,7 @@ class BusinessRegression(repair.TaskRepair):
         value = bench.read_json(base._path(self.root, "authorization.json"))
         bench._exact(value, {"schema_version", "reference", "recorded_at", "protocol_sha256", "root_binding_sha256",
                             "initial_chain_hash", "max_requests", "plan"}, "task_authorization_fields")
-        if (value["schema_version"] != "serveflow-task-business-authorization-v4"
+        if (value["schema_version"] != self.authorization_schema
                 or value["protocol_sha256"] != bench.sha256(self.root / "protocol.json")
                 or value["root_binding_sha256"] != base._root_hash(self.root)
                 or value["initial_chain_hash"] != self.ledger(p).initial_chain_hash
@@ -413,8 +434,8 @@ class BusinessRegression(repair.TaskRepair):
                     if bench.sha256(base._path(self.root, name)) != proof_hash:
                         base._fail("task_data_proof_changed")
                     data.assert_healthy()
-                transport = engine.TaskHTTPTransport(config["base_url"], self.root, ledger, lease, admission,
-                                                     delegate_factory=delegate_factory)
+                transport = self.make_transport(config["base_url"], self.root, ledger, lease, admission,
+                                                delegate_factory=delegate_factory)
                 http = httpx.AsyncClient(transport=transport, timeout=8, follow_redirects=False,
                     trust_env=False, headers={"Accept-Encoding": "identity"})
                 sdk = AsyncAnthropic(api_key=config.get("api_key", "controlled-only"), base_url=config["base_url"],
@@ -528,7 +549,7 @@ class BusinessRegression(repair.TaskRepair):
             known = [item["response"]["usage"][key] for item in physical if item["response"]["usage"][key] is not None]
             usage[key] = {"known_sum": sum(known) if known else None, "known_requests": len(known),
                           "unknown_requests": state["attempts"] - len(known)}
-        return {"schema_version": "serveflow-task-business-report-v4", "batch": BATCH, "candidate": CANDIDATE,
+        return {"schema_version": self.report_schema, "batch": self.batch, "candidate": self.candidate,
             "protocol_sha256": bench.sha256(self.root / "protocol.json"), "review_policy": deepcopy(REVIEW_POLICY),
             "planned_cases": 12, "planned_turns": 13, "planned_denominator": 12,
             "authorized_requests": MAX_REQUESTS if (self.root / "authorization.json").exists() and self._approval(p) else 0,
@@ -554,14 +575,14 @@ class BusinessRegression(repair.TaskRepair):
                 "unknown and unexecuted remain in denominator; no HTTP/browser/Redis/background-memory acceptance"]}
 
 
-def main(argv=None):
+def _main(trial_class, worker_module, argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operation", choices=("prepare", "verify", "status", "report", "preflight", "authorize", "run", "_worker", "review"))
     parser.add_argument("--reference")
     parser.add_argument("--confirm-new-authorization", action="store_true")
     parser.add_argument("--review-file", type=Path)
     args = parser.parse_args(argv)
-    trial = BusinessRegression()
+    trial = trial_class()
     try:
         if args.operation == "prepare": value = asyncio.run(trial.prepare())
         elif args.operation == "verify": value = {"verified": bool(trial.verify()), "model_requests": trial.ledger(trial.verify()).status()["attempts"]}
@@ -577,8 +598,8 @@ def main(argv=None):
             trial._approval(trial.verify())
             from evaluation.task_supervisor import supervise
             os.chdir(bench.BACKEND_ROOT)
-            value = supervise([sys.executable, "-B", "-u", "-m", "evaluation.task_business_regression", "_worker"],
-                              root=ROOT, deadline_s=POLICY["outer_process_deadline_s"])
+            value = supervise([sys.executable, "-B", "-u", "-m", worker_module, "_worker"],
+                              root=trial.root, deadline_s=trial.execution_policy()["outer_process_deadline_s"])
             print(json.dumps(value, ensure_ascii=False, allow_nan=False))
             return 0 if value["exit_code"] == 0 and not value["timed_out"] and not value["cancelled"] else 2
         print(json.dumps(value, ensure_ascii=False, allow_nan=False))
@@ -586,6 +607,10 @@ def main(argv=None):
     except Exception:
         print("STOP: task_business_regression_failed; inspect private receipts, do not retry or reinitialize", file=sys.stderr)
         return 2
+
+
+def main(argv=None):
+    return _main(BusinessRegression, "evaluation.task_business_regression", argv)
 
 
 if __name__ == "__main__":
