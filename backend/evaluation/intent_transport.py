@@ -113,6 +113,14 @@ class GuardedIntentTransport(httpx.AsyncBaseTransport):
     cleanup never replaces an already observed primary failure.
     """
 
+    def _timeout_ceiling(self) -> float:
+        """Protected opt-in boundary; historical intent callers stay at 8s."""
+        return 8.0
+
+    def _prepare_network_request(self, request: httpx.Request) -> None:
+        """Trusted subclasses may tighten request-local transport settings."""
+        return None
+
     def __init__(self, base_url: str, expected_payload_sha256: str,
                  before_send: Callable[[], Any], transport: httpx.AsyncBaseTransport | None = None,
                  timeout_s: float = 8, response_limit: int = 262_144):
@@ -122,7 +130,7 @@ class GuardedIntentTransport(httpx.AsyncBaseTransport):
             raise TrialTransportError("invalid_payload")
         if (not callable(before_send) or inspect.iscoroutinefunction(before_send)
                 or type(timeout_s) not in {int, float} or not math.isfinite(timeout_s)
-                or not 0 < timeout_s <= 8 or type(response_limit) is not int
+                or not 0 < timeout_s <= self._timeout_ceiling() or type(response_limit) is not int
                 or not 1 <= response_limit <= 262_144):
             raise TrialTransportError("invalid_request")
         self._expected_hash = expected_payload_sha256
@@ -229,6 +237,7 @@ class GuardedIntentTransport(httpx.AsyncBaseTransport):
                     raise ValueError
             except Exception:
                 raise self._failure("before_send_failed") from None
+            self._prepare_network_request(request)
             async with asyncio.timeout(self._timeout_s):
                 self.sent = True
                 response = await self._transport.handle_async_request(request)

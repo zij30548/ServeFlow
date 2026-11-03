@@ -111,21 +111,22 @@ def test_normal_exit_uses_only_fixed_worker_group_no_logs_and_no_stop_receipt(fa
     assert_ledger(root)
 
 
-def test_quality_worker_alone_admits_four_arm_outer_deadline(fake):
+@pytest.mark.parametrize("module", ["evaluation.quality_trial", "evaluation.quality_phase_trial"])
+def test_explicit_quality_workers_admit_four_arm_outer_deadline(fake, module):
     root, _, _, _, sends, starts, _ = fake
-    command = [sys.executable, "-B", "-u", "-m", "evaluation.quality_trial", "_worker"]
+    command = [sys.executable, "-B", "-u", "-m", module, "_worker"]
     assert supervisor.supervise(command, root=root, deadline_s=3600) == {
         "exit_code": 0, "timed_out": False, "cancelled": False}
     assert starts[0][0] == command and len(starts) == 1 and not sends
     assert_ledger(root)
 
 
-@pytest.mark.parametrize("module", ["evaluation.task_trial", "evaluation.task_deadline_recheck", "evaluation.quality_trial"])
+@pytest.mark.parametrize("module", ["evaluation.task_trial", "evaluation.task_deadline_recheck", "evaluation.quality_trial", "evaluation.quality_phase_trial"])
 def test_new_plan_does_not_raise_old_worker_or_arbitrary_deadlines(fake, module):
     root, _, _, _, _, starts, _ = fake
     command = [sys.executable, "-B", "-u", "-m", module, "_worker"]
     with pytest.raises(supervisor.SupervisorError, match="deadline_invalid"):
-        supervisor.supervise(command, root=root, deadline_s=3601 if module == "evaluation.quality_trial" else 901)
+        supervisor.supervise(command, root=root, deadline_s=3601 if module in {"evaluation.quality_trial", "evaluation.quality_phase_trial"} else 901)
     assert not starts
     assert_ledger(root)
 

@@ -189,6 +189,10 @@ class QualityTrial(business.BusinessRegression):
     def artifact_proof(self): return _artifacts()
     def historical_proof(self): return prior_proof()
     def execution_policy(self): return deepcopy(POLICY)
+    def http_limits(self): return deepcopy(business.engine.HTTP_LIMITS)
+    def make_transport(self, *args, **kwargs): return QualityHTTPTransport(*args, **kwargs)
+    def sdk_timeout_s(self): return 8
+    def deadline_policy(self): return EvaluationDeadlinePolicy(overhead_limit_s=30, cleanup_grace_s=.25)
     def ledger(self, protocol):
         return QualityBudget(self.root / "ledger", bench.sha256(base._path(self.root, "protocol.json")), protocol["plan"])
 
@@ -215,7 +219,7 @@ class QualityTrial(business.BusinessRegression):
             "root_binding_sha256": base._root_hash(self.root), "artifacts": self.artifact_proof(),
             "cases_sha256": canonical_payload_hash({"cases": values}), "dependencies": business.engine._dependencies(),
             "model": base.MODEL, "base_url": config["base_url"], "messages_url": messages_url(config["base_url"]),
-            "limits": deepcopy(LIMITS), "http_limits": deepcopy(business.engine.HTTP_LIMITS), "policy": self.execution_policy(),
+            "limits": deepcopy(LIMITS), "http_limits": self.http_limits(), "policy": self.execution_policy(),
             "review_policy": deepcopy(REVIEW_POLICY), "phase_parameters": deepcopy(business.engine.PHASE_PARAMETERS),
             "agent_parameters": deepcopy(business.engine.AGENT_PARAMETERS), "plan": fixed_plan(), "initial_intent_requests": initial,
             "offline_data_proof": business.engine.offline_data_proof(), "prior_proof": self.historical_proof(),
@@ -235,7 +239,7 @@ class QualityTrial(business.BusinessRegression):
         if (p["schema_version"] != self.protocol_schema or p["batch"] != self.batch or p["candidate"] != self.candidate
                 or p["root_binding_sha256"] != base._root_hash(self.root) or p["model"] != base.MODEL
                 or p["base_url"] != config["base_url"] or p["messages_url"] != messages_url(config["base_url"])
-                or p["limits"] != LIMITS or p["http_limits"] != business.engine.HTTP_LIMITS
+                or p["limits"] != LIMITS or p["http_limits"] != self.http_limits()
                 or p["policy"] != self.execution_policy() or p["review_policy"] != REVIEW_POLICY
                 or p["phase_parameters"] != json.loads(json.dumps(business.engine.PHASE_PARAMETERS))
                 or p["agent_parameters"] != json.loads(json.dumps(business.engine.AGENT_PARAMETERS))
@@ -319,18 +323,18 @@ class QualityTrial(business.BusinessRegression):
                     self.verify(); self._approval(p)
                     if bench.sha256(base._path(self.root, "data-proof.json")) != proof_hash: base._fail("quality_data_proof_changed")
                     data.assert_healthy()
-                transport = QualityHTTPTransport(config["base_url"], self.root, ledger, lease, admission, delegate_factory=delegate_factory)
-                http = httpx.AsyncClient(transport=transport, timeout=8, follow_redirects=False, trust_env=False,
+                transport = self.make_transport(config["base_url"], self.root, ledger, lease, admission, delegate_factory=delegate_factory)
+                http = httpx.AsyncClient(transport=transport, timeout=self.sdk_timeout_s(), follow_redirects=False, trust_env=False,
                                         headers={"Accept-Encoding": "identity"})
                 sdk = AsyncAnthropic(api_key=config.get("api_key", "controlled-only"), base_url=config["base_url"],
-                                     max_retries=0, timeout=8, http_client=http)
+                                     max_retries=0, timeout=self.sdk_timeout_s(), http_client=http)
                 def healthy():
                     if transport.fault: base._fail("quality_transport_stopped")
                     admission()
                 for arm, case, logical in arm_cases():
                     if logical in ledger.status()["completed_cases"]: continue
                     healthy(); ledger.start_case(logical, lease=lease)
-                    with base._quiet_clients(), eval_deadlines(EvaluationDeadlinePolicy(overhead_limit_s=30, cleanup_grace_s=.25)):
+                    with base._quiet_clients(), eval_deadlines(self.deadline_policy()):
                         artifact = await execute_arm_case(arm, case, sdk, data, ensure_healthy=healthy, frame_case_id=logical)
                     artifact.update({"arm": arm, "logical_case_id": logical,
                         "protocol_sha256": bench.sha256(self.root / "protocol.json"), "evidence_kind": transport.kind,
@@ -452,13 +456,13 @@ class QualityTrial(business.BusinessRegression):
                 "planned_denominator": 12, "full_plan_delta_percentage_points": None if counts["unpaired_unknown_or_unexecuted"] else
                 100 * (arms[right]["correct_handling"]["value"] - arms[left]["correct_handling"]["value"])}
         usage = usage_for(physical, state["attempts"])
-        return {"schema_version": self.report_schema, "batch": BATCH, "candidate": CANDIDATE,
+        return {"schema_version": self.report_schema, "batch": self.batch, "candidate": self.candidate,
             "protocol_sha256": bench.sha256(self.root / "protocol.json"), "review_policy": deepcopy(REVIEW_POLICY),
             "planned_arm_cases": 48, "planned_arm_turns": 52, "actual_requests": state["attempts"],
             "authorized_requests": MAX_REQUESTS if (self.root / "authorization.json").exists() and self._approval(p) else 0,
             "ledger": state, "sealed_requests": len(physical), "arms": arms, "pairs": pairs, "cases": rows, "usage": usage,
             "physical_resources": _resources([{"latency_ms": item["latency_ms"], "usage": {**item["response"]["usage"], "physical_requests": 1}} for item in physical]),
-            "stage_clock_policy": deepcopy(clock.CLOCK_POLICY),
+            "stage_clock_policy": deepcopy(self.execution_policy()["stage_clock"]),
             "legacy_gate_scope": "diagnostic only: original success status, deterministic role/tool expectations and valid Judge >=0.75; not the old v6 full fresh/exact-projection contract, and no historical score is recomputed",
             "model_quality_evidence": bool(physical) and all(item["evidence_kind"] == "live-model" for item in physical)
                 and all(row.get("data_kind", "live-mysql-and-isolated-chroma") == "live-mysql-and-isolated-chroma" for row in rows),

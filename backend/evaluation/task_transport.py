@@ -350,10 +350,13 @@ class TaskHTTPTransport(httpx.AsyncBaseTransport):
                 raise TrialTransportError("protocol")
             value["timing"] = {key: round(timing[key], 3) for key in sorted(TIMING_FIELDS)}
         diagnostics = self._physical_diagnostics()
-        if (type(diagnostics) is not dict or set(diagnostics) - {"stage_deadline_reason"}
+        numeric_diagnostics = {"network_limit_s", "sdk_limit_s", "active_stage_limit_s"}
+        if (type(diagnostics) is not dict or set(diagnostics) - ({"stage_deadline_reason"} | numeric_diagnostics)
                 or ("stage_deadline_reason" in diagnostics and (
                     type(diagnostics["stage_deadline_reason"]) is not str
-                    or diagnostics["stage_deadline_reason"] not in {"active", "overhead", "wall"}))):
+                    or diagnostics["stage_deadline_reason"] not in {"active", "overhead", "wall"}))
+                or any(type(diagnostics[key]) not in {int, float} or not math.isfinite(diagnostics[key])
+                       or not 0 < diagnostics[key] <= 30 for key in numeric_diagnostics & set(diagnostics))):
             raise TrialTransportError("protocol")
         value.update(diagnostics)
         base._write(self.root, name, value)
