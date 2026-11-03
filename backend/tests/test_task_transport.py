@@ -349,7 +349,7 @@ def test_admission_integrity_failure_happens_before_reservation(tmp_path):
         assert "sensitive detail" not in (root / "stopped.json").read_text()
 
 
-@pytest.mark.parametrize("case_id", ["e01", "e02", "e03", "e04", "e06"])
+@pytest.mark.parametrize("case_id", ["e01", "e02", "e03", "e04", "e05", "e06"])
 def test_real_sdk_transport_and_orchestrator_are_connected(tmp_path, monkeypatch, case_id):
     """Real SDK serialization, bounded claims and production loops, fake replies.
 

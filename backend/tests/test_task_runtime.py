@@ -78,10 +78,11 @@ class ControlledSDK:
 
     base_url = "https://dashscope.aliyuncs.com/apps/anthropic"
 
-    def __init__(self):
+    def __init__(self, *, e05_intent="payment_issue"):
         self.messages = SimpleNamespace(create=self.create)
         self.calls = []
         self.seen = Counter()
+        self.e05_intent = e05_intent
 
     @staticmethod
     def text(value):
@@ -94,7 +95,7 @@ class ControlledSDK:
         key = (frame.case_id, frame.turn_id, frame.phase, frame.agent)
         self.seen[key] += 1
         if frame.phase == "intent":
-            intent = {"e02": "refund", "e05": "payment_issue"}.get(frame.case_id, "logistics")
+            intent = {"e02": "refund", "e05": self.e05_intent}.get(frame.case_id, "logistics")
             return self.text(json.dumps({"intent": intent, "confidence": 0.99,
                                          "reasoning": "controlled classification"}))
         if frame.phase == "rag_rewrite":
@@ -110,6 +111,8 @@ class ControlledSDK:
         if self.seen[key] == 1:
             if frame.case_id == "e03":
                 name, args = "search_knowledge_base", {"query": "配送与数字订阅的演示政策", "top_k": 1}
+            elif frame.case_id == "e05" and frame.agent == "technical":
+                name, args = "build_diagnostic_plan", {"environment": "controlled-demo", "reproduced": True}
             else:
                 order = {"e01": "DEMO-1001", "e02": "DEMO-1004", "e04": "DEMO-1002", "e05": "DEMO-1003", "e06": "DEMO-1005"}[frame.case_id]
                 name, args = "read_demo_order", {"order_id": order}
@@ -241,21 +244,33 @@ def test_data_fault_cannot_be_hidden_by_actor_fallback_or_produce_judge_score():
     asyncio.run(run())
 
 
-def test_fixed_payment_classification_exposes_unhandled_technical_collaboration():
-    """A controlled diagnostic of a current limitation, not a quality pass.
+@pytest.mark.parametrize("intent,roles", [("payment_issue", ["billing", "technical"]),
+                                         ("technical", ["technical", "billing"])])
+def test_paid_activation_uses_billing_records_and_technical_diagnostics(intent, roles):
+    """Real production loops with controlled model choices, not quality scores.
 
     Do not change the question/gold to make missing technical work disappear.
     The actual LLM's classification and response remain unmeasured here.
     """
     async def run():
-        sdk, data = ControlledSDK(), ControlledData()
+        sdk, data = ControlledSDK(e05_intent=intent), ControlledData()
         output = await execute_case(case("e05"), sdk, data, ensure_healthy=data.assert_healthy)
         result = output["turns"][0]["result"]
-        assert result["intent"] == "payment_issue"
-        assert result["agent_types"] == ["billing"]
+        assert result["intent"] == intent
+        assert result["agent_types"] == roles
         assert data.orders == [("demo-customer-a", "DEMO-1003")]
         assert output["deterministic"]["checks"]["business_evidence"]
-        assert not output["deterministic"]["checks"]["required_agents"]
+        assert all(output["deterministic"]["checks"].values())
+        assert output["deterministic"]["blockers"] == []
+        observed = output["turns"][0]["tool_evidence"]["calls"]
+        assert {(call["agent"], call["name"]) for call in observed} == {
+            ("billing", "read_demo_order"), ("technical", "build_diagnostic_plan")}
+        native = {frame.agent: native_tool_results(arguments)
+                  for frame, arguments in sdk.calls if frame.phase == "agent" and native_tool_results(arguments)}
+        assert native["billing"][0]["order"]["payments"][0]["amount_minor"] == 3900
+        assert "diagnostic_steps" in native["technical"][0]
+        assert "order" not in native["technical"][0]
+        assert any(frame.phase == "composer" for frame, _ in sdk.calls)
         assert output["turns"][0]["judge_overall"] == 1.0
-        assert output["semantic_review"] is None  # A Judge's 1.0 cannot repair routing.
+        assert output["semantic_review"] is None  # Controlled Judge 1.0 is not semantic acceptance.
     asyncio.run(run())

@@ -1116,7 +1116,7 @@ class AgentOrchestrator:
 
     def _domain_scores(self, req: Request) -> Dict[AgentType, float]:
         """按意图、关键词和实体为各领域 Agent 打分。"""
-        msg = req.message.lower()
+        evidence = self._domain_evidence(req.message)
         scores = {
             AgentType.GENERAL: 0.1,
             AgentType.TECHNICAL: 0.0,
@@ -1152,17 +1152,9 @@ class AgentOrchestrator:
         ):
             scores[AgentType.BILLING] += 0.75
 
-        technical_kws = ["崩溃", "报错", "error", "crash", "无法登录", "登录失败", "500", "401", "验证码"]
-        billing_kws = ["退款", "退货", "扣款", "发票", "账单", "支付", "订阅", "refund", "invoice", "多扣"]
-        general_kws = ["订单", "物流", "快递", "配送", "会员", "积分", "咨询", "帮助"]
-
-        technical_hits = sum(1 for kw in technical_kws if kw in msg)
-        billing_hits = sum(1 for kw in billing_kws if kw in msg)
-        general_hits = sum(1 for kw in general_kws if kw in msg)
-
-        scores[AgentType.TECHNICAL] += min(0.45, technical_hits * 0.18)
-        scores[AgentType.BILLING] += min(0.45, billing_hits * 0.18)
-        scores[AgentType.GENERAL] += min(0.35, general_hits * 0.12)
+        scores[AgentType.TECHNICAL] += min(0.45, len(evidence[AgentType.TECHNICAL]) * 0.18)
+        scores[AgentType.BILLING] += min(0.45, len(evidence[AgentType.BILLING]) * 0.18)
+        scores[AgentType.GENERAL] += min(0.35, len(evidence[AgentType.GENERAL]) * 0.12)
 
         entities = req.entities or {}
         if entities.get("error_code"):
@@ -1173,6 +1165,69 @@ class AgentOrchestrator:
             scores[AgentType.GENERAL] += 0.1
 
         return {agent_type: round(score, 3) for agent_type, score in scores.items()}
+
+    @staticmethod
+    def _domain_evidence(message: str) -> Dict[AgentType, set[str]]:
+        """Finite current-message evidence shared by scoring and collaboration.
+
+        A single intent cannot represent both payment verification and technical
+        diagnosis. Add explicit action/symptom combinations, not a second model
+        call, inferred history or a grant of additional tool permissions.
+        """
+        text = IntentRecognizer._active_intent_text(message)
+        # Extend the recognizer's finite topic exclusions only for routing's
+        # extra vocabulary. Negative symptoms (未开通/无法激活) remain evidence.
+        activation_symptom = r"(?:开通失败|激活失败|无法开通|无法激活|不能激活|未激活|没开通|未开通)"
+        subject = r"(?:权益|服务|账号|账户|订阅|功能|应用|页面)"
+        excluded_symptom = rf"(?:我的)?{subject}(?:\s|提示|显示|出现|发生|现在|的){{0,3}}[“「\"\x27]?{activation_symptom}[”」\"\x27]?"
+        topic = rf"(?:技术排障|技术诊断|技术支持|故障排查|故障诊断|激活问题|开通问题|付款|实付|扣钱|{excluded_symptom}|{activation_symptom})"
+        topics = rf"{topic}(?:\s*(?:或|和|及|、|与|/)\s*{topic})*"
+        exclusion = (r"(?<!不是)(?<!并非)(?<!不)"
+                     r"(?:不是|并非|不需要|不想|不用|不要|不必|无需|无须|先别|暂不|别|不查|不核对|不做)\s*")
+        verbs = r"(?:(?:再|先|现在|给我|帮我|做|进行|要|想|需要|问|咨询|查|查询|核对|检查|处理|排查|诊断|修复|解决|关于)\s*){0,4}"
+        text = re.sub(exclusion + verbs + topics, " ", text)
+        keywords = {
+            AgentType.TECHNICAL: ("崩溃", "报错", "error", "crash", "无法登录", "登录失败", "500", "401", "验证码"),
+            AgentType.BILLING: ("退款", "退货", "扣款", "发票", "账单", "支付", "订阅", "refund", "invoice", "多扣"),
+            AgentType.GENERAL: ("订单", "物流", "快递", "配送", "会员", "积分", "咨询", "帮助"),
+        }
+        evidence = {role: {word for word in words if (
+            bool(re.search(rf"(?<![a-z0-9_]){re.escape(word)}(?![a-z0-9_])", text))
+            if word.isascii() else word in text)} for role, words in keywords.items()}
+        # Quoted action names and definition questions do not authorize another
+        # actor. Keep quoted error symptoms in `text` for ordinary diagnostics.
+        commands = re.sub(r'“[^”\n]*”|「[^」\n]*」|"[^"\n]*"|(?<!\w)\x27[^\x27\n]*\x27(?!\w)', " ", text)
+        directive = r"(?:请(?!问|解释|说明|告诉)|麻烦|帮我|给我|我(?:要|想|需要|希望)|希望|要求|做|进行)"
+        clause = r"[^，。！？；\n]"
+        diagnose = rf"{directive}{clause}{{0,8}}(?:技术排障|技术诊断|故障排查|故障诊断)"
+        diagnose_activation = rf"(?:排查|诊断|修复|解决|处理){clause}{{0,8}}{activation_symptom}"
+        verify_payment = (
+            rf"(?:核对|核实|查(?:询|看)?|检查|确认){clause}{{0,10}}(?:付款|实付|扣过钱|扣的钱)|"
+            rf"(?:付款|实付)(?:金额|状态|记录|凭证)?{clause}{{0,10}}(?:核对|核实|检查|查询)"
+        )
+        paid_activation = (
+            rf"(?:付(?:过|了)?款|已付款|支付成功|扣(?:过|了)钱|已扣款|扣款成功){clause}{{0,16}}"
+            r"(?:未|没|无法|不能)(?:能|有)?(?:开通|激活)"
+        )
+        activation_failure = (
+            rf"{subject}{clause}{{0,12}}"
+            rf"{activation_symptom}"
+        )
+        definition = r"(?<!原因)是什么(?!原因)|什么意思|什么含义|什么定义|如何理解|怎么理解"
+        for current in re.split(r"[，。！？；\n]", commands):
+            if re.search(definition, current):
+                continue
+            if re.search(diagnose, current) or re.search(diagnose_activation, current):
+                evidence[AgentType.TECHNICAL].add("technical_diagnosis_request")
+            if re.search(verify_payment, current):
+                evidence[AgentType.BILLING].add("payment_verification_request")
+            if re.search(paid_activation, current):
+                evidence[AgentType.TECHNICAL].add("paid_activation_failure")
+                evidence[AgentType.BILLING].add("paid_activation_failure")
+        for current in re.split(r"[，。！？；\n]", text):
+            if not re.search(definition, current) and re.search(activation_failure, current):
+                evidence[AgentType.TECHNICAL].add("activation_failure")
+        return evidence
 
     @staticmethod
     def _routing_reason(
@@ -1196,20 +1251,17 @@ class AgentOrchestrator:
         """
         判断是否需要多个 Agent 并行协作。
 
-        意图识别通常只返回一个主意图；这里用领域关键词补充检测复合问题，
-        例如"登录报错且被重复扣款"需要技术和账单 Agent 同时处理。
+        意图识别通常只返回一个主意图；复用评分层的当前领域证据补充协作，
+        例如付款核对与激活故障诊断分别由账单、技术 Agent 承接。
         """
-        msg = req.message.lower()
+        evidence = self._domain_evidence(req.message)
         targets: List[AgentType] = []
-
-        technical_kws = ["崩溃", "报错", "error", "crash", "无法登录", "登录失败", "500", "401"]
-        billing_kws = ["退款", "扣款", "发票", "账单", "支付", "订阅", "refund", "invoice"]
 
         if req.intent in (
             IntentCategory.TECHNICAL,
             IntentCategory.TECHNICAL_LOGIN,
             IntentCategory.TECHNICAL_CRASH,
-        ) or any(kw in msg for kw in technical_kws):
+        ) or evidence[AgentType.TECHNICAL]:
             targets.append(AgentType.TECHNICAL)
         if req.intent in (
             IntentCategory.BILLING,
@@ -1218,7 +1270,7 @@ class AgentOrchestrator:
             IntentCategory.REFUND,
             IntentCategory.INVOICE,
             IntentCategory.PAYMENT_ISSUE,
-        ) or any(kw in msg for kw in billing_kws):
+        ) or evidence[AgentType.BILLING]:
             targets.append(AgentType.BILLING)
 
         # 保持顺序去重，并只返回当前有实例的 Agent 类型。
