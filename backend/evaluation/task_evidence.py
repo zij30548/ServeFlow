@@ -1,8 +1,8 @@
 """Evaluation-only tool evidence and a one-attempt quality judge.
 
-The production orchestrator, tools, evaluator and databases are unchanged. This
-module observes only fresh evaluation instances; it never loads configuration,
-initializes a store, executes a business scenario, or creates an SDK client.
+This module observes only fresh evaluation instances; it does not edit business
+modules or databases. Importing it never loads configuration, initializes a
+store, executes a business scenario, or creates an SDK client.
 """
 from __future__ import annotations
 
@@ -29,10 +29,27 @@ TOOL_NAMES = frozenset({
     "suggest_required_fields", "lookup_error_code", "build_diagnostic_plan",
     "check_billing_fields", "compare_amounts", "create_handoff_summary",
 })
+FATAL_EVIDENCE_CODES = frozenset({
+    "evidence_invalid_json", "evidence_size_limit", "invalid_tool_registry",
+    "invalid_capture_agent", "tool_budget_exhausted", "tool_permission_denied",
+    "tool_handler_failed", "tool_cancelled", "tool_trace_missing",
+    "tool_trace_mismatch", "tool_trace_duplicate_id", "tool_trace_invalid", "capture_not_active",
+})
+_SAFE_EVIDENCE_CODES = FATAL_EVIDENCE_CODES | frozenset({
+    "tool_input_invalid", "invalid_fixture_read", "invalid_capture_configuration",
+    "capture_already_installed", "invalid_evidence_case", "invalid_judge_configuration",
+})
 
 
 class EvidenceError(ValueError):
     """A fixed diagnostic code, never the original input or exception body."""
+
+    def __init__(self, reason):
+        self.reason = reason if type(reason) is str and reason in _SAFE_EVIDENCE_CODES else "evidence_invalid_json"
+        # Existing ledgers use protocol for a failed execution contract. Keep
+        # the specific safe reason separately instead of calling it storage.
+        self.code = "protocol"
+        super().__init__(self.reason)
 
 
 def _clone(value, maximum=65536, *, ascii_only=True):
@@ -112,19 +129,39 @@ class CaptureTools:
         self.tool_calls = self.rag_calls = self._bytes = 0
         self.calls, self.blockers, self._patched = [], [], []
         self._sequences = {}
+        self._registries = {}
+        self.fault = None
+        self._ever_installed = False
 
     def _block(self, code):
+        code = code if type(code) is str and code in _SAFE_EVIDENCE_CODES else "evidence_invalid_json"
         if code not in self.blockers:
             self.blockers.append(code)
+        if code in FATAL_EVIDENCE_CODES and self.fault is None:
+            self.fault = code
+
+    def assert_healthy(self):
+        """A shared turn-local latch; restoring wrappers never clears faults."""
+        if self.fault is not None:
+            raise EvidenceError(self.fault)
+
+    def assert_send_allowed(self):
+        """An old frame cannot spend after its one-shot turn capture closes."""
+        self.assert_healthy()
+        if not self._patched:
+            self._block("capture_not_active")
+            raise EvidenceError(self.fault)
 
     def install(self, orchestrator):
-        if self._patched:
+        if self._patched or self._ever_installed:
             raise EvidenceError("capture_already_installed")
+        self._ever_installed = True
         try:
             agents = [agent for pool in orchestrator._pool.values() for agent in pool]
             for agent in agents:
                 role = _role(agent.agent_type)
                 if role not in ROLES or getattr(agent, "_task_evidence_owner", None) is not None:
+                    self._block("invalid_capture_agent")
                     raise EvidenceError("invalid_capture_agent")
                 original = agent.get_tools
                 had_attribute = "get_tools" in vars(agent)
@@ -134,18 +171,38 @@ class CaptureTools:
                 def observed_tools(original=original, role=role, scope=scope):
                     tools = original()
                     if not isinstance(tools, dict):
+                        self._block("invalid_tool_registry")
                         raise EvidenceError("invalid_tool_registry")
                     result = {}
+                    registry = {}
                     for name, spec in tools.items():
                         if (name not in TOOL_NAMES or not isinstance(spec, AgentToolSpec)
                                 or spec.name != name):
+                            self._block("invalid_tool_registry")
                             raise EvidenceError("invalid_tool_registry")
+                        try:
+                            from jsonschema import validators
+                            schema = _clone(spec.input_schema, 8192)[0]
+                            validators.validator_for(schema).check_schema(schema)
+                        except Exception:
+                            self._block("invalid_tool_registry")
+                            raise EvidenceError("invalid_tool_registry") from None
+                        registry[name] = {"input_schema": schema, "tool_scope": list(scope),
+                            "allowed_agents": list(spec.allowed_agents) if spec.allowed_agents is not None else None,
+                            "retry_safe": spec.retry_safe}
                         result[name] = replace(spec, handler=self._handler(role, scope, spec))
+                    if role in self._registries and self._registries[role] != registry:
+                        self._block("invalid_tool_registry")
+                        raise EvidenceError("invalid_tool_registry")
+                    self._registries[role] = registry
                     return result
 
                 self._patched.append((agent, had_attribute, old_attribute))
                 agent._task_evidence_owner = self
                 agent.get_tools = observed_tools
+                # Bind the actual schemas before model output exists; never
+                # derive a rejection rule from the model or its error string.
+                observed_tools()
         except BaseException:
             self.restore()
             raise
@@ -163,6 +220,7 @@ class CaptureTools:
 
     def _handler(self, role, scope, spec):
         async def observed(req, args):
+            self.assert_healthy()
             self.tool_calls += 1
             self.rag_calls += spec.name == "search_knowledge_base"
             self._sequences[role] = self._sequences.get(role, 0) + 1
@@ -260,30 +318,77 @@ class CaptureTools:
         for role in set(role_traces) | {call["agent"] for call in self.calls}:
             calls = [call for call in self.calls if call["agent"] == role]
             observed = role_traces.get(role, [])
-            if len(calls) != len(observed):
-                self._block("tool_trace_mismatch")
-            for call, trace in zip(calls, observed):
-                try:
-                    same_input = _clone(call["input"], 8192)[1] == _clone(trace.get("input"), 8192)[1]
-                except EvidenceError:
-                    same_input = False
+            cursor = 0
+            for sequence, trace in enumerate(observed, 1):
                 tool_id = trace.get("tool_use_id")
                 if (not {"tool_name", "input", "success", "result_success", "tool_use_id"} <= set(trace)
-                        or trace.get("tool_name") != call["name"] or not same_input
-                        or type(trace.get("success")) is not bool or trace["success"] != call["success"]
-                        or trace.get("result_success") is not call["result_success"]
-                        or getattr(result, "request_id", None) is not None and call["request_id"] != result.request_id
                         or not isinstance(tool_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", tool_id)):
                     self._block("tool_trace_mismatch")
                     continue
-                call["tool_use_id"] = tool_id
                 ids.append((role, tool_id))
+                call = calls[cursor] if cursor < len(calls) else None
+                try:
+                    same_input = call is not None and _clone(call["input"], 8192)[1] == _clone(trace.get("input"), 8192)[1]
+                except EvidenceError:
+                    same_input = False
+                matches = (call is not None and trace.get("tool_name") == call["name"] and same_input
+                    and type(trace.get("success")) is bool and trace["success"] == call["success"]
+                    and trace.get("result_success") is call["result_success"]
+                    and (getattr(result, "request_id", None) is None or call["request_id"] == result.request_id))
+                if matches:
+                    call["tool_use_id"] = tool_id
+                    cursor += 1
+                    continue
+                rejected = self._model_input_rejection(role, trace)
+                if rejected is not None:
+                    events.append({"event": "model_tool_input_rejected", "agent": role,
+                        "sequence": sequence, "tool_use_id": tool_id, "name": trace["tool_name"],
+                        "input_sha256": rejected, "error_code": "tool_input_invalid"})
+                    self._block("tool_input_invalid")  # Ordinary model failure, not lost handler evidence.
+                else:
+                    self._block("tool_trace_mismatch")
+            if cursor != len(calls):
+                self._block("tool_trace_mismatch")
         if len(ids) != len(set(ids)):
             self._block("tool_trace_duplicate_id")
+        try:
+            packet = _clone({"calls": self.calls, "events": events}, self.max_total_bytes + 65536)[0]
+        except EvidenceError as error:
+            self._block(error.reason)
+            raise
         return {"case_id": self.case_id, "turn_id": self.turn_id,
-                "calls": _clone(self.calls, self.max_total_bytes + 65536)[0],
-                "blockers": list(self.blockers), "events": events,
+                "calls": packet["calls"],
+                "blockers": list(self.blockers), "events": packet["events"],
                 "tool_calls": self.tool_calls, "rag_calls": self.rag_calls}
+
+    def _model_input_rejection(self, role, trace):
+        """Recognize only an independently proven pre-handler schema rejection.
+
+        A failed flag or error message alone is never evidence that a missing
+        handler record is legitimate. Valid arguments remain a fatal mismatch.
+        """
+        name = trace.get("tool_name")
+        registry = self._registries.get(role, {}).get(name) if type(name) is str else None
+        if (registry is None or name not in registry["tool_scope"]
+                or registry["allowed_agents"] is not None and role not in registry["allowed_agents"]
+                or registry["retry_safe"] is not True or trace.get("success") is not False
+                or trace.get("result_success") is not None or type(trace.get("input")) is not dict):
+            return None
+        try:
+            args, raw = _clone(trace["input"], 8192)
+        except EvidenceError as error:
+            self._block(error.reason)
+            return None
+        from jsonschema import validators, ValidationError
+        try:
+            validators.validator_for(registry["input_schema"])(registry["input_schema"]).validate(args)
+        except ValidationError:
+            # Invalid arguments may contain unknown keys or secrets. Preserve
+            # only their bound hash, never copy those values into evidence.
+            return hashlib.sha256(raw).hexdigest()
+        except Exception:
+            self._block("invalid_tool_registry")
+        return None
 
 
 def _case_input(case):

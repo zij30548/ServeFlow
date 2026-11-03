@@ -296,6 +296,7 @@ def load_suites(root: Path = BACKEND_ROOT) -> dict:
 def artifact_paths(root: Path = BACKEND_ROOT) -> list[str]:
     fixed = ["core/intent_recognizer.py", "core/intent_embedding.py", "core/provider_options.py",
              "core/skill_loader.py", "core/conversation_state.py", "core/concurrency.py", "core/safe_diagnostics.py", "core/llm_utils.py",
+             "core/policy_grounding.py",
              "agents/agent_orchestrator.py", "agents/tools.py", "tooling/knowledge_base.py",
              "tooling/tool_manager.py", "tooling/mcp_client.py", "tooling/mcp_server.py",
              "memory/conversation_memory.py", "monitor/performance_monitor.py", "api/main.py",
@@ -303,7 +304,9 @@ def artifact_paths(root: Path = BACKEND_ROOT) -> list[str]:
              "evaluation/benchmark_metrics.py", "knowledge/serveflow-demo-v2.json",
              "demo_business/fixtures.json", "demo_business/store.py", "demo_business/session.py",
              "config/mcp_servers.json", "requirements.txt", "requirements-dev.txt", "requirements-demo.txt",
-             "tests/test_benchmark.py", "tests/test_benchmark_metrics.py"]
+             "tests/test_benchmark.py", "tests/test_benchmark_metrics.py",
+             "tests/test_policy_grounding.py", "tests/test_policy_runtime.py",
+             "tests/test_mysql_collection_contract.py"]
     fixed.extend(f"evaluation/benchmark/{suite}-v1.json" for suite in SUITES)
     fixed.extend(str(path.relative_to(root)) for path in sorted((root / "skills").rglob("SKILL.md")))
     return sorted(fixed)

@@ -185,6 +185,29 @@ def test_missing_independent_eval_database_preflight_and_run_have_zero_calls(tmp
     assert (trial.root / "worker-stop.json").exists()
 
 
+@pytest.mark.parametrize("reason,expected", [
+    ("evidence_invalid_json", "evidence_invalid_json"),
+    ("private payload, customer text or SQL must not be persisted", "evidence_invalid_json"),
+])
+def test_capture_failure_persists_only_safe_reason_and_prevents_restart(tmp_path, monkeypatch, reason, expected):
+    from evaluation.task_evidence import EvidenceError
+    trial, protocol = prepare(tmp_path)
+    grant(trial)
+    async def fail(*_args, **_kwargs):
+        raise EvidenceError(reason)
+    monkeypatch.setattr(module, "execute_case", fail)
+    data = ControlledData()
+    with pytest.raises(EvidenceError):
+        asyncio.run(trial.execute(delegate_factory=lambda _: httpx.MockTransport(lambda _: None),
+                                 controlled_data=data))
+    stopped = bench.read_json(trial.root / "worker-stop.json")
+    assert stopped["evidence_error"] == expected
+    assert "private payload" not in json.dumps(stopped)
+    assert data.closed and trial.ledger(protocol).status()["attempts"] == 0
+    with pytest.raises(base.TrialError):
+        asyncio.run(trial.execute(controlled_data=ControlledData()))
+
+
 @pytest.mark.parametrize("kind", ["artifacts", "dependencies", "offline_proof", "prior_proof", "initial_payload", "initial_wire_hash", "authorization"])
 def test_frozen_or_approval_tampering_blocks_execution_before_data(tmp_path, monkeypatch, kind):
     trial, protocol = prepare(tmp_path)

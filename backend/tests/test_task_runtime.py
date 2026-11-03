@@ -274,3 +274,74 @@ def test_paid_activation_uses_billing_records_and_technical_diagnostics(intent, 
         assert output["turns"][0]["judge_overall"] == 1.0
         assert output["semantic_review"] is None  # Controlled Judge 1.0 is not semantic acceptance.
     asyncio.run(run())
+
+
+@pytest.mark.parametrize('case_id,failed_role', [('e01','general'),('e02','billing')])
+def test_bad_capture_result_stops_native_loop_fallback_and_judge(case_id, failed_role):
+    from evaluation.task_evidence import EvidenceError
+    class NonJSONData(ControlledData):
+        async def order_reader(self, customer, order):
+            value = await super().order_reader(customer, order)
+            value['order']['entitlements'] = ()
+            return value
+    async def run():
+        sdk, data = ControlledSDK(), NonJSONData()
+        with pytest.raises(EvidenceError,match='evidence_invalid_json'):
+            await execute_case(case(case_id),sdk,data,ensure_healthy=data.assert_healthy)
+        assert [(frame.phase,frame.agent) for frame,_ in sdk.calls] == [('intent',None),('agent',failed_role)]
+        assert len(data.orders)==1
+        assert CURRENT.get() is None
+    asyncio.run(run())
+
+
+def test_rag_fallback_cannot_swallow_shared_evidence_fault_and_call_reranker():
+    from copy import deepcopy
+    from evaluation.task_evidence import EvidenceError
+    class FaultingRAGSDK(ControlledSDK):
+        async def create(self,**kwargs):
+            frame=CURRENT.get()
+            if frame.phase=='rag_rewrite':
+                self.calls.append((frame,deepcopy(kwargs)))
+                owner=frame.evidence_guard.__self__
+                owner._block('evidence_invalid_json')
+                raise RuntimeError('controlled rewriting failure')
+            return await super().create(**kwargs)
+    async def run():
+        sdk,data=FaultingRAGSDK(),ControlledData()
+        with pytest.raises(EvidenceError,match='evidence_invalid_json'):
+            await execute_case(case('e03'),sdk,data,ensure_healthy=data.assert_healthy)
+        phases=[frame.phase for frame,_ in sdk.calls]
+        assert phases.count('intent')==1 and phases.count('agent')==1 and phases.count('rag_rewrite')==1
+        assert 'rag_rerank' not in phases and 'composer' not in phases and 'judge' not in phases
+        assert CURRENT.get() is None
+    asyncio.run(run())
+
+
+def test_real_native_bad_parameter_correction_is_not_a_capture_execution_fault():
+    import hashlib
+    from evaluation.task_evidence import _clone
+    from types import SimpleNamespace
+    class RecoveringSDK(ControlledSDK):
+        def __init__(self):super().__init__();self.actor_count=0
+        async def create(self,**kwargs):
+            frame=CURRENT.get()
+            if frame.phase!='agent':return await super().create(**kwargs)
+            self.calls.append((frame,kwargs));self.actor_count+=1
+            if self.actor_count<=2:
+                return SimpleNamespace(content=[{'type':'tool_use','id':'controlled_'+str(self.actor_count),
+                    'name':'read_demo_order','input':{'order_id':123 if self.actor_count==1 else 'DEMO-1001'}}],stop_reason='tool_use')
+            return self.text('Controlled recovered reply; semantic quality remains unmeasured.')
+    async def run():
+        sdk,data=RecoveringSDK(),ControlledData()
+        result=await execute_case(case('e01'),sdk,data,ensure_healthy=data.assert_healthy)
+        assert sdk.actor_count==3 and len(data.orders)==1
+        assert result['judge_ready'] and result['semantic_review'] is None
+        observed=result['turns'][0]['tool_evidence']
+        assert len(observed['calls'])==1 and observed['calls'][0]['tool_use_id']=='controlled_2'
+        assert observed['events'][0]['event']=='model_tool_input_rejected'
+        assert observed['events'][0]['input_sha256']==hashlib.sha256(_clone({'order_id':123})[1]).hexdigest()
+        assert 'input' not in observed['events'][0]
+        assert observed['blockers']==['tool_input_invalid']
+        assert not result['deterministic']['checks']['trace_integrity']  # Ordinary sample failure is retained.
+        assert any(frame.phase=='judge' for frame,_ in sdk.calls)
+    asyncio.run(run())

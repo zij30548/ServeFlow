@@ -15,6 +15,13 @@ def dataset(suite):
     return bench.load_suites()[suite]
 
 
+def test_future_freeze_covers_policy_runtime_dependency_and_regressions():
+    paths = bench.artifact_paths()
+    assert len(paths) == len(set(paths))
+    assert {"core/policy_grounding.py", "tests/test_policy_grounding.py",
+            "tests/test_policy_runtime.py", "tests/test_mysql_collection_contract.py"} <= set(paths)
+
+
 def test_real_case_files_have_valid_balanced_splits_without_network(monkeypatch):
     def forbidden(*args, **kwargs):
         raise AssertionError("benchmark preparation must not connect to services")

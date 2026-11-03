@@ -43,6 +43,10 @@ from core.intent_recognizer import IntentCategory, IntentRecognizer, UrgencyLeve
 from core.llm_utils import extract_text_content
 from core.provider_options import nonthinking_options
 from core.safe_diagnostics import record_llm_failure
+from core.policy_grounding import (
+    PolicyEvidence, extract_policy_evidence, has_record_question,
+    merge_policy_evidence, render_policy_evidence, requires_policy_evidence,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +166,7 @@ class AgentResponse:
     tool_traces: List[Dict[str, Any]] = field(default_factory=list)
     status: str = "success"
     error_code: Optional[str] = None
+    policy_evidence: Optional[PolicyEvidence] = field(default=None, repr=False)
 
 
 @dataclass
@@ -171,6 +176,7 @@ class AgentCallResult:
     tools_used: List[str] = field(default_factory=list)
     tool_traces: List[Dict[str, Any]] = field(default_factory=list)
     status: str = "success"
+    policy_evidence: Optional[PolicyEvidence] = field(default=None, repr=False)
 
 
 class AgentCallError(RuntimeError):
@@ -289,7 +295,8 @@ class BaseAgent:
             self.stats.record(complete, ms, req.request_id)
             self.stats.success += int(complete)
             self.stats.total_ms += ms
-            escalate = self._needs_escalation(call_result.content)
+            # Quoted policy instructions are data, not an executed handoff.
+            escalate = call_result.policy_evidence is None and self._needs_escalation(call_result.content)
             return AgentResponse(
                 agent_type=self.agent_type,
                 content=call_result.content,
@@ -299,6 +306,7 @@ class BaseAgent:
                 tools_used=call_result.tools_used,
                 tool_traces=call_result.tool_traces,
                 status=call_result.status,
+                policy_evidence=call_result.policy_evidence,
             )
         except asyncio.CancelledError:
             elapsed = (time.monotonic() - t0) * 1000
@@ -348,6 +356,20 @@ class BaseAgent:
         tools_used: List[str] = []
         tool_traces: List[Dict[str, Any]] = []
         seen_tool_use_ids = set()
+        policy_required = requires_policy_evidence(req.message, req.history)
+        mixed_policy = has_record_question(req.message)
+
+        def policy_result(evidence: PolicyEvidence) -> AgentCallResult:
+            return AgentCallResult(
+                content=render_policy_evidence(evidence), tools_used=list(tools_used),
+                tool_traces=list(tool_traces),
+                status="success" if evidence.status == "sources" and not evidence.mixed else "partial",
+                policy_evidence=evidence,
+            )
+
+        if policy_required and ("search_knowledge_base" not in tools
+                                or "search_knowledge_base" not in self.profile.tool_scope):
+            return policy_result(PolicyEvidence(status="unavailable", mixed=mixed_policy))
         try:
             for _ in range(3):
                 request_kwargs: Dict[str, Any] = {
@@ -366,6 +388,8 @@ class BaseAgent:
                         }
                         for spec in tools.values()
                     ]
+                if policy_required:
+                    request_kwargs["tool_choice"] = {"type": "tool", "name": "search_knowledge_base"}
                 request_kwargs.update(nonthinking_options(self._client, self._model))
                 resp = await asyncio.wait_for(
                     self._client.messages.create(**request_kwargs),
@@ -373,6 +397,10 @@ class BaseAgent:
                 )
                 tool_uses = [block for block in (resp.content or []) if self._block_type(block) == "tool_use"]
                 if not tool_uses:
+                    if policy_required:
+                        # A provider ignoring named tool_choice cannot turn an
+                        # ungrounded text answer into business policy evidence.
+                        return policy_result(PolicyEvidence(status="unverified", mixed=mixed_policy))
                     content = extract_text_content(resp.content).strip()
                     if not content:
                         raise AgentCallError("模型未返回有效回复", tools_used, tool_traces)
@@ -406,8 +434,12 @@ class BaseAgent:
                     )
                 seen_tool_use_ids.update(batch_ids)
 
+                if policy_required and (len(tool_uses) != 1 or self._block_value(tool_uses[0], "name") != "search_knowledge_base"):
+                    return policy_result(PolicyEvidence(status="unverified", mixed=mixed_policy))
+
                 messages.append({"role": "assistant", "content": resp.content})
                 tool_results = []
+                policy_sources = []
                 for block in tool_uses:
                     name = self._block_value(block, "name")
                     tool_use_id = self._block_value(block, "id")
@@ -470,7 +502,15 @@ class BaseAgent:
                         "content": json.dumps(result, ensure_ascii=False),
                         "is_error": not call_success or result_success is False,
                     })
+                    if policy_required and name == "search_knowledge_base":
+                        policy_sources.append(extract_policy_evidence(result, mixed=mixed_policy)
+                                              if call_success else PolicyEvidence(status="unavailable", mixed=mixed_policy))
                 messages.append({"role": "user", "content": tool_results})
+                if policy_required:
+                    # This path ends with deterministic presentation of the
+                    # actual local tool result. It does not claim a second
+                    # model continuation or let free-form actor text add facts.
+                    return policy_result(merge_policy_evidence(policy_sources, mixed=mixed_policy))
 
             raise AgentCallError(
                 f"{self.agent_type.value} 工具调用超过最大轮数",
@@ -716,6 +756,22 @@ class ResponseComposer:
         return (await self.compose_result(req, responses)).content
 
     async def compose_result(self, req: Request, responses: List[AgentResponse]) -> AgentCallResult:
+        if any(response.policy_evidence is not None for response in responses) or (
+                requires_policy_evidence(req.message, req.history)
+                and not any(response.agent_type is AgentType.ESCALATION for response in responses)):
+            mixed = has_record_question(req.message)
+            evidence = merge_policy_evidence(
+                [response.policy_evidence for response in responses if response.success and response.policy_evidence is not None],
+                mixed=mixed,
+            )
+            # Never combine a grounded policy with arbitrary actor prose.
+            # Unverified transaction subquestions remain explicitly partial.
+            status = "success" if evidence.status == "sources" and not evidence.mixed else "partial"
+            if any(not r.success or r.status != "success" or r.policy_evidence is None for r in responses):
+                status = "partial"
+            if responses and not any(r.success for r in responses):
+                status = "failed"
+            return AgentCallResult(render_policy_evidence(evidence), status=status, policy_evidence=evidence)
         successful = [response for response in responses if response.success and response.content.strip()]
         status = "success" if len(successful) == len(responses) and all(r.status == "success" for r in successful) else "partial"
         if not successful:

@@ -303,9 +303,13 @@ class TaskTrial:
             except BaseException as exc:
                 path = self.root / "worker-stop.json"
                 if not path.exists():
-                    base._write(self.root, path.name, {"schema_version": "serveflow-task-worker-stop-v1",
+                    from evaluation.task_evidence import EvidenceError, FATAL_EVIDENCE_CODES
+                    stopped = {"schema_version": "serveflow-task-worker-stop-v1",
                         "reason": "cancelled" if isinstance(exc, asyncio.CancelledError) else "execution_stopped",
-                        "recorded_at": base._now()})
+                        "recorded_at": base._now()}
+                    if isinstance(exc, EvidenceError) and exc.reason in FATAL_EVIDENCE_CODES:
+                        stopped["evidence_error"] = exc.reason
+                    base._write(self.root, path.name, stopped)
                 raise
             finally:
                 try:

@@ -70,8 +70,24 @@ async def services(monkeypatch):
     await memory._redis.aclose()
 
 
-def body(message="退款规则", request_id="one", conv_id="c"):
+def body(message="查询我的退款状态", request_id="one", conv_id="c"):
+    # Reliability tests need an ordinary record operation. Policy-only queries
+    # now fail closed without a registered retrieval tool (covered separately).
     return {"message": message, "user_id": "u", "conv_id": conv_id, "client_request_id": request_id}
+
+
+@pytest.mark.asyncio
+async def test_policy_without_registered_material_stays_partial_without_model_or_unsafe_tool(services):
+    memory, orch, model, http = services
+    write = AsyncMock(return_value={"success": True})
+    orch.set_shared_tools({"write": AgentToolSpec("write", "test", {"type": "object"}, write, retry_safe=False)})
+    response = await http.post("/chat", json=body("退款规则"))
+    assert response.status_code == 200 and response.json()["status"] == "partial"
+    assert "无法核实政策" in response.json()["response"]
+    model.messages.create.assert_not_awaited()
+    write.assert_not_awaited()
+    repeat = await http.post("/chat", json=body("退款规则"))
+    assert repeat.json() == response.json()
 
 
 @pytest.mark.asyncio
@@ -218,7 +234,7 @@ async def test_dialog_evaluation_uses_same_slot_merge_as_chat(services):
     evaluator._orchestrator = orch
     evaluator._judge = SimpleNamespace(judge=AsyncMock(return_value=QualityScores(1, 1, 1, 1)))
     results = await evaluator._evaluate_dialog_case({
-        "turns": ["订单号 #12345，昨天支付99元", "退款多久到？"],
+        "turns": ["订单号 #12345，昨天支付99元", "我的退款到账了吗？"],
         "expected_entities": {"order_id": ["12345"], "amount": ["99元"]},
     }, 0)
     assert results[-1].passed and results[-1].metadata["deterministic_checks"]["entities"]
@@ -255,7 +271,7 @@ async def test_background_compression_does_not_block_chat_or_drop_new_messages(s
         finish.set()
         await maintain
         rows = [json.loads(row) for row in await memory._redis.lrange(key, 0, -1)]
-        assert len(rows) == 7 and rows[0]["role"] == "assistant" and rows[1]["content"] == "退款规则"
+        assert len(rows) == 7 and rows[0]["role"] == "assistant" and rows[1]["content"] == "查询我的退款状态"
         assert await memory._redis.get(memory._summary_key("u", "c")) == "有效摘要"
         memory._store_episodic.assert_awaited_once()
     finally:

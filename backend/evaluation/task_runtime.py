@@ -87,18 +87,19 @@ async def execute_case(case, sdk, data, *, ensure_healthy):
     judge = SingleAttemptJudge(BoundClient(sdk, "judge"), base.MODEL, timeout_s=8)
     for number, question in enumerate(case["turns"], 1):
         ensure_healthy()
-        frame = Frame(case["id"], f"turn-{number}")
         req = Request(message=question, user_id="task-eval-" + case["customer_id"],
             conv_id="task-eval-" + case["id"], request_id=f"task-eval-{case['id']}-{number}",
             context="[本次实际对话历史]\n" + "\n".join(f"{v['role']}: {v['content']}" for v in history[-6:]) if history else "",
             history=history[-6:] or None, conversation_state=state,
             demo_customer_id=case["customer_id"], demo_order_reader=data.order_reader)
         capture = CaptureTools(case["id"], number, call_context=lambda role: context(agent=role))
+        frame = Frame(case["id"], f"turn-{number}", evidence_guard=capture.assert_send_allowed)
         capture.install(orc)
         try:
             with context(frame):
                 actual = await orc.run(req)
                 observed = capture.reconcile(actual)
+                capture.assert_healthy()
                 ensure_healthy()  # Production fallback must not hide transport/data failures.
                 calls.extend(observed["calls"])
                 blockers.extend(observed["blockers"])

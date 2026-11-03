@@ -415,3 +415,86 @@ def test_mysql_failed_related_insert_rolls_back_the_whole_new_order(actual_demo_
         connection.close()
     assert DemoBusinessStore(actual_demo_url).read_order_sync('demo-customer-a', 'DEMO-1999')['status'] == 'not_found'
     assert verify_database(actual_demo_url)['counts']['orders'] == 10
+
+
+@pytest.mark.parametrize('order_id', ['DEMO-1001', 'DEMO-1003', 'DEMO-1004', 'DEMO-1010'])
+def test_driver_tuple_collections_become_strict_json_lists_without_changing_facts(order_id):
+    """Exercise empty and nonempty driver tuples through the real store path."""
+    from evaluation.task_evidence import _clone, fixture_order_result
+
+    class TupleCursor(FakeCursor):
+        def fetchall(self):
+            return tuple(self.result)
+
+    cursor = TupleCursor()
+    connection = FakeConnection(cursor)
+    store = DemoBusinessStore(URL, connector=lambda config: connection)
+    result = store.read_order_sync('demo-customer-a', order_id)
+    assert all(type(result['order'][table]) is list for table in (
+        'items', 'payments', 'shipments', 'entitlements', 'refunds'))
+    copied, _ = _clone(result)
+    assert copied == fixture_order_result(load_fixture(), 'demo-customer-a', order_id)
+    assert connection.closed
+    assert all(sql.startswith(('SELECT ', 'START TRANSACTION READ ONLY')) for sql, _ in cursor.calls)
+    if order_id == 'DEMO-1004':
+        assert copied['order']['refunds'][0]['amount_minor'] is None
+    if order_id == 'DEMO-1003':
+        assert copied['order']['payments'][0]['amount_minor'] == 3900
+    if order_id == 'DEMO-1010':
+        assert copied['order']['entitlements'][0]['auto_renew'] is False
+
+
+@pytest.mark.parametrize('invalid', [None, {}, '', set(), iter(())])
+def test_unknown_driver_collection_is_rejected_instead_of_becoming_empty(invalid):
+    class InvalidCursor(FakeCursor):
+        def fetchall(self):
+            return invalid
+
+    connection = FakeConnection(InvalidCursor())
+    store = DemoBusinessStore(URL, connector=lambda config: connection)
+    with pytest.raises(DemoStoreError, match='demo_store_invalid_record'):
+        store.read_order_sync('demo-customer-a', 'DEMO-1001')
+    assert connection.closed
+
+
+@pytest.mark.parametrize('invalid_row', [None, [], 'row', 0, True])
+def test_invalid_driver_rows_in_tuple_do_not_enter_business_output(invalid_row):
+    class InvalidRowCursor(FakeCursor):
+        def fetchall(self):
+            return (invalid_row,)
+
+    connection = FakeConnection(InvalidRowCursor())
+    store = DemoBusinessStore(URL, connector=lambda config: connection)
+    with pytest.raises(DemoStoreError, match='demo_store_invalid_record'):
+        store.read_order_sync('demo-customer-a', 'DEMO-1001')
+    assert connection.closed
+
+
+def test_driver_zero_and_unknown_money_remain_distinct_in_strict_json_result():
+    from evaluation.task_evidence import _clone
+    fixture = deepcopy(load_fixture())
+    pending = next(row for row in fixture['refunds'] if row['order_id'] == 'DEMO-1004')
+    for value in (None, 0):
+        pending['amount_minor'] = value
+        cursor = FakeCursor(fixture=fixture)
+        cursor.fetchall = lambda: tuple(cursor.result)
+        connection = FakeConnection(cursor)
+        result = DemoBusinessStore(URL, connector=lambda config: connection).read_order_sync(
+            'demo-customer-a', 'DEMO-1004')
+        copied, _ = _clone(result)
+        actual = copied['order']['refunds'][0]['amount_minor']
+        if value is None:
+            assert actual is None
+        else:
+            assert type(actual) is int and actual == 0
+        assert connection.closed
+
+
+def test_tuple_container_does_not_bypass_related_row_limit():
+    cursor = FakeCursor(extra_rows=7)
+    cursor.fetchall = lambda: tuple(cursor.result)
+    connection = FakeConnection(cursor)
+    store = DemoBusinessStore(URL, connector=lambda config: connection)
+    with pytest.raises(DemoStoreError, match='demo_store_invalid_record'):
+        store.read_order_sync('demo-customer-a', 'DEMO-1001')
+    assert connection.closed

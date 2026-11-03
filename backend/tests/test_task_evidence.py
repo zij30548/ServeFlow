@@ -342,3 +342,112 @@ def test_judge_timeout_does_not_retry_or_fabricate_zero_scores():
 def test_judge_configuration_rejects_unbounded_deadlines(timeout):
     with pytest.raises(EvidenceError, match="invalid_judge_configuration"):
         SingleAttemptJudge(judge_client(), "controlled", timeout_s=timeout)
+
+
+def test_contract_fault_is_sticky_and_blocks_other_roles_before_handler():
+    calls = []
+    async def bad(req, args):
+        calls.append('general')
+        return {'empty_collection': ()}
+    async def sibling(req, args):
+        calls.append('billing')
+        return {'success': True}
+    a = Agent('general', {'inspect_request_context': make_tool('inspect_request_context', 'bad', {}, bad)})
+    b = Agent('billing', {'inspect_request_context': make_tool('inspect_request_context', 'unused', {}, sibling)})
+    capture = CaptureTools('sticky', 1).install(orc(a, b))
+    async def run():
+        with pytest.raises(EvidenceError, match='evidence_invalid_json'):
+            await a.get_tools()['inspect_request_context'].handler(request(), {})
+        with pytest.raises(EvidenceError, match='evidence_invalid_json'):
+            await b.get_tools()['inspect_request_context'].handler(request(), {})
+    asyncio.run(run())
+    assert capture.fault == 'evidence_invalid_json' and calls == ['general']
+    assert capture.tool_calls == 1 and capture.calls[0]['result'] is None
+    capture._block('tool_trace_missing')
+    assert capture.fault == 'evidence_invalid_json'  # Preserve the first cause.
+    capture.restore()
+    with pytest.raises(EvidenceError, match='evidence_invalid_json') as error:
+        capture.assert_healthy()
+    assert error.value.code == 'protocol' and error.value.reason == 'evidence_invalid_json'
+
+
+def test_invalid_model_arguments_remain_recoverable_but_trace_damage_is_fatal():
+    seen = []
+    async def handler(req, args): seen.append(args); return {'ok': True}
+    spec = make_tool('inspect_request_context', 'controlled', {'focus': {'type':'string'}}, handler, ['focus'])
+    agent = Agent(tools={spec.name: spec})
+    capture = CaptureTools('recoverable', 1).install(orc(agent))
+    async def run():
+        with pytest.raises(EvidenceError, match='tool_input_invalid'):
+            await agent.get_tools()[spec.name].handler(request(), {'focus': 3})
+        capture.assert_healthy()
+        await agent.get_tools()[spec.name].handler(request(), {'focus': 'valid'})
+    asyncio.run(run())
+    assert seen == [{'focus': 'valid'}] and capture.fault is None
+    execution = result(capture)
+    execution.tool_traces = []
+    capture.reconcile(execution)
+    with pytest.raises(EvidenceError, match='tool_trace_mismatch'):
+        capture.assert_healthy()
+    capture.restore()
+
+
+def test_unknown_capture_error_reason_is_not_diagnostic_content():
+    error=EvidenceError('Authorization: unsafe-private-value')
+    assert str(error)==error.reason=='evidence_invalid_json' and error.code=='protocol'
+    capture=CaptureTools('safe',1)
+    capture._block('Authorization: unsafe-private-value')
+    assert capture.fault=='evidence_invalid_json' and 'unsafe-private' not in str(capture.blockers)
+
+
+def test_completed_capture_cannot_be_reinstalled_to_reactivate_old_frame():
+    agent=Agent()
+    capture=CaptureTools('same-case',1).install(orc(agent))
+    stale=capture.assert_send_allowed
+    stale()
+    capture.restore()
+    with pytest.raises(EvidenceError,match='capture_not_active'):
+        stale()
+    with pytest.raises(EvidenceError,match='capture_already_installed'):
+        capture.install(orc(agent))
+    fresh=CaptureTools('same-case',1).install(orc(agent))
+    fresh.assert_send_allowed()
+    with pytest.raises(EvidenceError,match='capture_not_active'):
+        stale()
+    fresh.restore()
+
+
+def test_pre_handler_schema_rejection_is_an_event_not_fabricated_handler_capture():
+    import hashlib
+    from evaluation.task_evidence import _clone
+    agent=Agent()
+    capture=CaptureTools('bad-native-parameter',1).install(orc(agent))
+    traces=[{'agent_type':'general','tool_name':'read_demo_order','tool_use_id':'bad_native_1',
+             'input':{'order_id':123,'password':'do-not-store-this'},'success':False,'result_success':None,
+             'error':'this untrusted error text must not decide whether capture was lost'}]
+    observed=capture.reconcile(result(capture,traces=traces))
+    capture.assert_healthy()
+    assert observed['calls']==[] and observed['tool_calls']==0
+    assert observed['blockers']==['tool_input_invalid']
+    event=observed['events'][0]
+    assert event=={'event':'model_tool_input_rejected','agent':'general','sequence':1,
+                  'tool_use_id':'bad_native_1','name':'read_demo_order',
+                  'input_sha256':hashlib.sha256(_clone(traces[0]['input'])[1]).hexdigest(),'error_code':'tool_input_invalid'}
+    assert 'untrusted' not in json.dumps(observed)
+    assert 'password' not in json.dumps(observed) and 'do-not-store-this' not in json.dumps(observed)
+    capture.restore()
+
+
+@pytest.mark.parametrize('damage',['valid_args','other_role','duplicate_id'])
+def test_failed_trace_flags_do_not_hide_missing_or_cross_role_handler_capture(damage):
+    agent=Agent()
+    capture=CaptureTools('lost-native-evidence',1).install(orc(agent))
+    trace={'agent_type':'general','tool_name':'read_demo_order','tool_use_id':'native_1',
+           'input':{'order_id':123},'success':False,'result_success':None}
+    if damage=='valid_args':trace['input']={'order_id':'DEMO-1001'}
+    elif damage=='other_role':trace['agent_type']='technical'
+    traces=[trace,dict(trace)] if damage=='duplicate_id' else [trace]
+    capture.reconcile(result(capture,traces=traces))
+    with pytest.raises(EvidenceError,match='tool_trace_'):
+        capture.assert_healthy()
+    capture.restore()

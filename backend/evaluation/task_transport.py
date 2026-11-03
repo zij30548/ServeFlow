@@ -15,10 +15,12 @@ import json
 import math
 import time
 from types import SimpleNamespace
+from typing import Callable
 
 import httpx
 
 from evaluation import intent_trial as base
+from evaluation.task_evidence import EvidenceError, FATAL_EVIDENCE_CODES
 from evaluation.intent_transport import (
     GuardedIntentTransport, TrialTransportError, canonical_payload_hash,
     validated_endpoint, messages_url, _unique_pairs, _reject_constant,
@@ -31,6 +33,7 @@ class Frame:
     turn_id: str
     phase: str | None = None
     agent: str | None = None
+    evidence_guard: Callable[[], None] | None = None
 
 
 CURRENT: ContextVar[Frame | None] = ContextVar("serveflow_task_trial", default=None)
@@ -67,6 +70,8 @@ class BoundClient:
         if self._phase is not None:
             # Explicit non-agent stages never inherit a stale actor tag.
             frame = replace(frame, phase=self._phase, agent=self._agent)
+        if frame.evidence_guard is not None:
+            frame.evidence_guard()
         with context(frame):
             return await self._sdk.messages.create(**kwargs)
 
@@ -118,13 +123,16 @@ class TaskHTTPTransport(httpx.AsyncBaseTransport):
         self.fault = None
         self.kind = "controlled-transport" if delegate_factory is not None else "live-model"
 
-    def _stop(self, code):
+    def _stop(self, code, *, evidence_error=None):
         self.fault = self.fault or code
         path = base._path(self.root, "stopped.json")
         if not path.exists():
             try:
-                base._write(self.root, "stopped.json", {"schema_version": "serveflow-task-stop-v1",
-                    "error_code": self.fault, "recorded_at": base._now()})
+                value = {"schema_version": "serveflow-task-stop-v1",
+                         "error_code": self.fault, "recorded_at": base._now()}
+                if evidence_error in FATAL_EVIDENCE_CODES:
+                    value["evidence_error"] = evidence_error
+                base._write(self.root, "stopped.json", value)
             except Exception:
                 pass
 
@@ -136,14 +144,21 @@ class TaskHTTPTransport(httpx.AsyncBaseTransport):
             raise TrialTransportError("protocol")
         payload = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_pairs, parse_constant=_reject_constant)
         expected = AGENT_PARAMETERS.get(frame.agent) if frame.phase == "agent" else PHASE_PARAMETERS.get(frame.phase)
-        if (expected is None or set(payload) - {"model", "messages", "max_tokens", "temperature", "thinking", "system", "tools", "stream"}
+        if (expected is None or set(payload) - {"model", "messages", "max_tokens", "temperature", "thinking", "system", "tools", "stream", "tool_choice"}
                 or payload.get("model") != base.MODEL or type(payload.get("max_tokens")) is not int
                 or type(payload.get("temperature")) not in {int, float} or not math.isfinite(payload["temperature"])
                 or (payload["max_tokens"], payload.get("temperature")) != expected
                 or payload.get("thinking") != {"type": "disabled"} or payload.get("stream", False) is not False
                 or not isinstance(payload.get("messages"), list)):
             raise TrialTransportError("protocol")
-        if frame.phase != "agent" and ("system" in payload or "tools" in payload):
+        if frame.phase != "agent" and ("system" in payload or "tools" in payload or "tool_choice" in payload):
+            raise TrialTransportError("protocol")
+        if "tool_choice" in payload and (
+                frame.phase != "agent" or type(payload["tool_choice"]) is not dict
+                or payload["tool_choice"] != {"type": "tool", "name": "search_knowledge_base"}
+                or type(payload.get("tools")) is not list
+                or sum(type(item) is dict and item.get("name") == "search_knowledge_base"
+                       for item in payload["tools"]) != 1):
             raise TrialTransportError("protocol")
         return canonical_payload_hash(payload), hashlib.sha256(raw).hexdigest()
 
@@ -151,18 +166,26 @@ class TaskHTTPTransport(httpx.AsyncBaseTransport):
         async with self._slots:
             frame, operation, guard, started = CURRENT.get(), None, None, time.perf_counter()
             admission_error = None
+            evidence_error = None
             try:
                 payload_hash, wire_hash = self._validate(request, frame)
                 def admit():
-                    nonlocal operation, admission_error
+                    nonlocal operation, admission_error, evidence_error
                     try:
                         if self.fault or (self.root / "stopped.json").exists():
                             raise TrialTransportError("protocol")
                         self.verify_admission()
+                        # Recheck after waiting for a slot and after synchronous
+                        # protocol checks. Another role may have latched a fault
+                        # after this request's facade was entered.
+                        if frame.evidence_guard is not None:
+                            frame.evidence_guard()
                         operation = self.budget.reserve(frame.case_id, frame.turn_id, frame.phase, frame.agent,
                             payload_hash, wire_hash, lease=self.lease)
                     except Exception as error:
                         admission_error = getattr(error, "code", "storage_failure")
+                        if isinstance(error, EvidenceError) and error.reason in FATAL_EVIDENCE_CODES:
+                            evidence_error = error.reason
                         raise
                 delegate = self.factory(frame) if self.factory else None
                 if self.factory is not None and not isinstance(delegate, httpx.MockTransport):
@@ -189,7 +212,7 @@ class TaskHTTPTransport(httpx.AsyncBaseTransport):
                             else base._error(guard.failure_code) if guard and guard.failure_code else "protocol")
                 if code not in {"auth", "quota", "rate_limit", "network", "timeout", "cancelled", "response_limit", "protocol", "storage_failure"}:
                     code = "protocol"
-                self._stop(code)
+                self._stop(code, evidence_error=evidence_error)
                 if operation is not None:
                     try:
                         self._seal(operation, frame, guard, {"content": [], "upstream_model": None,

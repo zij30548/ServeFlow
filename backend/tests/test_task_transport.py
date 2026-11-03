@@ -12,7 +12,7 @@ from anthropic import AsyncAnthropic
 from evaluation import benchmark as bench
 from evaluation import task_transport as module
 from evaluation.intent_transport import GuardedIntentTransport, TrialTransportError, canonical_payload_hash
-from evaluation.task_budget import TaskBudget
+from evaluation.task_budget import TaskBudget, TaskBudgetError
 from evaluation.task_transport import BoundClient, CURRENT, Frame, TaskHTTPTransport, context
 
 
@@ -75,6 +75,38 @@ def harness(tmp_path, factory, *, verify=lambda: None):
 
 def saved(root, attempt=1):
     return bench.read_json(root / f"physical-{attempt:03d}.json")
+
+
+@pytest.mark.parametrize("choice,phase,registered,allowed", [
+    ({"type": "tool", "name": "search_knowledge_base"}, "agent", True, True),
+    ({"type": "auto"}, "agent", True, False),
+    ({"type": "any"}, "agent", True, False),
+    ({"type": "none"}, "agent", True, False),
+    ({"type": "tool", "name": "read_demo_order"}, "agent", True, False),
+    ({"type": "tool", "name": "search_knowledge_base", "disable_parallel_tool_use": True}, "agent", True, False),
+    ({"type": "tool", "name": "search_knowledge_base"}, "agent", False, False),
+    ({"type": "tool", "name": "search_knowledge_base"}, "intent", True, False),
+])
+def test_only_registered_named_policy_tool_choice_is_admitted(tmp_path, choice, phase, registered, allowed):
+    calls = []
+    async def handle(req):
+        calls.append(req)
+        return response()
+    with harness(tmp_path, lambda frame: httpx.MockTransport(handle)) as (root, budget, transport):
+        payload = body(phase, "general" if phase == "agent" else None)
+        payload["tool_choice"] = choice
+        if registered:
+            payload["tools"] = [{"name": "search_knowledge_base", "description": "controlled retrieval",
+                                 "input_schema": {"type": "object", "properties": {}}}]
+        async def run():
+            with context(Frame("c1", "t1", phase, "general" if phase == "agent" else None)):
+                return await transport.handle_async_request(request(payload))
+        if allowed:
+            assert asyncio.run(run()).status_code == 200
+        else:
+            with pytest.raises(TrialTransportError):
+                asyncio.run(run())
+        assert len(calls) == budget.status()["attempts"] == int(allowed)
 
 
 def test_dynamic_hashes_and_claim_precede_delegate_and_sealed_hash_matches(tmp_path):
@@ -398,7 +430,13 @@ def test_real_sdk_transport_and_orchestrator_are_connected(tmp_path, monkeypatch
             assert all(row["evidence_kind"] == "controlled-transport" for row in physical)
             assert sum(row["phase"] == "judge" for row in physical) == len(values[0]["turns"])
             if case_id == "e03":
-                assert {row["phase"] for row in physical} >= {"rag_rewrite", "rag_rerank", "composer"}
+                phases = {row["phase"] for row in physical}
+                assert phases >= {"rag_rewrite", "rag_rerank"}
+                assert "composer" not in phases  # Policy merge is deterministic.
+                assert "controlled composed reply" not in output["answer"]
+                assert "配送说明" in output["answer"]
+                assert all(payload.get("tool_choice") == {"type": "tool", "name": "search_knowledge_base"}
+                           for payload, (frame, _) in zip(sent, script.calls) if frame.phase == "agent")
             assert not (root / "stopped.json").exists()
     asyncio.run(run())
 
@@ -415,3 +453,139 @@ def test_overdeep_json_is_retained_as_structure_failure_without_execution_pause(
             assert saved(root)["outcome"] == "structure_failed"
             assert transport.fault is None and not (root / "stopped.json").exists()
     asyncio.run(run())
+
+
+def test_facade_checks_shared_turn_latch_before_any_sdk_call_and_context_resets():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from evaluation.task_evidence import CaptureTools, EvidenceError
+    sdk = SimpleNamespace(base_url=BASE, messages=SimpleNamespace(create=AsyncMock(return_value='controlled')))
+    client = BoundClient(sdk, 'agent', 'general')
+    failed, fresh = CaptureTools('case-a', 1), CaptureTools('case-b', 1)
+    failed._block('evidence_invalid_json')
+    async def run():
+        with context(Frame('case-a', 't1', evidence_guard=failed.assert_healthy)):
+            with pytest.raises(EvidenceError, match='evidence_invalid_json'):
+                await client.messages.create()
+        assert CURRENT.get() is None
+        with context(Frame('case-b', 't1', evidence_guard=fresh.assert_healthy)):
+            assert await client.messages.create() == 'controlled'
+        assert CURRENT.get() is None
+    asyncio.run(run())
+    assert sdk.messages.create.await_count == 1
+
+
+def test_direct_transport_rechecks_evidence_before_reserve_not_storage_failure(tmp_path):
+    from evaluation.task_evidence import CaptureTools
+    capture, sent = CaptureTools('c1', 1), []
+    async def handle(req): sent.append(req); return response()
+    def verify(): capture._block('evidence_invalid_json')
+    with harness(tmp_path, lambda frame: httpx.MockTransport(handle), verify=verify) as (root, ledger, transport):
+        async def run():
+            with context(Frame('c1','t1','intent', evidence_guard=capture.assert_healthy)):
+                with pytest.raises(TrialTransportError, match='protocol'):
+                    await transport.handle_async_request(request())
+        asyncio.run(run())
+        assert sent == [] and ledger.status()['attempts'] == 0
+        stopped = bench.read_json(root/'stopped.json')
+        assert stopped['error_code'] == 'protocol' and stopped['evidence_error'] == 'evidence_invalid_json'
+
+
+def test_queued_other_role_cannot_send_after_shared_capture_failure(tmp_path):
+    from evaluation.task_evidence import CaptureTools
+    capture, sent = CaptureTools('c1', 1), []
+    async def run():
+        entered, release = asyncio.Event(), asyncio.Event()
+        async def handle(req):
+            sent.append(req)
+            if len(sent) == 3: entered.set()
+            await release.wait()
+            return response()
+        with harness(tmp_path, lambda frame: httpx.MockTransport(handle)) as (root, ledger, transport):
+            async def invoke(role):
+                with context(Frame('c1', 't1', 'agent', role, capture.assert_healthy)):
+                    return await transport.handle_async_request(request(body('agent',role)))
+            active = [asyncio.create_task(invoke(role)) for role in ('general','technical','billing')]
+            await entered.wait()
+            queued = asyncio.create_task(invoke('general'))
+            await asyncio.sleep(0)
+            capture._block('evidence_invalid_json')
+            release.set()
+            values = await asyncio.gather(*active, queued, return_exceptions=True)
+            assert all(isinstance(v,httpx.Response) for v in values[:3])
+            assert isinstance(values[3],TrialTransportError)
+            assert len(sent) == ledger.status()['attempts'] == 3
+            assert ledger.status()['pending'] == []
+            assert all(saved(root,i)['outcome']=='received' for i in (1,2,3))
+            assert bench.read_json(root/'stopped.json')['evidence_error']=='evidence_invalid_json'
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('case_id', ['e01','e02'])
+def test_real_sdk_native_capture_fault_spends_only_initial_two_requests(tmp_path, monkeypatch, case_id):
+    """Serialization damage cannot spend a loop, fallback, composer or Judge send."""
+    from test_task_runtime import ControlledSDK, ControlledData, case
+    from evaluation.task_evidence import EvidenceError
+    from evaluation.task_runtime import execute_case
+    for key in tuple(__import__('os').environ):
+        if key.startswith(('ECHOMIND_','SILICONFLOW_','EVAL_JUDGE_')): monkeypatch.delenv(key)
+    class NonJSONData(ControlledData):
+        async def order_reader(self, customer, order):
+            value=await super().order_reader(customer,order)
+            value['order']['entitlements']=()
+            return value
+    async def run():
+        root=tmp_path/'contract-failure';root.mkdir(mode=0o700)
+        ids=(case_id,*[f'e{i:02d}' for i in range(1,7) if f'e{i:02d}'!=case_id])
+        values=[case(c) for c in ids]
+        plan=[{'case_id':c['id'],'turn_ids':[f'turn-{i}' for i in range(1,len(c['turns'])+1)]} for c in values]
+        ledger=TaskBudget(root/'ledger','a'*64,plan,initialize=True)
+        script,data,sent=ControlledSDK(),NonJSONData(),[]
+        async def upstream(request):
+            sent.append(CURRENT.get())
+            output=await script.create(**json.loads(request.content))
+            return httpx.Response(200,json={'id':f'controlled-{len(sent)}','type':'message','role':'assistant',
+                'model':'qwen3.7-flash-2026-07-15','content':output.content,'stop_reason':output.stop_reason,
+                'stop_sequence':None,'usage':{'input_tokens':20,'output_tokens':10}})
+        with ledger.exclusive_run() as lease:
+            ledger.start_case(case_id,lease=lease)
+            transport=TaskHTTPTransport(BASE,root,ledger,lease,data.assert_healthy,
+                                       delegate_factory=lambda frame:httpx.MockTransport(upstream))
+            http=httpx.AsyncClient(transport=transport,timeout=8,follow_redirects=False,trust_env=False)
+            sdk=AsyncAnthropic(api_key=KEY,base_url=BASE,max_retries=0,timeout=8,http_client=http)
+            try:
+                with pytest.raises(EvidenceError,match='evidence_invalid_json'):
+                    await execute_case(values[0],sdk,data,ensure_healthy=data.assert_healthy)
+            finally:await sdk.close()
+            assert [frame.phase for frame in sent]==['intent','agent']
+            assert ledger.status()['attempts']==2 and ledger.status()['pending']==[]
+            assert len(data.orders)==1
+            assert all(saved(root,i)['outcome']=='received' for i in (1,2))
+            assert not (root/'physical-003.json').exists()
+        # No future runner lease may resume this unsealed interrupted case.
+        with pytest.raises(TaskBudgetError,match='pending'):
+            with ledger.exclusive_run():pass
+    asyncio.run(run())
+
+
+def test_restored_turn_frame_cannot_revive_even_when_same_case_is_reopened():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from test_task_evidence import Agent, orc
+    from evaluation.task_evidence import CaptureTools, EvidenceError
+    sdk=SimpleNamespace(base_url=BASE,messages=SimpleNamespace(create=AsyncMock(return_value='controlled')))
+    agent=Agent()
+    old=CaptureTools('same-case',1).install(orc(agent))
+    frame=Frame('same-case','turn-1',evidence_guard=old.assert_send_allowed)
+    old.restore()
+    fresh=CaptureTools('same-case',1).install(orc(agent))
+    client=BoundClient(sdk,'agent','general')
+    async def run():
+        with context(frame),pytest.raises(EvidenceError,match='capture_not_active'):
+            await client.messages.create()
+        with context(Frame('same-case','turn-1',evidence_guard=fresh.assert_send_allowed)):
+            assert await client.messages.create()=='controlled'
+        assert CURRENT.get() is None
+    asyncio.run(run())
+    assert sdk.messages.create.await_count==1
+    fresh.restore()

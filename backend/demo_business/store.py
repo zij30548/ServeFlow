@@ -339,15 +339,24 @@ class DemoBusinessStore:
                     deadline_check()
                     names = TABLE_COLUMNS[table]
                     cursor.execute(f"SELECT {', '.join(names)} FROM {TABLE_PREFIX}{table} WHERE order_id = %s ORDER BY {names[0]} LIMIT {MAX_RELATED_ROWS + 1}", (order_id,))
-                    rows = cursor.fetchall()
-                    if len(rows) > MAX_RELATED_ROWS:
+                    raw_rows = cursor.fetchall()
+                    # DictCursor may return an empty tuple while nonempty
+                    # results are lists. Normalize only these legal driver
+                    # containers at the business boundary; unknown/invalid
+                    # results are not an empty collection.
+                    if type(raw_rows) not in (list, tuple) or len(raw_rows) > MAX_RELATED_ROWS:
                         raise DemoStoreError("demo_store_invalid_record")
-                    for row in rows:
+                    rows = []
+                    for raw_row in raw_rows:
+                        if type(raw_row) is not dict:
+                            raise DemoStoreError("demo_store_invalid_record")
+                        row = dict(raw_row)
                         if table == "entitlements" and type(row.get("auto_renew")) is int and row["auto_renew"] in (0, 1):
                             row["auto_renew"] = bool(row["auto_renew"])
                         _validate_row(table, row)
                         if row["order_id"] != order_id:
                             raise DemoStoreError("demo_store_invalid_record")
+                        rows.append(row)
                     order[table] = rows
                 deadline_check()
                 _validate_order_relations(order)
