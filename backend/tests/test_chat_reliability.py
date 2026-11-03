@@ -57,6 +57,9 @@ async def services(monkeypatch):
     recognizer = IntentRecognizer.__new__(IntentRecognizer)
 
     async def recognize(message, history=None):
+        # Deliberately keep a specialised role here so transport failures still
+        # exercise Billing -> General fallback. This is a routing stub, not a
+        # claim that the fixture's ordinary messages have true refund intent.
         return IntentResult(IntentCategory.REFUND, .95, UrgencyLevel.LOW, "billing",
                             recognizer._extract_entities(message), "test", 0)
 
@@ -70,9 +73,9 @@ async def services(monkeypatch):
     await memory._redis.aclose()
 
 
-def body(message="查询我的退款状态", request_id="one", conv_id="c"):
-    # Reliability tests need an ordinary record operation. Policy-only queries
-    # now fail closed without a registered retrieval tool (covered separately).
+def body(message="请说明客服支持的范围", request_id="one", conv_id="c"):
+    # Exercise transport/commit/idempotency independently from record and policy
+    # evidence guards. Specific guarded business cases are tested explicitly.
     return {"message": message, "user_id": "u", "conv_id": conv_id, "client_request_id": request_id}
 
 
@@ -88,6 +91,29 @@ async def test_policy_without_registered_material_stays_partial_without_model_or
     write.assert_not_awaited()
     repeat = await http.post("/chat", json=body("退款规则"))
     assert repeat.json() == response.json()
+
+
+@pytest.mark.asyncio
+async def test_record_question_without_target_is_partial_without_model_tools_and_is_idempotent(services):
+    memory, orch, model, http = services
+    write = AsyncMock(return_value={"success": True})
+    orch.set_shared_tools({"write": AgentToolSpec("write", "controlled", {"type": "object"}, write, retry_safe=False)})
+    submitted = body("查询我的退款状态")
+    response = await http.post("/chat", json=submitted)
+    assert response.status_code == 200 and response.json()["status"] == "partial"
+    assert "一个有效演示订单号" in response.json()["response"]
+    assert response.json()["tools_used"] == []
+    model.messages.create.assert_not_awaited()
+    write.assert_not_awaited()
+    repeat = await http.post("/chat", json=submitted)
+    assert repeat.status_code == 200 and repeat.json() == response.json()
+    model.messages.create.assert_not_awaited()
+    assert await memory._redis.llen(memory._wm_key("u", "c")) == 2
+    receipt = await memory.get_turn_receipt("u", "c", "one")
+    assert receipt["response"]["status"] == "partial"
+    conflicting = await http.post("/chat", json=body("换一个问题"))
+    assert conflicting.status_code == 409
+    assert await memory._redis.llen(memory._wm_key("u", "c")) == 2
 
 
 @pytest.mark.asyncio
@@ -237,7 +263,14 @@ async def test_dialog_evaluation_uses_same_slot_merge_as_chat(services):
         "turns": ["订单号 #12345，昨天支付99元", "我的退款到账了吗？"],
         "expected_entities": {"order_id": ["12345"], "amount": ["99元"]},
     }, 0)
-    assert results[-1].passed and results[-1].metadata["deterministic_checks"]["entities"]
+    # #12345 is preserved as an extracted user field, not silently converted
+    # into an authenticated DEMO order target. The new record gate correctly
+    # leaves the final lookup incomplete even with an optimistic Judge score.
+    assert not results[-1].passed
+    assert results[-1].metadata["deterministic_checks"]["entities"]
+    assert results[-1].metadata["agent_status"] == "partial"
+    assert "一个有效演示订单号" in results[-1].metadata["response"]
+    assert results[-1].scores["overall"] == 1.0
     assert results[-1].metadata["entities"]["date"] == ["昨天"]
 
 
@@ -271,7 +304,7 @@ async def test_background_compression_does_not_block_chat_or_drop_new_messages(s
         finish.set()
         await maintain
         rows = [json.loads(row) for row in await memory._redis.lrange(key, 0, -1)]
-        assert len(rows) == 7 and rows[0]["role"] == "assistant" and rows[1]["content"] == "查询我的退款状态"
+        assert len(rows) == 7 and rows[0]["role"] == "assistant" and rows[1]["content"] == "请说明客服支持的范围"
         assert await memory._redis.get(memory._summary_key("u", "c")) == "有效摘要"
         memory._store_episodic.assert_awaited_once()
     finally:

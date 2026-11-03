@@ -171,7 +171,8 @@ def supervise(command, *, root: Path, deadline_s=900):
     Python cleanup; persistent send claims still require separate reconciliation.
     """
     expected = [[sys.executable, "-B", "-u", "-m", module, "_worker"]
-                for module in ("evaluation.task_trial", "evaluation.task_recheck", "evaluation.task_repair", "evaluation.retrieval_trial")]
+                for module in ("evaluation.task_trial", "evaluation.task_recheck", "evaluation.task_repair",
+                               "evaluation.retrieval_trial", "evaluation.task_business_regression")]
     if (os.name != "posix" or not hasattr(os, "killpg") or not hasattr(os, "O_NOFOLLOW")
             or not hasattr(os, "O_DIRECTORY")):
         raise SupervisorError("supervisor_posix_required")

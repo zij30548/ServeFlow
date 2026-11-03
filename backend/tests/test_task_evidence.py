@@ -451,3 +451,64 @@ def test_failed_trace_flags_do_not_hide_missing_or_cross_role_handler_capture(da
     with pytest.raises(EvidenceError,match='tool_trace_'):
         capture.assert_healthy()
     capture.restore()
+
+
+@pytest.mark.parametrize("identity", [False, 123, "demo-1001", "DEMO-1001\n", "DEMO-100", "demo-customer-a"])
+def test_capture_rejects_invalid_bound_order_target(identity):
+    with pytest.raises(EvidenceError, match="invalid_capture_configuration"):
+        CaptureTools("invalid-bound-target", 1, expected_order_id=identity)
+
+
+def test_bound_target_mismatch_is_an_ordinary_hashed_model_event_without_handler_record():
+    import hashlib
+    from evaluation.task_evidence import _clone
+    agent = Agent()
+    capture = CaptureTools("wrong-target", 1, expected_order_id="DEMO-1001").install(orc(agent))
+    trace = {"agent_type": "general", "tool_name": "read_demo_order", "tool_use_id": "wrong_target_1",
+             "input": {"order_id": "DEMO-1004"}, "success": False, "result_success": None,
+             "input_rejection": "order_target_mismatch", "error": "ignored private error body"}
+    observed = capture.reconcile(result(capture, traces=[trace]))
+    capture.assert_healthy()
+    assert observed["calls"] == [] and observed["tool_calls"] == 0
+    assert observed["blockers"] == ["tool_input_invalid"]
+    assert observed["events"] == [{"event": "model_tool_input_rejected", "agent": "general", "sequence": 1,
+        "tool_use_id": "wrong_target_1", "name": "read_demo_order",
+        "input_sha256": hashlib.sha256(_clone(trace["input"])[1]).hexdigest(), "error_code": "tool_input_invalid",
+        "input_rejection": "order_target_mismatch", "expected_order_id": "DEMO-1001"}]
+    assert "private error" not in json.dumps(observed) and '"input":' not in json.dumps(observed)
+    capture.restore()
+
+
+@pytest.mark.parametrize("damage", ["missing_marker", "unknown_marker", "matching_target", "unbound_target", "successful_flag"])
+def test_valid_schema_trace_rejection_requires_independent_target_proof(damage):
+    agent = Agent()
+    capture = CaptureTools("unproved-target", 1,
+        expected_order_id=None if damage == "unbound_target" else "DEMO-1001").install(orc(agent))
+    trace = {"agent_type": "general", "tool_name": "read_demo_order", "tool_use_id": "unproved_1",
+             "input": {"order_id": "DEMO-1004"}, "success": False, "result_success": None,
+             "input_rejection": "order_target_mismatch", "error": "this error cannot establish rejection"}
+    if damage == "missing_marker":
+        trace.pop("input_rejection")
+    elif damage == "unknown_marker":
+        trace["input_rejection"] = "arbitrary_reason"
+    elif damage == "matching_target":
+        trace["input"] = {"order_id": "DEMO-1001"}
+    elif damage == "successful_flag":
+        trace["success"] = True
+    capture.reconcile(result(capture, traces=[trace]))
+    with pytest.raises(EvidenceError, match="tool_trace_mismatch"):
+        capture.assert_healthy()
+    capture.restore()
+
+
+def test_capture_bound_target_guard_blocks_unexpected_dispatch_before_reader():
+    reader, admission = AsyncMock(), AsyncMock()
+    agent = Agent()
+    capture = CaptureTools("dispatch-mismatch", 1, expected_order_id="DEMO-1001",
+                           before_call=admission).install(orc(agent))
+    with pytest.raises(EvidenceError, match="tool_permission_denied"):
+        asyncio.run(agent.get_tools()["read_demo_order"].handler(request(reader=reader), {"order_id": "DEMO-1004"}))
+    assert reader.await_count == admission.await_count == 0
+    assert capture.fault == "tool_permission_denied"
+    assert capture.calls[0]["result"] is None
+    capture.restore()

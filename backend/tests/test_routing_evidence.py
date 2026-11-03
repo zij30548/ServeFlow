@@ -162,7 +162,12 @@ def test_new_billing_signal_obeys_availability_and_monitor(orchestrator, unavail
     decision = orchestrator._route_decision(request(ORIGINAL_ACTIVATION_REQUEST,
                                                   IntentCategory.TECHNICAL, order=True))
     assert decision.primary_agent is AgentType.TECHNICAL
-    assert decision.supporting_agents == []
+    # Losing Billing cannot leave the explicit payment subquestion unowned.
+    # General is allowed to read the server-bound record; Technical is not.
+    assert decision.supporting_agents == [AgentType.GENERAL]
+    assert "read_demo_order" in orchestrator._pool[AgentType.GENERAL][0].get_tools()
+    assert "read_demo_order" not in orchestrator._pool[AgentType.TECHNICAL][0].get_tools()
+    assert AgentType.BILLING not in decision.agent_types
     if unavailable == "monitor":
         assert "monitor_fallback=[billing]" in decision.reason
 

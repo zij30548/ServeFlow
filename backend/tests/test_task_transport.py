@@ -82,24 +82,28 @@ def saved(root, attempt=1):
     ({"type": "auto"}, "agent", True, False),
     ({"type": "any"}, "agent", True, False),
     ({"type": "none"}, "agent", True, False),
-    ({"type": "tool", "name": "read_demo_order"}, "agent", True, False),
+    ({"type": "tool", "name": "read_demo_order"}, "agent", True, True),
+    ({"type": "tool", "name": "build_diagnostic_plan"}, "agent", True, True),
+    ({"type": "tool", "name": "lookup_error_code"}, "agent", True, True),
+    ({"type": "tool", "name": "arbitrary_tool"}, "agent", True, False),
     ({"type": "tool", "name": "search_knowledge_base", "disable_parallel_tool_use": True}, "agent", True, False),
     ({"type": "tool", "name": "search_knowledge_base"}, "agent", False, False),
     ({"type": "tool", "name": "search_knowledge_base"}, "intent", True, False),
 ])
-def test_only_registered_named_policy_tool_choice_is_admitted(tmp_path, choice, phase, registered, allowed):
+def test_only_registered_named_readonly_tool_choices_are_admitted(tmp_path, choice, phase, registered, allowed):
     calls = []
     async def handle(req):
         calls.append(req)
         return response()
     with harness(tmp_path, lambda frame: httpx.MockTransport(handle)) as (root, budget, transport):
-        payload = body(phase, "general" if phase == "agent" else None)
+        role = "technical" if choice.get("name") in {"build_diagnostic_plan", "lookup_error_code"} else "general"
+        payload = body(phase, role if phase == "agent" else None)
         payload["tool_choice"] = choice
         if registered:
-            payload["tools"] = [{"name": "search_knowledge_base", "description": "controlled retrieval",
+            payload["tools"] = [{"name": choice.get("name", "search_knowledge_base"), "description": "controlled tool",
                                  "input_schema": {"type": "object", "properties": {}}}]
         async def run():
-            with context(Frame("c1", "t1", phase, "general" if phase == "agent" else None)):
+            with context(Frame("c1", "t1", phase, role if phase == "agent" else None)):
                 return await transport.handle_async_request(request(payload))
         if allowed:
             assert asyncio.run(run()).status_code == 200
@@ -107,6 +111,57 @@ def test_only_registered_named_policy_tool_choice_is_admitted(tmp_path, choice, 
             with pytest.raises(TrialTransportError):
                 asyncio.run(run())
         assert len(calls) == budget.status()["attempts"] == int(allowed)
+
+
+
+@pytest.mark.parametrize("name,role", [("search_knowledge_base", "general"),
+                                      ("read_demo_order", "billing"),
+                                      ("build_diagnostic_plan", "technical"),
+                                      ("lookup_error_code", "technical")])
+@pytest.mark.parametrize("copies", [0, 1, 2])
+def test_named_tool_requires_exactly_one_matching_definition_before_counting(tmp_path, name, role, copies):
+    calls = []
+    async def handle(req):
+        calls.append(req)
+        return response()
+    with harness(tmp_path, lambda frame: httpx.MockTransport(handle)) as (_, budget, transport):
+        payload = body("agent", role if role in module.AGENT_PARAMETERS else "general")
+        payload["tool_choice"] = {"type": "tool", "name": name}
+        payload["tools"] = [{"name": name, "description": "controlled tool",
+                             "input_schema": {"type": "object", "properties": {}}} for _ in range(copies)]
+        async def run():
+            with context(Frame("c1", "t1", "agent", role)):
+                return await transport.handle_async_request(request(payload))
+        if copies == 1:
+            assert asyncio.run(run()).status_code == 200
+        else:
+            with pytest.raises(TrialTransportError):
+                asyncio.run(run())
+        assert len(calls) == budget.status()["attempts"] == int(copies == 1)
+
+
+@pytest.mark.parametrize("name,role", [("read_demo_order", "technical"),
+                                      ("read_demo_order", "escalation"),
+                                      ("build_diagnostic_plan", "general"),
+                                      ("build_diagnostic_plan", "billing"),
+                                      ("lookup_error_code", "general"),
+                                      ("lookup_error_code", "billing")])
+def test_named_readonly_tools_cannot_expand_role_permissions(tmp_path, name, role):
+    calls = []
+    async def handle(req):
+        calls.append(req)
+        return response()
+    with harness(tmp_path, lambda frame: httpx.MockTransport(handle)) as (_, budget, transport):
+        payload = body("agent", role if role in module.AGENT_PARAMETERS else "general")
+        payload["tool_choice"] = {"type": "tool", "name": name}
+        payload["tools"] = [{"name": name, "description": "controlled tool",
+                             "input_schema": {"type": "object", "properties": {}}}]
+        async def run():
+            with context(Frame("c1", "t1", "agent", role)):
+                await transport.handle_async_request(request(payload))
+        with pytest.raises(TrialTransportError):
+            asyncio.run(run())
+        assert calls == [] and budget.status()["attempts"] == 0
 
 
 def test_dynamic_hashes_and_claim_precede_delegate_and_sealed_hash_matches(tmp_path):

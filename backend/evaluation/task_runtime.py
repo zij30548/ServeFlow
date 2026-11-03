@@ -92,7 +92,10 @@ async def execute_case(case, sdk, data, *, ensure_healthy):
             context="[本次实际对话历史]\n" + "\n".join(f"{v['role']}: {v['content']}" for v in history[-6:]) if history else "",
             history=history[-6:] or None, conversation_state=state,
             demo_customer_id=case["customer_id"], demo_order_reader=data.order_reader)
-        capture = CaptureTools(case["id"], number, call_context=lambda role: context(agent=role))
+        from core.order_evidence import resolve_order_id
+        selection = resolve_order_id(req.message, req.history)
+        capture = CaptureTools(case["id"], number, call_context=lambda role: context(agent=role),
+                               expected_order_id=selection.order_id if selection.status == "resolved" else None)
         frame = Frame(case["id"], f"turn-{number}", evidence_guard=capture.assert_send_allowed)
         capture.install(orc)
         try:

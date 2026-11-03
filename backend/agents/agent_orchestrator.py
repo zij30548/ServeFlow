@@ -47,6 +47,15 @@ from core.policy_grounding import (
     PolicyEvidence, extract_policy_evidence, has_record_question,
     merge_policy_evidence, render_policy_evidence, requires_policy_evidence,
 )
+from core.order_evidence import (
+    OrderEvidence, extract_order_evidence, merge_order_evidence,
+    needs_order_evidence, render_order_evidence, resolve_order_id,
+    requests_business_mutation,
+)
+from core.diagnostic_evidence import (
+    DiagnosticEvidence, extract_diagnostic_evidence,
+    merge_diagnostic_evidence, render_diagnostic_evidence,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +176,8 @@ class AgentResponse:
     status: str = "success"
     error_code: Optional[str] = None
     policy_evidence: Optional[PolicyEvidence] = field(default=None, repr=False)
+    order_evidence: Optional[OrderEvidence] = field(default=None, repr=False)
+    diagnostic_evidence: Optional[DiagnosticEvidence] = field(default=None, repr=False)
 
 
 @dataclass
@@ -177,6 +188,8 @@ class AgentCallResult:
     tool_traces: List[Dict[str, Any]] = field(default_factory=list)
     status: str = "success"
     policy_evidence: Optional[PolicyEvidence] = field(default=None, repr=False)
+    order_evidence: Optional[OrderEvidence] = field(default=None, repr=False)
+    diagnostic_evidence: Optional[DiagnosticEvidence] = field(default=None, repr=False)
 
 
 class AgentCallError(RuntimeError):
@@ -209,6 +222,48 @@ class Request:
     conversation_state: Optional[Dict[str, Any]] = None
     demo_customer_id: Optional[str] = field(default=None, repr=False)
     demo_order_reader: Optional[Callable[[str, str], Awaitable[Dict[str, Any]]]] = field(default=None, repr=False)
+
+
+def _project_business_result(req, *, order=None, policy=None, diagnostic=None,
+                             require_order=False, require_policy=False,
+                             require_diagnostic=False, incomplete=False):
+    """Present only typed tool evidence; model prose is never a record source.
+
+    Requirements are per-role during execution and per-request when composing.
+    A missing role/result cannot be hidden by a successful sibling role.
+    """
+    blocks = []
+    if order is not None:
+        blocks.append(render_order_evidence(order))
+    if diagnostic is not None:
+        blocks.append(render_diagnostic_evidence(diagnostic))
+    if policy is not None:
+        # Mixed previously meant an unverified record subquestion. It is no
+        # longer unresolved when this same request has verified record evidence.
+        if require_order and order is not None and order.status in {"found", "not_found"}:
+            policy = replace(policy, mixed=False)
+        blocks.append(render_policy_evidence(policy))
+    if require_order and order is None:
+        blocks.append("订单或交易部分尚未核实，不能根据历史回复或政策推断本次订单状态。")
+    if require_policy and policy is None:
+        blocks.append("本次未取得可核验的政策资料，规则部分仍未知。")
+    if require_diagnostic and diagnostic is None:
+        blocks.append("技术排查部分本次未完成；未确认故障原因或修复结果。")
+    complete = not incomplete
+    if require_order:
+        complete = complete and order is not None and order.status in {"found", "not_found"}
+    if require_policy:
+        complete = complete and policy is not None and policy.status == "sources" and not policy.mixed
+    if require_diagnostic:
+        complete = complete and diagnostic is not None and diagnostic.status == "suggestions"
+    # This runtime has no transaction-changing tool. Merely reading a record
+    # cannot satisfy a request to execute a refund, cancellation or account edit.
+    if requests_business_mutation(req.message):
+        blocks.append("这里只能查询和整理信息，不能执行退款、冻结、解绑或其他业务变更；这些操作尚未完成，需通过已核实的业务渠道处理。")
+        complete = False
+    return AgentCallResult("\n\n".join(blocks), status="success" if complete else "partial",
+                           order_evidence=order, policy_evidence=policy,
+                           diagnostic_evidence=diagnostic)
 
 
 @dataclass
@@ -296,7 +351,8 @@ class BaseAgent:
             self.stats.success += int(complete)
             self.stats.total_ms += ms
             # Quoted policy instructions are data, not an executed handoff.
-            escalate = call_result.policy_evidence is None and self._needs_escalation(call_result.content)
+            escalate = (call_result.policy_evidence is None and call_result.order_evidence is None
+                        and call_result.diagnostic_evidence is None and self._needs_escalation(call_result.content))
             return AgentResponse(
                 agent_type=self.agent_type,
                 content=call_result.content,
@@ -307,6 +363,8 @@ class BaseAgent:
                 tool_traces=call_result.tool_traces,
                 status=call_result.status,
                 policy_evidence=call_result.policy_evidence,
+                order_evidence=call_result.order_evidence,
+                diagnostic_evidence=call_result.diagnostic_evidence,
             )
         except asyncio.CancelledError:
             elapsed = (time.monotonic() - t0) * 1000
@@ -358,18 +416,59 @@ class BaseAgent:
         seen_tool_use_ids = set()
         policy_required = requires_policy_evidence(req.message, req.history)
         mixed_policy = has_record_question(req.message)
+        record_requested = needs_order_evidence(req.message, req.history)
+        selection = resolve_order_id(req.message, req.history) if record_requested else None
+        order_required = record_requested and self.agent_type in {AgentType.GENERAL, AgentType.BILLING}
+        diagnostic_required = record_requested and self.agent_type is AgentType.TECHNICAL
+        # Only a unique code in the user's own current message may bind an
+        # error-specific lookup. Model entities are not observation evidence.
+        observed_codes = set(re.findall(r"(?<![A-Za-z0-9])(?:401|403|404|500)(?![A-Za-z0-9])", req.message))
+        diagnostic_code = next(iter(observed_codes)) if len(observed_codes) == 1 else None
+        order_sources, diagnostic_sources, policy_sources = [], [], []
+        required_tools = []
 
-        def policy_result(evidence: PolicyEvidence) -> AgentCallResult:
-            return AgentCallResult(
-                content=render_policy_evidence(evidence), tools_used=list(tools_used),
-                tool_traces=list(tool_traces),
-                status="success" if evidence.status == "sources" and not evidence.mixed else "partial",
-                policy_evidence=evidence,
+        def business_result(*, incomplete=False):
+            projected = _project_business_result(
+                req, order=merge_order_evidence(order_sources) if order_sources else None,
+                policy=merge_policy_evidence(policy_sources, mixed=mixed_policy) if policy_sources else None,
+                diagnostic=merge_diagnostic_evidence(diagnostic_sources) if diagnostic_sources else None,
+                require_order=order_required, require_policy=policy_required,
+                require_diagnostic=diagnostic_required, incomplete=incomplete,
             )
+            projected.tools_used = list(tools_used)
+            projected.tool_traces = list(tool_traces)
+            return projected
 
-        if policy_required and ("search_knowledge_base" not in tools
-                                or "search_knowledge_base" not in self.profile.tool_scope):
-            return policy_result(PolicyEvidence(status="unavailable", mixed=mixed_policy))
+        if order_required and selection.status != "resolved":
+            if not policy_required:
+                return AgentCallResult(
+                    "请明确提供本次要核对的一个有效演示订单号；多个或不明确的订单不能擅自选择。",
+                    status="partial",
+                )
+            # Answer the independently supported policy part; keep the record
+            # subquestion explicitly unverified instead of suppressing both.
+            order_required = False
+        if order_required:
+            # A trusted identity is set by the server, never the model/entities.
+            if (req.demo_customer_id not in {"demo-customer-a", "demo-customer-b"}
+                    or req.demo_order_reader is None):
+                # Existing mixed policy-only callers may still view references,
+                # but they cannot turn those references into order facts.
+                if not policy_required:
+                    return business_result(incomplete=True)
+                order_required = False
+            else:
+                required_tools.append("read_demo_order")
+        if diagnostic_required:
+            required_tools.append("lookup_error_code" if diagnostic_code else "build_diagnostic_plan")
+        if policy_required:
+            required_tools.append("search_knowledge_base")
+
+        for name in required_tools:
+            if name not in tools or name not in self.profile.tool_scope:
+                if name == "search_knowledge_base":
+                    policy_sources.append(PolicyEvidence(status="unavailable", mixed=mixed_policy))
+                return business_result(incomplete=True)
         try:
             for _ in range(3):
                 request_kwargs: Dict[str, Any] = {
@@ -388,8 +487,9 @@ class BaseAgent:
                         }
                         for spec in tools.values()
                     ]
-                if policy_required:
-                    request_kwargs["tool_choice"] = {"type": "tool", "name": "search_knowledge_base"}
+                required_tool = required_tools[0] if required_tools else None
+                if required_tool:
+                    request_kwargs["tool_choice"] = {"type": "tool", "name": required_tool}
                 request_kwargs.update(nonthinking_options(self._client, self._model))
                 resp = await asyncio.wait_for(
                     self._client.messages.create(**request_kwargs),
@@ -397,10 +497,12 @@ class BaseAgent:
                 )
                 tool_uses = [block for block in (resp.content or []) if self._block_type(block) == "tool_use"]
                 if not tool_uses:
-                    if policy_required:
+                    if required_tool:
                         # A provider ignoring named tool_choice cannot turn an
                         # ungrounded text answer into business policy evidence.
-                        return policy_result(PolicyEvidence(status="unverified", mixed=mixed_policy))
+                        if required_tool == "search_knowledge_base":
+                            policy_sources.append(PolicyEvidence(status="unverified", mixed=mixed_policy))
+                        return business_result(incomplete=True)
                     content = extract_text_content(resp.content).strip()
                     if not content:
                         raise AgentCallError("模型未返回有效回复", tools_used, tool_traces)
@@ -434,12 +536,25 @@ class BaseAgent:
                     )
                 seen_tool_use_ids.update(batch_ids)
 
-                if policy_required and (len(tool_uses) != 1 or self._block_value(tool_uses[0], "name") != "search_knowledge_base"):
-                    return policy_result(PolicyEvidence(status="unverified", mixed=mixed_policy))
+                if required_tool and (len(tool_uses) != 1 or self._block_value(tool_uses[0], "name") != required_tool):
+                    if required_tool == "search_knowledge_base":
+                        policy_sources.append(PolicyEvidence(status="unverified", mixed=mixed_policy))
+                    return business_result(incomplete=True)
+
+                if (not order_required and any(self._block_value(block, "name") == "read_demo_order"
+                                              for block in tool_uses)):
+                    return AgentCallResult(
+                        "本次没有可明确绑定的订单查询请求，未读取订单；请先说明要核对的订单及事项。",
+                        status="partial", tools_used=list(tools_used), tool_traces=list(tool_traces),
+                    )
+                if (required_tool == "lookup_error_code"
+                        and self._block_value(tool_uses[0], "input") != {"error_code": diagnostic_code}):
+                    # Preserve the actual model response in evaluation, but do
+                    # not fabricate an executed handler or silently fix its input.
+                    return business_result(incomplete=True)
 
                 messages.append({"role": "assistant", "content": resp.content})
                 tool_results = []
-                policy_sources = []
                 for block in tool_uses:
                     name = self._block_value(block, "name")
                     tool_use_id = self._block_value(block, "id")
@@ -449,6 +564,7 @@ class BaseAgent:
                     call_success = True
                     result_success: Optional[bool] = None
                     error_text = ""
+                    input_rejection = None
                     if spec is None:
                         call_success = False
                         result: Any = {"success": False, "error": f"工具不在 {self.agent_type.value} Agent 白名单中"}
@@ -456,6 +572,10 @@ class BaseAgent:
                     else:
                         try:
                             self._validate_tool_input(spec, args)
+                            if (name == "read_demo_order"
+                                    and args != {"order_id": selection.order_id}):
+                                input_rejection = "order_target_mismatch"
+                                raise ValueError("工具订单号与本次用户请求不一致")
                             if not spec.retry_safe:
                                 operation = json.dumps([name, args], sort_keys=True, ensure_ascii=True)
                                 if operation in req.unsafe_tool_calls:
@@ -496,6 +616,8 @@ class BaseAgent:
                             "retry_safe": spec.retry_safe if spec else True,
                         }
                     )
+                    if input_rejection is not None:
+                        tool_traces[-1]["input_rejection"] = input_rejection
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": tool_use_id,
@@ -505,12 +627,24 @@ class BaseAgent:
                     if policy_required and name == "search_knowledge_base":
                         policy_sources.append(extract_policy_evidence(result, mixed=mixed_policy)
                                               if call_success else PolicyEvidence(status="unavailable", mixed=mixed_policy))
+                    if order_required and name == "read_demo_order":
+                        order_sources.append(extract_order_evidence(
+                            result, expected_order_id=selection.order_id,
+                            trusted_customer_id=req.demo_customer_id,
+                        ))
+                    if diagnostic_required and name in {"lookup_error_code", "build_diagnostic_plan"}:
+                        diagnostic_sources.append(extract_diagnostic_evidence(name, result))
                 messages.append({"role": "user", "content": tool_results})
-                if policy_required:
+                if required_tool:
+                    required_tools.pop(0)
+                if not required_tools and (policy_required or order_required or diagnostic_required):
                     # This path ends with deterministic presentation of the
                     # actual local tool result. It does not claim a second
                     # model continuation or let free-form actor text add facts.
-                    return policy_result(merge_policy_evidence(policy_sources, mixed=mixed_policy))
+                    projected = business_result()
+                    projected.tools_used = list(tools_used)
+                    projected.tool_traces = list(tool_traces)
+                    return projected
 
             raise AgentCallError(
                 f"{self.agent_type.value} 工具调用超过最大轮数",
@@ -723,13 +857,20 @@ class EscalationAgent(BaseAgent):
         intent = req.intent.value if req.intent else "unknown"
         urgency = req.urgency.name if req.urgency else "UNKNOWN"
         entities = json.dumps(req.entities or {}, ensure_ascii=False)
+        statement = re.sub(r"([\\`*_{}\[\]<>#!|])", r"\\\1", req.message).replace("\n", "\n> ")
         content = (
             "这个问题需要人工升级处理，以下信息可交给人工客服继续核验。\n\n"
             f"升级原因：意图={intent}，紧急度={urgency}\n"
-            f"已记录信息：{entities}\n"
+            f"用户陈述（尚未后台核验）：\n> {statement}\n\n"
+            f"模型提取的线索（未经核验）：{entities}\n"
             "目前系统尚未接入人工工单队列，请通过现有客服渠道联系人工。"
-            "请不要发送密码、短信验证码或完整支付凭证。"
+            "本次没有创建工单、接通真人或执行退款、冻结交易、解绑、重置账号等操作。"
+            "请不要发送密码、短信验证码、支付密码或完整支付凭证。\n"
         )
+        if has_record_question(req.message):
+            content += "订单争议可向人工提供商品清单、包裹与签收信息及脱敏凭证；这里尚未完成业务记录核验。\n"
+        if re.search(r"盗|账户|账号|冻结|解绑|密码", req.message):
+            content += "如担心账户安全，请自行前往已核实的官方安全入口处理；不要直接清空云端资料或恢复出厂设置。"
         ms = (time.monotonic() - t0) * 1000
         self.stats.success += 1
         self.stats.total_ms += ms
@@ -756,6 +897,26 @@ class ResponseComposer:
         return (await self.compose_result(req, responses)).content
 
     async def compose_result(self, req: Request, responses: List[AgentResponse]) -> AgentCallResult:
+        grounded_record = needs_order_evidence(req.message, req.history)
+        if (grounded_record or any(r.order_evidence is not None or r.diagnostic_evidence is not None for r in responses)) and not any(
+                r.agent_type is AgentType.ESCALATION for r in responses):
+            # Mixed record/policy/diagnosis requests retain each evidence channel.
+            # A second language-model summary could reintroduce unsupported
+            # refund conditions, so it is deliberately not used on this path.
+            orders = [r.order_evidence for r in responses if r.success and r.order_evidence is not None]
+            policies = [r.policy_evidence for r in responses if r.success and r.policy_evidence is not None]
+            diagnostics = [r.diagnostic_evidence for r in responses if r.success and r.diagnostic_evidence is not None]
+            return _project_business_result(
+                req, order=merge_order_evidence(orders) if orders else None,
+                policy=merge_policy_evidence(policies, mixed=has_record_question(req.message)) if policies else None,
+                diagnostic=merge_diagnostic_evidence(diagnostics) if diagnostics else None,
+                require_order=grounded_record,
+                require_policy=requires_policy_evidence(req.message, req.history),
+                require_diagnostic=(any(r.agent_type is AgentType.TECHNICAL for r in responses)
+                    or req.intent in {IntentCategory.TECHNICAL, IntentCategory.TECHNICAL_LOGIN, IntentCategory.TECHNICAL_CRASH}
+                    or bool(AgentOrchestrator._domain_evidence(req.message)[AgentType.TECHNICAL])),
+                incomplete=any(not r.success or r.status != "success" for r in responses),
+            )
         if any(response.policy_evidence is not None for response in responses) or (
                 requires_policy_evidence(req.message, req.history)
                 and not any(response.agent_type is AgentType.ESCALATION for response in responses)):
@@ -999,6 +1160,15 @@ class AgentOrchestrator:
 
         # 2. 执行主 Agent（含降级）
         response = await self._execute(req, decision.primary_agent)
+        if response.success and any(value is not None for value in (
+                response.order_evidence, response.policy_evidence, response.diagnostic_evidence)):
+            # A route with an unavailable specialist can shrink to one role.
+            # Recheck the entire request's evidence requirements even then;
+            # a successful order read cannot hide an omitted technical task.
+            projected = await self._composer.compose_result(req, [response])
+            response = replace(response, content=projected.content, status=projected.status,
+                order_evidence=projected.order_evidence, policy_evidence=projected.policy_evidence,
+                diagnostic_evidence=projected.diagnostic_evidence)
 
         # 4. 升级检查
         escalated = False
@@ -1158,6 +1328,14 @@ class AgentOrchestrator:
                 and score >= 0.45
                 and score >= primary_score * 0.55
             ]
+
+        # Concrete record requests need a role whose actual tool scope permits
+        # the read. An intent label or monitor degradation must not silently
+        # turn a technical answer into a verified order answer.
+        if needs_order_evidence(req.message, req.history) and primary_agent is AgentType.TECHNICAL:
+            reader_role = AgentType.BILLING if AgentType.BILLING in available_scores else AgentType.GENERAL
+            if reader_role not in supporting_agents:
+                supporting_agents.append(reader_role)
 
         reason = self._routing_reason(req, available_scores, primary_agent, supporting_agents)
         if degraded_agents:

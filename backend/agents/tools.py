@@ -116,15 +116,54 @@ def lookup_error_code(req: Request, args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def build_diagnostic_plan(req: Request, args: Dict[str, Any]) -> Dict[str, Any]:
-    """技术工具：生成低风险排障顺序。"""
+    """生成低风险建议；输入的环境/复现标记不是后台核验事实。"""
     environment = str(args.get("environment", "unknown"))[:80]
     reproduced = bool(args.get("reproduced", False))
-    steps = [
-        "复现并记录完整错误信息",
-        "确认网络、DNS、代理和证书",
-        "确认版本、配置和权限",
-    ]
-    if reproduced:
+    # Only the current user's explicit statement can omit a repeated check.
+    # Model-generated environment/reproduced arguments cannot establish that
+    # any diagnostic action has actually been performed.
+    message = getattr(req, "message", "")
+    text = message if isinstance(message, str) else ""
+    text = re.sub(r'“[^”\n]*”|「[^」\n]*」|"[^"\n]*"|`[^`\n]*`', " ", text)
+    network_checked = False
+    for clause in re.split(r"[，。！？；;!?\n]", text):
+        if re.search(r"(?:并未|尚未|没有|还没|未)(?:做|完成|进行|检查|确认|核对|排查|测试|验证)", clause):
+            continue
+        before = (r"(?:已经|已|刚刚|刚)(?:做过|完成|进行)?(?:了)?\s*"
+                  r"(?:检查|确认|核对|排查|测试|验证)(?:过|了)?\s*(?:当前)?"
+                  r"(?:网络|连接|联网|网络连接)")
+        after = (r"(?:网络|连接|联网|网络连接)(?:我|也|已经|已|都|均|也已|也已经|已经被|已被|\s){0,4}"
+                 r"(?:检查|确认|核对|排查|测试|验证)(?:过|了|完成|正常|无误|没问题)")
+        english = (r"\b(?:already\s+(?:checked|verified|tested)\s+(?:the\s+)?(?:network|connection)|"
+                   r"(?:network|connection)\s+(?:(?:has|have)\s+been\s+)?(?:checked|verified|confirmed))\b")
+        if re.search(before + "|" + after, clause) or re.search(english, clause, re.I):
+            network_checked = True
+            break
+    activation_fault = False
+    symptom = r"(?:开通失败|激活失败|无法开通|无法激活|不能开通|不能激活|未激活|没开通|未开通)"
+    entitlement_fault = r"(?:权益|订阅|会员)[^，。！？；;!?\n]{0,8}(?:无效|失效|不生效|未生效|没生效|无法使用|不能使用)"
+    for clause in re.split(r"[，。！？；;!?\n]", text):
+        # A quoted label, definition or declined topic is not a current fault.
+        if re.search(r"什么意思|是什么含义|什么是|怎么理解|仅作为示例|只是示例", clause):
+            continue
+        if re.search(r"(?:不是|并非|并没有)\s*(?:" + symptom + "|" + entitlement_fault + ")", clause):
+            continue
+        if re.search(r"(?:权益|订阅|会员)[^，。！？；;!?\n]{0,4}"
+                     r"(?:没有|并未|并没有|未发生)(?:失效|无效|不生效|无法使用)", clause):
+            continue
+        if re.search(r"(?:不需要|不用|不要|无需|无须|先别|暂不|别)[^，。！？；;!?\n]{0,8}"
+                     r"(?:开通|激活|权益|订阅|会员)", clause):
+            continue
+        if re.search(symptom + "|" + entitlement_fault, clause):
+            activation_fault = True
+            break
+    steps = ["用最小请求复现并记录完整错误信息、发生时间和 request_id"
+             if activation_fault and reproduced else "记录完整错误信息、发生时间和 request_id"]
+    steps.append("确认 DNS、代理和证书" if network_checked else "确认网络、DNS、代理和证书")
+    steps.append("确认版本、配置和权限")
+    if activation_fault:
+        steps.append("核对购买账号、当前使用账号与权益归属是否一致；不要提供密码或验证码")
+    elif reproduced:
         steps.append("用最小请求复现并记录 request_id")
     return {
         "environment": environment,

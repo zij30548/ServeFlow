@@ -114,15 +114,20 @@ class CaptureTools:
 
     def __init__(self, case_id, turn_id, *, max_tool_calls=12, max_rag_calls=3,
                  max_result_bytes=65536, max_total_bytes=262144,
-                 before_call=None, call_context=None):
+                 before_call=None, call_context=None, expected_order_id=None):
         if (not isinstance(case_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", case_id)
                 or type(turn_id) is not int or not 0 <= turn_id <= 20
                 or type(max_tool_calls) is not int or not 1 <= max_tool_calls <= 12
                 or type(max_rag_calls) is not int or not 0 <= max_rag_calls <= 3
                 or type(max_result_bytes) is not int or not 1 <= max_result_bytes <= 65536
-                or type(max_total_bytes) is not int or not 1 <= max_total_bytes <= 262144):
+                or type(max_total_bytes) is not int or not 1 <= max_total_bytes <= 262144
+                or (expected_order_id is not None and (type(expected_order_id) is not str
+                    or re.fullmatch(r"DEMO-[0-9]{4}", expected_order_id) is None))):
             raise EvidenceError("invalid_capture_configuration")
         self.case_id, self.turn_id = case_id, turn_id
+        # Bound by the caller from the actual current user request/history,
+        # never inferred from the model's chosen arguments or free error text.
+        self.expected_order_id = expected_order_id
         self.max_tool_calls, self.max_rag_calls = max_tool_calls, max_rag_calls
         self.max_result_bytes, self.max_total_bytes = max_result_bytes, max_total_bytes
         self.before_call, self.call_context = before_call, call_context or (lambda _role: nullcontext())
@@ -253,6 +258,11 @@ class CaptureTools:
                     validators.validator_for(spec.input_schema)(spec.input_schema).validate(args)
                 except Exception:
                     raise EvidenceError("tool_input_invalid") from None
+                if (spec.name == "read_demo_order" and self.expected_order_id is not None
+                        and args != {"order_id": self.expected_order_id}):
+                    # If production unexpectedly dispatches a mismatched read,
+                    # this is an execution guard failure, not a recovered answer.
+                    raise EvidenceError("tool_permission_denied")
                 entry["input_schema"], _ = _clone(spec.input_schema, 8192)
                 entry["input"], argument_bytes = _clone(args, 8192)
                 self._bytes += len(argument_bytes)
@@ -341,9 +351,13 @@ class CaptureTools:
                     continue
                 rejected = self._model_input_rejection(role, trace)
                 if rejected is not None:
-                    events.append({"event": "model_tool_input_rejected", "agent": role,
+                    digest, reason = rejected
+                    event = {"event": "model_tool_input_rejected", "agent": role,
                         "sequence": sequence, "tool_use_id": tool_id, "name": trace["tool_name"],
-                        "input_sha256": rejected, "error_code": "tool_input_invalid"})
+                        "input_sha256": digest, "error_code": "tool_input_invalid"}
+                    if reason == "order_target_mismatch":
+                        event.update(input_rejection=reason, expected_order_id=self.expected_order_id)
+                    events.append(event)
                     self._block("tool_input_invalid")  # Ordinary model failure, not lost handler evidence.
                 else:
                     self._block("tool_trace_mismatch")
@@ -362,10 +376,11 @@ class CaptureTools:
                 "tool_calls": self.tool_calls, "rag_calls": self.rag_calls}
 
     def _model_input_rejection(self, role, trace):
-        """Recognize only an independently proven pre-handler schema rejection.
+        """Independently prove a schema or request-bound target rejection.
 
-        A failed flag or error message alone is never evidence that a missing
-        handler record is legitimate. Valid arguments remain a fatal mismatch.
+        A failed flag/error string is not evidence that a missing handler is
+        legitimate. A valid schema needs the fixed production rejection marker
+        plus a different independently bound request target; otherwise fatal.
         """
         name = trace.get("tool_name")
         registry = self._registries.get(role, {}).get(name) if type(name) is str else None
@@ -385,9 +400,14 @@ class CaptureTools:
         except ValidationError:
             # Invalid arguments may contain unknown keys or secrets. Preserve
             # only their bound hash, never copy those values into evidence.
-            return hashlib.sha256(raw).hexdigest()
+            return hashlib.sha256(raw).hexdigest(), None
         except Exception:
             self._block("invalid_tool_registry")
+            return None
+        if (name == "read_demo_order" and self.expected_order_id is not None
+                and trace.get("input_rejection") == "order_target_mismatch"
+                and args != {"order_id": self.expected_order_id}):
+            return hashlib.sha256(raw).hexdigest(), "order_target_mismatch"
         return None
 
 

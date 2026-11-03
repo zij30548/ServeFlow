@@ -126,6 +126,19 @@ def wire_text(kwargs):
     return json.dumps(kwargs, ensure_ascii=False)
 
 
+def message_text(kwargs):
+    """Actual text blocks, without JSON escaping away multiline history."""
+    values = []
+    for message in kwargs["messages"]:
+        content = message.get("content")
+        if isinstance(content, str):
+            values.append(content)
+        elif isinstance(content, list):
+            values.extend(block["text"] for block in content
+                          if isinstance(block, dict) and isinstance(block.get("text"), str))
+    return "\n".join(values)
+
+
 def native_tool_results(kwargs):
     return [json.loads(block["content"]) for message in kwargs["messages"]
             if isinstance(message.get("content"), list) for block in message["content"]
@@ -155,9 +168,21 @@ def test_order_tool_executes_real_handler_and_full_judge_is_not_semantic_pass():
         assert output["turns"][0]["judge_overall"] == 1.0 and output["judge_ready"]
         assert output["semantic_review"] is None
         assert output["deterministic"]["semantic_review_required"] is True
-        second_actor = [kw for frame, kw in sdk.calls if frame.phase == "agent"][1]
-        assert '"type": "tool_result"' in wire_text(second_actor)
-        assert "DEMO-TRACK-1001-A" in wire_text(second_actor)
+        actors = [kw for frame, kw in sdk.calls if frame.phase == "agent"]
+        assert len(actors) == 1
+        assert actors[0]["tool_choice"] == {"type": "tool", "name": "read_demo_order"}
+        assert not any(frame.phase == "composer" for frame, _ in sdk.calls)
+        # Native selection is followed by the real handler and typed program
+        # presentation, not a second model continuation that can add facts.
+        assert native_tool_results(actors[0]) == []
+        answer = output["answer"]
+        assert "合成演示订单记录" in answer and "DEMO-TRACK-1001-A" in answer
+        assert "in_transit" in answer and "awaiting_dispatch" in answer
+        assert "物流单号：未知；预计送达：未知" in answer
+        assert tool["result"]["as_of"] in answer
+        assert tool["result"]["order"]["record_updated_at"] in answer
+        assert "未执行订单或资金操作" in answer
+        assert "controlled actual assistant" not in answer and "controlled composed reply" not in answer
     asyncio.run(run())
 
 
@@ -171,14 +196,21 @@ def test_trusted_identity_survives_user_spoof_and_cross_owner_not_found_is_usabl
         assert record["trusted_customer_id"] == "demo-customer-a"
         assert record["result"]["status"] == "not_found"
         assert record["result"]["order"] is None and record["result_success"] is None
-        actor_after_tool = [kw for frame, kw in sdk.calls if frame.phase == "agent"][1]
-        native_result = native_tool_results(actor_after_tool)[0]
-        assert native_result == fixture_order_result(data.fixture, "demo-customer-a", "DEMO-1005")
-        assert native_result["status"] == "not_found" and native_result["order"] is None
+        actors = [kw for frame, kw in sdk.calls if frame.phase == "agent"]
+        assert len(actors) == 1
+        assert actors[0]["tool_choice"] == {"type": "tool", "name": "read_demo_order"}
+        assert record["result"] == fixture_order_result(data.fixture, "demo-customer-a", "DEMO-1005")
+        assert record["result"]["as_of"] in output["answer"]
+        assert "当前演示身份的可见记录中未找到" in output["answer"]
+        assert "无法据此判断其他身份是否存在该订单" in output["answer"]
+        assert "合成演示订单记录" in output["answer"]
+        assert not any(frame.phase == "composer" for frame, _ in sdk.calls)
         private_names = [row["name"] for row in data.fixture["items"] if row["order_id"] == "DEMO-1005"]
         private_tracks = [row["tracking_id"] for row in data.fixture["shipments"]
                           if row["order_id"] == "DEMO-1005" and row["tracking_id"]]
-        assert all(secret not in wire_text(actor_after_tool) for secret in private_names + private_tracks)
+        assert all(secret not in wire_text(actors[0]) and secret not in output["answer"]
+                   for secret in private_names + private_tracks)
+        assert native_tool_results(actors[0]) == []
     asyncio.run(run())
 
 
@@ -221,10 +253,21 @@ def test_two_actual_turns_carry_produced_assistant_and_structured_order_state():
         assert len(output["turns"]) == 2 and output["execution_status"] == "success"
         assert data.orders == [("demo-customer-a", "DEMO-1002")] * 2
         actual_first = output["turns"][0]["result"]["response"]
-        assert actual_first.startswith("controlled actual assistant e04/turn-1/")
+        assert actual_first.startswith("以下为合成演示订单记录")
+        assert "数据截至：2026-10-25T00:00:00Z" in actual_first
+        assert "数据截至：2026-10-25T00:00:00Z" in output["answer"]
+        assert "物流单号：未知；预计送达：未知" in output["answer"]
         second_intent = next(kw for frame, kw in sdk.calls if frame.phase == "intent" and frame.turn_id == "turn-2")
         second_actor = next(kw for frame, kw in sdk.calls if frame.phase == "agent" and frame.turn_id == "turn-2")
-        assert actual_first in wire_text(second_intent) and actual_first in wire_text(second_actor)
+        assert actual_first in message_text(second_intent) and actual_first in message_text(second_actor)
+        actors = [(frame.turn_id, kw) for frame, kw in sdk.calls if frame.phase == "agent"]
+        assert [turn for turn, _ in actors] == ["turn-1", "turn-2"]
+        assert all(kw["tool_choice"] == {"type": "tool", "name": "read_demo_order"} for _, kw in actors)
+        assert not any(frame.phase == "composer" for frame, _ in sdk.calls)
+        fresh_calls = [turn["tool_evidence"]["calls"] for turn in output["turns"]]
+        assert all(len(calls) == 1 and calls[0]["input"] == {"order_id": "DEMO-1002"}
+                   for calls in fresh_calls)
+        assert fresh_calls[0][0]["tool_use_id"] != fresh_calls[1][0]["tool_use_id"]
         assert "DEMO-1002" in wire_text(second_actor)
         assert '"order_id"' in wire_text(second_actor)
         assert output["deterministic"]["blockers"] == []
@@ -265,12 +308,24 @@ def test_paid_activation_uses_billing_records_and_technical_diagnostics(intent, 
         observed = output["turns"][0]["tool_evidence"]["calls"]
         assert {(call["agent"], call["name"]) for call in observed} == {
             ("billing", "read_demo_order"), ("technical", "build_diagnostic_plan")}
-        native = {frame.agent: native_tool_results(arguments)
-                  for frame, arguments in sdk.calls if frame.phase == "agent" and native_tool_results(arguments)}
-        assert native["billing"][0]["order"]["payments"][0]["amount_minor"] == 3900
-        assert "diagnostic_steps" in native["technical"][0]
-        assert "order" not in native["technical"][0]
-        assert any(frame.phase == "composer" for frame, _ in sdk.calls)
+        actual = {call["agent"]: call["result"] for call in observed}
+        assert actual["billing"]["order"]["payments"][0]["amount_minor"] == 3900
+        assert "diagnostic_steps" in actual["technical"] and "order" not in actual["technical"]
+        actors = [(frame.agent, arguments) for frame, arguments in sdk.calls if frame.phase == "agent"]
+        assert Counter(role for role, _ in actors) == {"billing": 1, "technical": 1}
+        assert {role: arguments["tool_choice"]["name"] for role, arguments in actors} == {
+            "billing": "read_demo_order", "technical": "build_diagnostic_plan"}
+        assert not any(frame.phase == "composer" for frame, _ in sdk.calls)
+        assert "39.00 元" in result["response"] and "activation_failed" in result["response"]
+        assert actual["billing"]["as_of"] in result["response"]
+        assert actual["billing"]["order"]["record_updated_at"] in result["response"]
+        assert "本地工具提供的排查建议" in result["response"]
+        assert "不代表已查询后台、确认根因或完成修复" in result["response"]
+        assert "记录完整错误信息、发生时间和 request_id" in result["response"]
+        assert "确认网络、DNS、代理和证书" not in result["response"]
+        assert "重启" not in result["response"]
+        assert "controlled composed reply" not in result["response"]
+        assert "原路退款" not in result["response"] and "退款将在" not in result["response"]
         assert output["turns"][0]["judge_overall"] == 1.0
         assert output["semantic_review"] is None  # Controlled Judge 1.0 is not semantic acceptance.
     asyncio.run(run())
@@ -317,7 +372,8 @@ def test_rag_fallback_cannot_swallow_shared_evidence_fault_and_call_reranker():
     asyncio.run(run())
 
 
-def test_real_native_bad_parameter_correction_is_not_a_capture_execution_fault():
+@pytest.mark.parametrize("bad_order_id", [123, "DEMO-1004"])
+def test_native_bad_parameter_fails_closed_without_correction_or_extra_actor(bad_order_id):
     import hashlib
     from evaluation.task_evidence import _clone
     from types import SimpleNamespace
@@ -329,19 +385,30 @@ def test_real_native_bad_parameter_correction_is_not_a_capture_execution_fault()
             self.calls.append((frame,kwargs));self.actor_count+=1
             if self.actor_count<=2:
                 return SimpleNamespace(content=[{'type':'tool_use','id':'controlled_'+str(self.actor_count),
-                    'name':'read_demo_order','input':{'order_id':123 if self.actor_count==1 else 'DEMO-1001'}}],stop_reason='tool_use')
+                    'name':'read_demo_order','input':{'order_id':bad_order_id if self.actor_count==1 else 'DEMO-1001'}}],stop_reason='tool_use')
             return self.text('Controlled recovered reply; semantic quality remains unmeasured.')
     async def run():
         sdk,data=RecoveringSDK(),ControlledData()
         result=await execute_case(case('e01'),sdk,data,ensure_healthy=data.assert_healthy)
-        assert sdk.actor_count==3 and len(data.orders)==1
+        assert sdk.actor_count==1 and data.orders==[]
+        assert result['execution_status']=='failed'
         assert result['judge_ready'] and result['semantic_review'] is None
+        # The deliberately optimistic controlled Judge cannot erase rejection.
+        assert result['turns'][0]['judge_overall']==1.0
+        assert result['turns'][0]['result']['status']=='partial'
         observed=result['turns'][0]['tool_evidence']
-        assert len(observed['calls'])==1 and observed['calls'][0]['tool_use_id']=='controlled_2'
+        assert observed['calls']==[]
+        assert len(observed['events'])==1 and observed['events'][0]['tool_use_id']=='controlled_1'
         assert observed['events'][0]['event']=='model_tool_input_rejected'
-        assert observed['events'][0]['input_sha256']==hashlib.sha256(_clone({'order_id':123})[1]).hexdigest()
+        assert observed['events'][0]['input_sha256']==hashlib.sha256(_clone({'order_id':bad_order_id})[1]).hexdigest()
+        if isinstance(bad_order_id,str):
+            assert observed['events'][0]['input_rejection']=='order_target_mismatch'
+            assert observed['events'][0]['expected_order_id']=='DEMO-1001'
         assert 'input' not in observed['events'][0]
         assert observed['blockers']==['tool_input_invalid']
         assert not result['deterministic']['checks']['trace_integrity']  # Ordinary sample failure is retained.
         assert any(frame.phase=='judge' for frame,_ in sdk.calls)
+        assert not any(frame.phase=='composer' for frame,_ in sdk.calls)
+        assert "DEMO-TRACK-1001-A" not in result['answer']
+        assert "controlled recovered reply" not in result['answer'].lower()
     asyncio.run(run())

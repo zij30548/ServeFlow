@@ -153,13 +153,22 @@ class TaskHTTPTransport(httpx.AsyncBaseTransport):
             raise TrialTransportError("protocol")
         if frame.phase != "agent" and ("system" in payload or "tools" in payload or "tool_choice" in payload):
             raise TrialTransportError("protocol")
-        if "tool_choice" in payload and (
-                frame.phase != "agent" or type(payload["tool_choice"]) is not dict
-                or payload["tool_choice"] != {"type": "tool", "name": "search_knowledge_base"}
-                or type(payload.get("tools")) is not list
-                or sum(type(item) is dict and item.get("name") == "search_knowledge_base"
-                       for item in payload["tools"]) != 1):
-            raise TrialTransportError("protocol")
+        if "tool_choice" in payload:
+            choice = payload["tool_choice"]
+            named_roles = {
+                "search_knowledge_base": {"general", "technical", "billing", "escalation"},
+                "read_demo_order": {"general", "billing"},
+                "build_diagnostic_plan": {"technical"},
+                "lookup_error_code": {"technical"},
+            }
+            if (frame.phase != "agent" or type(choice) is not dict
+                    or set(choice) != {"type", "name"} or choice.get("type") != "tool"
+                    or type(choice.get("name")) is not str
+                    or choice["name"] not in named_roles or frame.agent not in named_roles[choice["name"]]
+                    or type(payload.get("tools")) is not list
+                    or sum(type(item) is dict and item.get("name") == choice["name"]
+                           for item in payload["tools"]) != 1):
+                raise TrialTransportError("protocol")
         return canonical_payload_hash(payload), hashlib.sha256(raw).hexdigest()
 
     async def handle_async_request(self, request):

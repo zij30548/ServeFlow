@@ -8,9 +8,13 @@ import pytest
 
 from agents.agent_orchestrator import (
     AgentOrchestrator, AgentResponse, AgentType, BaseAgent, BillingAgent,
-    EscalationAgent, GeneralAgent, Request, RoutingDecision, TechnicalAgent,
+    EscalationAgent, GeneralAgent, Request, ResponseComposer, RoutingDecision, TechnicalAgent,
 )
-from agents.tools import demo_order_tool, read_demo_order
+from agents.tools import build_diagnostic_plan, demo_order_tool, read_demo_order
+from core.diagnostic_evidence import extract_diagnostic_evidence
+from core.order_evidence import extract_order_evidence
+from demo_business.store import load_fixture
+from evaluation.task_evidence import fixture_order_result
 
 
 def make_request(**changes):
@@ -119,28 +123,63 @@ def test_demo_schema_and_role_whitelist_cannot_expand_to_customer_or_sql():
 
 
 @pytest.mark.asyncio
-async def test_parallel_roles_receive_same_trusted_context_and_composer_keeps_results():
-    reader = AsyncMock(return_value=order_result())
-    req = make_request(demo_order_reader=reader)
+async def test_parallel_roles_keep_identity_and_project_typed_results_without_model_merge():
+    stored = fixture_order_result(load_fixture(), "demo-customer-a", "DEMO-1001")
+    reader = AsyncMock(return_value=stored)
+    req = make_request(message="核对 DEMO-1001 的付款，同时做技术排障。", demo_order_reader=reader)
     orchestrator = AgentOrchestrator.__new__(AgentOrchestrator)
     contexts = []
+    untrusted = "后台已修复，退款999元将在明天到账，我会主动通知你。"
 
     async def execute(received, agent_type):
         contexts.append((received, received.demo_customer_id, received.demo_order_reader))
-        result = await read_demo_order(received, {"order_id": "DEMO-1001"})
-        assert result["status"] == "found"
-        return AgentResponse(agent_type, "演示订单已核对", True, tools_used=["read_demo_order"])
+        if agent_type is AgentType.GENERAL:
+            result = await read_demo_order(received, {"order_id": "DEMO-1001"})
+            evidence = extract_order_evidence(result, expected_order_id="DEMO-1001",
+                                              trusted_customer_id=received.demo_customer_id)
+            assert evidence.status == "found"
+            return AgentResponse(agent_type, untrusted, True, tools_used=["read_demo_order"],
+                                 order_evidence=evidence)
+        assert agent_type is AgentType.TECHNICAL
+        assert "read_demo_order" not in TechnicalAgent.profile.tool_scope
+        evidence = extract_diagnostic_evidence("build_diagnostic_plan",
+            build_diagnostic_plan(received, {"environment": "model input", "reproduced": False}))
+        return AgentResponse(agent_type, untrusted, True, tools_used=["build_diagnostic_plan"],
+                             diagnostic_evidence=evidence)
 
+    model = SimpleNamespace(messages=SimpleNamespace(create=AsyncMock(side_effect=AssertionError("no free-form composer"))))
     orchestrator._execute = execute
-    orchestrator._composer = SimpleNamespace(compose_result=AsyncMock(return_value=SimpleNamespace(content="演示结果", status="success")))
+    orchestrator._composer = ResponseComposer(model, "controlled-model")
     orchestrator._record_tool_trace = lambda result: None
-    decision = RoutingDecision(primary_agent=AgentType.GENERAL, supporting_agents=[AgentType.BILLING], reason="controlled test", confidence=1)
+    decision = RoutingDecision(primary_agent=AgentType.GENERAL, supporting_agents=[AgentType.TECHNICAL],
+                               reason="controlled test", confidence=1)
     result = await orchestrator.run_parallel(req, decision)
     assert result.status == "success"
     assert len(contexts) == 2
     assert all(original is req and customer == "demo-customer-a" and bound_reader is reader
                for original, customer, bound_reader in contexts)
-    assert "read_demo_order" in result.tools_used
+    reader.assert_awaited_once_with("demo-customer-a", "DEMO-1001")
+    assert set(result.tools_used) == {"read_demo_order", "build_diagnostic_plan"}
+    assert stored["as_of"] in result.response and stored["order"]["record_updated_at"] in result.response
+    assert "DEMO-TRACK-1001-A" in result.response and "本地工具提供的排查建议" in result.response
+    assert "999" not in result.response and "明天到账" not in result.response and untrusted not in result.response
+    assert "我会主动通知" not in result.response
+    model.messages.create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("args", [{"order_id": "DEMO-1004"}, {"order_id": 123}])
+async def test_native_target_or_schema_rejection_never_retries_or_queries_another_order(args):
+    reader = AsyncMock()
+    native = SimpleNamespace(content=[{"type": "tool_use", "id": "one_bad_attempt",
+                                      "name": "read_demo_order", "input": args}], stop_reason="tool_use")
+    client = SimpleNamespace(messages=SimpleNamespace(create=AsyncMock(return_value=native)))
+    result = await GeneralAgent(client, "controlled-model").handle(make_request(demo_order_reader=reader))
+    assert result.status == "partial" and reader.await_count == 0
+    client.messages.create.assert_awaited_once()
+    assert len(result.tool_traces) == 1 and result.tool_traces[0]["success"] is False
+    assert result.tool_traces[0]["input"] == args
+    assert "DEMO-TRACK" not in result.content and "合成演示订单记录" not in result.content
 
 
 def test_request_defaults_do_not_grant_demo_customer_and_replace_keeps_bound_context():
