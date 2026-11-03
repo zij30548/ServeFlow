@@ -286,3 +286,20 @@ def test_unsupported_platform_is_explicit(fake, monkeypatch):
     with pytest.raises(supervisor.SupervisorError, match="supervisor_posix_required"):
         supervisor.supervise(COMMAND, root=root)
     assert not starts
+
+
+def test_routing_fix_worker_is_an_explicit_second_allowed_command(fake):
+    root, _, _, _, sends, starts, _ = fake
+    command = [sys.executable, "-B", "-u", "-m", "evaluation.task_recheck", "_worker"]
+    assert supervisor.supervise(command, root=root) == {"exit_code": 0, "timed_out": False, "cancelled": False}
+    assert starts[0][0] == command and len(starts) == 1 and not sends
+    assert_ledger(root)
+
+
+@pytest.mark.parametrize("module", ["evaluation.task_recheck_extra", "evaluation.intent_recheck", "evaluation.task_trial; echo bad"])
+def test_second_worker_does_not_open_arbitrary_modules(fake, module):
+    root, _, _, _, _, starts, _ = fake
+    command = [sys.executable, "-B", "-u", "-m", module, "_worker"]
+    with pytest.raises(supervisor.SupervisorError, match="supervisor_fixed_worker_required"):
+        supervisor.supervise(command, root=root)
+    assert starts == []

@@ -170,13 +170,14 @@ def supervise(command, *, root: Path, deadline_s=900):
     Catchable parent cancellation is cleaned up. SIGKILL/power loss cannot run
     Python cleanup; persistent send claims still require separate reconciliation.
     """
-    expected = [sys.executable, "-B", "-u", "-m", "evaluation.task_trial", "_worker"]
+    expected = [[sys.executable, "-B", "-u", "-m", module, "_worker"]
+                for module in ("evaluation.task_trial", "evaluation.task_recheck")]
     if (os.name != "posix" or not hasattr(os, "killpg") or not hasattr(os, "O_NOFOLLOW")
             or not hasattr(os, "O_DIRECTORY")):
         raise SupervisorError("supervisor_posix_required")
     if threading.current_thread() is not threading.main_thread():
         raise SupervisorError("supervisor_main_thread_required")
-    if (type(command) is not list or command != expected or not os.path.isabs(sys.executable)
+    if (type(command) is not list or command not in expected or not os.path.isabs(sys.executable)
             or not os.path.isfile(sys.executable) or not os.access(sys.executable, os.X_OK)):
         raise SupervisorError("supervisor_fixed_worker_required")
     if type(deadline_s) not in (int, float) or not math.isfinite(deadline_s) or not 0 < deadline_s <= 900:

@@ -32,6 +32,7 @@ class Cursor:
     def __enter__(self): return self
     def __exit__(self, *_args): pass
     def execute(self, sql): self.calls.append(sql)
+    def fetchone(self): return {"partial_revokes": 1}
     def fetchall(self): return [{"grant": line} for line in self.grants]
 
 
@@ -58,7 +59,7 @@ def test_grants_require_readonly_eval_scope_and_close_connection():
     connection = Connection(grants())
     result = data._verify_grants(data.parse_mysql_url(URL), lambda _: connection)
     assert len(result) == 64
-    assert connection.cur.calls == ["START TRANSACTION READ ONLY", "SHOW GRANTS FOR CURRENT_USER()"]
+    assert connection.cur.calls == ["START TRANSACTION READ ONLY", "SELECT @@GLOBAL.partial_revokes AS partial_revokes", "SHOW GRANTS FOR CURRENT_USER()"]
     assert connection.closed == 1
 
 
@@ -396,3 +397,13 @@ def test_embedding_cache_change_during_forward_is_rejected(monkeypatch):
     embedding = data._cached_only_embedding(DefaultEmbedding, initial)
     with pytest.raises(data.TaskDataError, match="evaluation_embedding_cache_changed"):
         embedding(["text"])
+
+
+@pytest.mark.parametrize("value", [{"partial_revokes": 0}, {"partial_revokes": True}, {"partial_revokes": "ON"}, {}, None])
+def test_schema_underscores_cannot_silently_expand_readonly_scope(value):
+    connection = Connection(grants())
+    connection.cur.fetchone = lambda: value
+    with pytest.raises(data.TaskDataError, match="evaluation_literal_schema_grants_required"):
+        data._verify_grants(data.parse_mysql_url(URL), lambda _: connection)
+    assert "SHOW GRANTS FOR CURRENT_USER()" not in connection.cur.calls
+    assert connection.closed == 1

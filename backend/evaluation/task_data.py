@@ -98,6 +98,14 @@ def _verify_grants(config: demo.DemoDatabaseConfig, connector) -> str:
         connection = connector(config)
         with connection.cursor() as cursor:
             cursor.execute("START TRANSACTION READ ONLY")
+            # Database names contain underscores. With ordinary MySQL grants
+            # these may be wildcards even inside backticks; require literal
+            # schema grants on this dedicated evaluation server.
+            cursor.execute("SELECT @@GLOBAL.partial_revokes AS partial_revokes")
+            literal_scope = cursor.fetchone()
+            if (type(literal_scope) is not dict or set(literal_scope) != {"partial_revokes"}
+                    or type(literal_scope["partial_revokes"]) is not int or literal_scope["partial_revokes"] != 1):
+                raise TaskDataError("evaluation_literal_schema_grants_required")
             cursor.execute("SHOW GRANTS FOR CURRENT_USER()")
             rows = cursor.fetchall()
         if not isinstance(rows, list) or not 1 <= len(rows) <= 32:
@@ -125,7 +133,7 @@ def _verify_grants(config: demo.DemoDatabaseConfig, connector) -> str:
             statements.append(line)
         if not has_select:
             raise TaskDataError("evaluation_select_only_account_required")
-        return _hash(sorted(statements))
+        return _hash({"statements": sorted(statements), "partial_revokes": True})
     except TaskDataError:
         raise
     except Exception:
@@ -154,7 +162,8 @@ def _verify_mysql(config: demo.DemoDatabaseConfig) -> tuple[demo.DemoBusinessSto
             "kind": "isolated-local-mysql-synthetic-fixture", "configuration_identity_sha256": _hash(identity),
             "grants_sha256": grants, "fixture_file_sha256": FIXTURE_SHA256,
             "fixture_canonical_sha256": result["seed_sha256"], "as_of": fixture["as_of"],
-            "counts": expected_counts, "database_access": "SELECT-only; no initialization"}
+            "counts": expected_counts, "database_access": "SELECT-only; no initialization",
+            "literal_schema_grants": True}
     except TaskDataError:
         raise
     except Exception:
