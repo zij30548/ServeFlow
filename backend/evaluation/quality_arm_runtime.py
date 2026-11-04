@@ -104,6 +104,9 @@ class _ArmComposer(ResponseComposer):
     def _project_order_content(self):
         return self._arm_state.policy.typed_projection
 
+    def _answer_order_questions(self):
+        return self._arm_state.policy.fresh_read and self._arm_state.policy.typed_projection
+
 
 class ArmOrchestrator(AgentOrchestrator):
     """Only a trusted test/runner factory may construct this role policy."""

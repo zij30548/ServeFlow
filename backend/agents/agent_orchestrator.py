@@ -53,6 +53,7 @@ from core.order_evidence import (
     needs_order_evidence, render_order_evidence, resolve_order_id,
     requests_business_mutation,
 )
+from core.order_answers import render_order_answers
 from core.diagnostic_evidence import (
     DiagnosticEvidence, extract_diagnostic_evidence,
     merge_diagnostic_evidence, render_diagnostic_evidence, select_diagnostic_request,
@@ -262,7 +263,7 @@ def _readonly_scope_result(req, result, *, safe_content=False):
 def _project_business_result(req, *, order=None, policy=None, diagnostic=None,
                              require_order=False, require_policy=False,
                              require_diagnostic=False, incomplete=False,
-                             free_order_content=None):
+                             free_order_content=None, answer_order_questions=False):
     """Present only typed tool evidence; model prose is never a record source.
 
     Requirements are per-role during execution and per-request when composing.
@@ -278,6 +279,12 @@ def _project_business_result(req, *, order=None, policy=None, diagnostic=None,
     if free_order_content is not None:
         blocks.append(free_order_content)
     elif order is not None:
+        if (answer_order_questions and type(order) is OrderEvidence
+                and order.customer_id == req.demo_customer_id):
+            answers = render_order_answers(order, message=req.message,
+                                           history=req.history, diagnostic=diagnostic)
+            if answers:
+                blocks.append(answers)
         blocks.append(render_order_evidence(order))
     if diagnostic is not None:
         blocks.append(render_diagnostic_evidence(diagnostic))
@@ -390,6 +397,10 @@ class BaseAgent:
     def _project_order_content(self) -> bool:
         """Production order facts are always rendered by the program."""
         return True
+
+    def _answer_order_questions(self) -> bool:
+        """Only current-read, typed projection can add grounded conclusions."""
+        return self._force_fresh_order_read() and self._project_order_content()
 
     def _previous_order_evidence(self, req: Request, order_id: str):
         """Production does not recover facts from text or retain order records."""
@@ -511,6 +522,7 @@ class BaseAgent:
                 require_order=order_required, require_policy=policy_required,
                 require_diagnostic=diagnostic_required, incomplete=incomplete,
                 free_order_content=free_order_content,
+                answer_order_questions=self._answer_order_questions(),
             )
             projected.tools_used = list(tools_used)
             projected.tool_traces = list(tool_traces)
@@ -1008,6 +1020,9 @@ class ResponseComposer:
     def _project_order_content(self) -> bool:
         return True
 
+    def _answer_order_questions(self) -> bool:
+        return True
+
     async def _compose_free_order_result(self, req: Request, responses: List[AgentResponse]) -> AgentCallResult:
         """Protected experiment path: preserve free prose, not unchecked facts.
 
@@ -1033,6 +1048,7 @@ class ResponseComposer:
                 or bool(AgentOrchestrator._domain_evidence(req.message)[AgentType.TECHNICAL])),
             incomplete=(free.status != "success" or any(not r.success or r.status != "success" for r in responses)),
             free_order_content=free.content if free_responses else "订单答复本次未完成，不能推断业务状态。",
+            answer_order_questions=False,
         )
         return projected
 
@@ -1059,6 +1075,7 @@ class ResponseComposer:
                     or req.intent in {IntentCategory.TECHNICAL, IntentCategory.TECHNICAL_LOGIN, IntentCategory.TECHNICAL_CRASH}
                     or bool(AgentOrchestrator._domain_evidence(req.message)[AgentType.TECHNICAL])),
                 incomplete=not responses or any(not r.success or r.status != "success" for r in responses),
+                answer_order_questions=self._answer_order_questions(),
             )
             if not responses or not any(r.success for r in responses):
                 projected.status = "failed"
