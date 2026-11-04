@@ -175,7 +175,7 @@ def supervise(command, *, root: Path, deadline_s=900):
                                "evaluation.retrieval_trial", "evaluation.task_business_regression",
                                "evaluation.task_observation_recheck", "evaluation.task_deadline_recheck",
                                "evaluation.quality_trial", "evaluation.quality_phase_trial",
-                               "evaluation.tool_scope_recheck")]
+                               "evaluation.tool_scope_recheck", "evaluation.retrieval_phase_trial")]
     if (os.name != "posix" or not hasattr(os, "killpg") or not hasattr(os, "O_NOFOLLOW")
             or not hasattr(os, "O_DIRECTORY")):
         raise SupervisorError("supervisor_posix_required")
@@ -188,7 +188,8 @@ def supervise(command, *, root: Path, deadline_s=900):
     # explicit workers may opt into their separately frozen 3600s outer boundary;
     # model/network stage deadlines and every old worker's 900s stay unchanged.
     quality_workers = [[sys.executable, "-B", "-u", "-m", module, "_worker"]
-                       for module in ("evaluation.quality_trial", "evaluation.quality_phase_trial")]
+                       for module in ("evaluation.quality_trial", "evaluation.quality_phase_trial",
+                                      "evaluation.retrieval_phase_trial")]
     maximum = 3600 if command in quality_workers else 900
     if type(deadline_s) not in (int, float) or not math.isfinite(deadline_s) or not 0 < deadline_s <= maximum:
         raise SupervisorError("supervisor_deadline_invalid")

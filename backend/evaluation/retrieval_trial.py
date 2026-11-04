@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
 from copy import deepcopy
 import fcntl
@@ -251,6 +251,23 @@ class RetrievalTransport(httpx.AsyncBaseTransport):
         if self.fault is not None:
             raise TrialTransportError(self.fault)
 
+    def make_guard(self, request, payload_hash, admit, delegate):
+        return GuardedIntentTransport(self.protocol["base_url"], payload_hash, admit, transport=delegate)
+
+    def failure_code(self, error, admission_code, guard):
+        return admission_code or ("cancelled" if isinstance(error, asyncio.CancelledError) else
+            base._error(guard.failure_code) if guard and guard.failure_code else getattr(error, "code", "protocol"))
+
+    async def record(self, *args):
+        self.seal(*args)
+
+    def error_observation(self, parsed, response_hash):
+        return {"content": [], "upstream_model": None, "stop_reason": None,
+                "usage": {"input_tokens": None, "output_tokens": None}}, None
+
+    def physical_diagnostics(self, guard):
+        return {}
+
     def stop(self, code):
         code = code if code in {"auth", "quota", "rate_limit", "network", "timeout", "cancelled", "response_limit", "protocol", "storage_failure"} else "protocol"
         self.fault = self.fault or code
@@ -261,6 +278,7 @@ class RetrievalTransport(httpx.AsyncBaseTransport):
     async def handle_async_request(self, request):
         frame, guard, operation = CURRENT.get(), None, None
         admission_code = None
+        parsed, response_hash = None, None
         started = time.perf_counter()
         try:
             self.healthy()
@@ -303,26 +321,26 @@ class RetrievalTransport(httpx.AsyncBaseTransport):
             delegate = self.factory(frame) if self.factory is not None else None
             if self.factory is not None and not isinstance(delegate, httpx.MockTransport):
                 raise TrialTransportError("protocol")
-            guard = GuardedIntentTransport(self.protocol["base_url"], payload_hash, admit, transport=delegate)
+            guard = self.make_guard(request, payload_hash, admit, delegate)
             response = await guard.handle_async_request(request)
+            response_hash = hashlib.sha256(response.content).hexdigest()
             try:
                 parsed, outcome = _response(response.content), "received"
             except (ValueError, TypeError, KeyError, RecursionError, OverflowError, TrialTransportError):
                 parsed = {"content": [], "upstream_model": None, "stop_reason": None,
                           "usage": {"input_tokens": None, "output_tokens": None}}
                 outcome = "structure_failed"
-            self.seal(operation, guard, parsed, outcome, None, (time.perf_counter()-started)*1000,
-                      hashlib.sha256(response.content).hexdigest(), wire_hash)
+            await self.record(operation, guard, parsed, outcome, None, (time.perf_counter()-started)*1000,
+                      response_hash, wire_hash)
             return response
         except BaseException as error:
-            code = admission_code or ("cancelled" if isinstance(error, asyncio.CancelledError) else
-                    base._error(guard.failure_code) if guard and guard.failure_code else getattr(error, "code", "protocol"))
+            code = self.failure_code(error, admission_code, guard)
             self.stop(code)
             if operation is not None:
                 try:
-                    self.seal(operation, guard, {"content": [], "upstream_model": None,
-                        "stop_reason": None, "usage": {"input_tokens": None, "output_tokens": None}},
-                        "execution_error", self.fault, (time.perf_counter()-started)*1000, None, wire_hash)
+                    observed, observed_hash = self.error_observation(parsed, response_hash)
+                    await self.record(operation, guard, observed,
+                        "execution_error", self.fault, (time.perf_counter()-started)*1000, observed_hash, wire_hash)
                 except Exception:
                     pass  # Occupied unknown claims are retained, never refunded.
             raise TrialTransportError(self.fault) from None
@@ -334,7 +352,7 @@ class RetrievalTransport(httpx.AsyncBaseTransport):
             "request_bytes_sha256": wire_hash, "request_model": base.MODEL,
             "request_id": guard.request_id, "http_status": guard.http_status,
             "delegate_entered": guard.sent, "latency_ms": latency_ms,
-            "response_sha256": response_hash, "response": parsed}
+            "response_sha256": response_hash, "response": parsed, **self.physical_diagnostics(guard)}
         filename = f"physical-{operation['attempt']:03d}.json"
         base._write(self.trial.root, filename, record)
         self.trial.budget(self.protocol).finish(operation["operation_id"], outcome,
@@ -342,11 +360,27 @@ class RetrievalTransport(httpx.AsyncBaseTransport):
 
 
 class RetrievalTrial:
-    def __init__(self, root=ROOT):
-        self.root = Path(root).absolute()
+    root_path, batch = ROOT, BATCH
+    protocol_schema = "serveflow-retrieval-protocol-v1"
+    authorization_schema = "serveflow-retrieval-authorization-v1"
+    report_schema = "serveflow-retrieval-report-v1"
+
+    def __init__(self, root=None):
+        self.root = Path(self.root_path if root is None else root).absolute()
         base._path(self.root, "protocol.json")
-        if self.root != ROOT and self.root.is_relative_to(bench.BACKEND_ROOT / "data/benchmarks"):
+        if self.root != self.root_path and self.root.is_relative_to(bench.BACKEND_ROOT / "data/benchmarks"):
             base._fail("fixed_retrieval_root_required")
+
+    def artifact_proof(self): return artifacts()
+    def historical_proof(self): return prior_proof()
+    def limits(self): return deepcopy(LIMITS)
+    def execution_policy(self): return deepcopy(POLICY)
+    def sdk_timeout_s(self): return 8
+    def execution_context(self): return nullcontext()
+    def outer_deadline_s(self): return 900
+    def make_transport(self, *args, **kwargs): return RetrievalTransport(*args, **kwargs)
+    def knowledge_ready(self, knowledge, protocol): return None
+    def knowledge_closed(self, success): return None
 
     def budget(self, protocol):
         return RetrievalBudget(self.root / "ledger", bench.sha256(base._path(self.root, "protocol.json")))
@@ -356,13 +390,13 @@ class RetrievalTrial:
             base._fail("retrieval_root_already_exists")
         values, config = cases(), base._configuration()
         requests = [await capture_rewrite(case, config["base_url"]) for case in values]
-        value = {"schema_version": "serveflow-retrieval-protocol-v1", "batch": BATCH,
+        value = {"schema_version": self.protocol_schema, "batch": self.batch,
             "created_at": base._now(), "git_head": subprocess.run(["git", "rev-parse", "HEAD"],
                 cwd=bench.BACKEND_ROOT, capture_output=True, text=True, check=True).stdout.strip(),
-            "root_binding_sha256": base._root_hash(self.root), "artifacts": artifacts(),
+            "root_binding_sha256": base._root_hash(self.root), "artifacts": self.artifact_proof(),
             "cases_sha256": bench.sha256(CASES_PATH), "model": base.MODEL, "base_url": config["base_url"],
-            "limits": deepcopy(LIMITS), "parameters": deepcopy(PARAMETERS), "policy": deepcopy(POLICY),
-            "dependencies": dependencies(), "data_identity": data_identity(), "prior_proof": prior_proof(),
+            "limits": self.limits(), "parameters": deepcopy(PARAMETERS), "policy": self.execution_policy(),
+            "dependencies": dependencies(), "data_identity": data_identity(), "prior_proof": self.historical_proof(),
             "baseline_binding": baseline_binding(),
             "initial_requests": requests, "operations": list(OPERATIONS),
             "authorized_model_requests": 0, "proposed_model_requests": 48}
@@ -378,17 +412,17 @@ class RetrievalTrial:
         p = bench.read_json(base._path(self.root, "protocol.json"))
         bench._exact(p, PROTOCOL_FIELDS, "retrieval_protocol_fields")
         config = base._configuration()
-        if (p["schema_version"] != "serveflow-retrieval-protocol-v1" or p["batch"] != BATCH
+        if (p["schema_version"] != self.protocol_schema or p["batch"] != self.batch
                 or p["root_binding_sha256"] != base._root_hash(self.root) or p["model"] != base.MODEL
-                or p["base_url"] != config["base_url"] or p["limits"] != LIMITS
-                or p["parameters"] != json.loads(json.dumps(PARAMETERS)) or p["policy"] != POLICY
+                or p["base_url"] != config["base_url"] or p["limits"] != self.limits()
+                or p["parameters"] != json.loads(json.dumps(PARAMETERS)) or p["policy"] != self.execution_policy()
                 or p["operations"] != list(OPERATIONS) or p["dependencies"] != dependencies()
-                or p["data_identity"] != data_identity() or p["prior_proof"] != prior_proof()
+                or p["data_identity"] != data_identity() or p["prior_proof"] != self.historical_proof()
                 or p["baseline_binding"] != baseline_binding()
                 or type(p["authorized_model_requests"]) is not int or p["authorized_model_requests"] != 0
                 or type(p["proposed_model_requests"]) is not int or p["proposed_model_requests"] != 48):
             base._fail("retrieval_protocol_changed")
-        if p["artifacts"] != artifacts() or p["cases_sha256"] != bench.sha256(CASES_PATH):
+        if p["artifacts"] != self.artifact_proof() or p["cases_sha256"] != bench.sha256(CASES_PATH):
             base._fail("retrieval_sources_changed")
         if type(p["initial_requests"]) is not list or len(p["initial_requests"]) != 24:
             base._fail("retrieval_initial_requests_changed")
@@ -421,7 +455,7 @@ class RetrievalTrial:
         ledger = self.budget(p)
         if ledger.status()["attempts"]:
             base._fail("retrieval_already_started")
-        value = {"schema_version": "serveflow-retrieval-authorization-v1", "reference": reference,
+        value = {"schema_version": self.authorization_schema, "reference": reference,
             "recorded_at": base._now(), "protocol_sha256": bench.sha256(self.root / "protocol.json"),
             "root_binding_sha256": base._root_hash(self.root), "initial_chain_hash": ledger.initial_chain_hash,
             "max_requests": 48, "operations": list(OPERATIONS)}
@@ -432,7 +466,7 @@ class RetrievalTrial:
         value = bench.read_json(base._path(self.root, "authorization.json"))
         bench._exact(value, {"schema_version", "reference", "recorded_at", "protocol_sha256", "root_binding_sha256",
             "initial_chain_hash", "max_requests", "operations"}, "retrieval_authorization_fields")
-        if (value["schema_version"] != "serveflow-retrieval-authorization-v1"
+        if (value["schema_version"] != self.authorization_schema
                 or value["protocol_sha256"] != bench.sha256(self.root / "protocol.json")
                 or value["root_binding_sha256"] != base._root_hash(self.root)
                 or value["initial_chain_hash"] != self.budget(p).initial_chain_hash
@@ -473,11 +507,12 @@ class RetrievalTrial:
             knowledge = controlled_knowledge or await build_owned_knowledge()
             if {k: knowledge.proof[k] for k in DATA_FIELDS} != p["data_identity"]:
                 base._fail("retrieval_actual_data_changed")
-            transport = RetrievalTransport(self, p, delegate_factory=delegate_factory)
+            self.knowledge_ready(knowledge, p)
+            transport = self.make_transport(self, p, delegate_factory=delegate_factory)
             http = httpx.AsyncClient(transport=transport, follow_redirects=False, trust_env=False,
-                timeout=8, headers={"Accept-Encoding": "identity"})
+                timeout=self.sdk_timeout_s(), headers={"Accept-Encoding": "identity"})
             sdk = AsyncAnthropic(api_key=config.get("api_key", "controlled-only"), base_url=config["base_url"],
-                max_retries=0, timeout=8, http_client=http)
+                max_retries=0, timeout=self.sdk_timeout_s(), http_client=http)
             for case in cases():
                 if (self.root / f"sample-seal-{case['id']}.json").exists():
                     continue
@@ -514,7 +549,7 @@ class RetrievalTrial:
                     method["rerank_applied"] = applied
                     return value, applied
                 manager.rewrite_query, manager._rerank_with_status = rewrite, rerank
-                with base._quiet_clients():
+                with base._quiet_clients(), self.execution_context():
                     result = await manager.search_with_rewrite("knowledge_search", case["input"]["message"], top_k=3)
                 transport.healthy()
                 data = result.data if isinstance(result.data, list) else []
@@ -560,7 +595,12 @@ class RetrievalTrial:
             finally:
                 try:
                     if knowledge is not None:
-                        await task_data._owned(asyncio.to_thread(knowledge.close))
+                        closed = False
+                        try:
+                            await task_data._owned(asyncio.to_thread(knowledge.close))
+                            closed = True
+                        finally:
+                            self.knowledge_closed(closed)
                 finally:
                     os.close(lock)
         return self.report()
@@ -608,7 +648,7 @@ class RetrievalTrial:
             known = [row["response"]["usage"][key] for row in physical.values() if row["response"]["usage"][key] is not None]
             token_totals[key] = {"known_sum": sum(known) if known else None,
                 "known_requests": len(known), "unknown_requests": state["attempts"]-len(known)}
-        return {"schema_version": "serveflow-retrieval-report-v1", "batch": BATCH,
+        return {"schema_version": self.report_schema, "batch": self.batch,
             "model_requests": state["attempts"], "usage": token_totals,
             "authorized_requests": 48 if (self.root / "authorization.json").exists() and self.approval(p) else 0,
             "ledger": state, "evidence_kinds": sorted(set(kind)), "stopped": (self.root / "stopped.json").exists(),
@@ -627,13 +667,13 @@ class RetrievalTrial:
                 "no relevance threshold: nonempty retrieval is not evidence that an out-of-scope question can be answered"]}
 
 
-def main(argv=None):
+def _main(trial_class, worker_module, argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operation", choices=("prepare", "verify", "report", "authorize", "run", "_worker"))
     parser.add_argument("--reference")
     parser.add_argument("--confirm-new-authorization", action="store_true")
     args = parser.parse_args(argv)
-    trial = RetrievalTrial()
+    trial = trial_class()
     try:
         if args.operation == "prepare":
             value = asyncio.run(trial.prepare())
@@ -647,7 +687,11 @@ def main(argv=None):
             trial.approval(trial.verify())
             from evaluation.task_supervisor import supervise
             os.chdir(bench.BACKEND_ROOT)
-            value = supervise([sys.executable, "-B", "-u", "-m", "evaluation.retrieval_trial", "_worker"], root=ROOT)
+            command = [sys.executable, "-B", "-u", "-m", worker_module, "_worker"]
+            if worker_module == "evaluation.retrieval_trial":
+                value = supervise(command, root=ROOT)
+            else:
+                value = supervise(command, root=trial.root, deadline_s=trial.outer_deadline_s())
         else:
             value = trial.report()
         print(json.dumps(value, ensure_ascii=False, allow_nan=False))
@@ -657,6 +701,10 @@ def main(argv=None):
     except Exception:
         print("STOP: retrieval_trial_failed; inspect private evidence, never reinitialize or auto-retry", file=sys.stderr)
         return 2
+
+
+def main(argv=None):
+    return _main(RetrievalTrial, "evaluation.retrieval_trial", argv)
 
 
 if __name__ == "__main__":
