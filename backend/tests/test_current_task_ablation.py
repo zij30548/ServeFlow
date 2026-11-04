@@ -436,4 +436,3 @@ def test_cli_success_requires_worker_success_without_timeout_or_cancellation(mon
         module.main()
     assert stopped.value.code == expected
     assert called == ["run"]
-
