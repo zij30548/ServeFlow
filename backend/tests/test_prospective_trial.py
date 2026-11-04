@@ -204,6 +204,7 @@ def test_source_proof_is_closed_addition_and_preserves_original_git_blobs(tmp_pa
 
 @pytest.mark.parametrize("failure", ["timeout","signal","spawn-signal","wait-error","system-exit"])
 def test_closed_supervisor_reaps_on_every_exit_and_restores_handlers(prepared,monkeypatch,failure):
+    monkeypatch.setattr(module,"ROOT",prepared.root)
     approved(prepared); before={number:signal.getsignal(number) for number in (signal.SIGINT,signal.SIGTERM)}
     terminated=[];recorded=[]
     class Process:
@@ -229,6 +230,7 @@ def test_closed_supervisor_reaps_on_every_exit_and_restores_handlers(prepared,mo
 
 
 def test_supervisor_no_approval_never_spawns(prepared,monkeypatch):
+    monkeypatch.setattr(module,"ROOT",prepared.root)
     monkeypatch.setattr(module.subprocess,"Popen",lambda *a,**k:pytest.fail("no approval must not spawn"))
     with pytest.raises(FileNotFoundError):module.supervise(prepared)
 

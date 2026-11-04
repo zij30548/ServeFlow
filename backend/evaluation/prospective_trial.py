@@ -161,10 +161,30 @@ class ProspectiveTransport(PhaseDeadlineTaskHTTPTransport):
 
 
 class ProspectiveTrial:
-    def __init__(self, root=ROOT):
-        self.root = Path(root).absolute()
+    root_path = ROOT
+    protocol_schema = "serveflow-prospective-execution-protocol-v1"
+    authorization_schema = "serveflow-prospective-authorization-v1"
+    progress_schema = "serveflow-prospective-progress-v1"
+
+    def source_proof(self):
+        return design_proof()
+
+    def artifact_proof(self):
+        return artifacts()
+
+    def history_proof(self):
+        return prior_ledgers()
+
+    def execution_policy(self):
+        return POLICY
+
+    def protocol_extension(self):
+        return {}
+
+    def __init__(self, root=None):
+        self.root = Path(self.root_path if root is None else root).absolute()
         base._path(self.root, "protocol.json")
-        if self.root != ROOT and self.root.is_relative_to(bench.BACKEND_ROOT / "data/benchmarks"):
+        if self.root != self.root_path and self.root.is_relative_to(bench.BACKEND_ROOT / "data/benchmarks"):
             base._fail("prospective_fixed_root_required")
 
     def ledger(self, p, *, initialize=False, send_limit=MAX_REQUESTS):
@@ -173,7 +193,7 @@ class ProspectiveTrial:
 
     async def prepare(self):
         if self.root.exists(): base._fail("prospective_execution_root_exists")
-        proof, config = design_proof(), base._configuration()
+        proof, config = self.source_proof(), base._configuration()
         from evaluation.retrieval_trial import capture_rewrite
         initial, rewrites = [], []
         task_cases = {c["id"]: c for c in design._cases(bench.BACKEND_ROOT, "tasks")["cases"]}
@@ -188,19 +208,19 @@ class ProspectiveTrial:
             else:
                 capture = await capture_rewrite(case, config["base_url"])
                 rewrites.append({**capture, "source_case_id": case["id"], "case_id": "R-"+case["id"]})
-        p = {"schema_version": "serveflow-prospective-execution-protocol-v1", "created_at": base._now(),
+        p = {"schema_version": self.protocol_schema, "created_at": base._now(),
             "git_head": subprocess.run(["git", "rev-parse", "HEAD"], cwd=bench.BACKEND_ROOT, check=True,
                                        capture_output=True, text=True).stdout.strip(),
             "root_binding_sha256": base._root_hash(self.root), "design_proof": proof,
-            "artifacts": artifacts(), "dependencies": engine._dependencies(), "model": base.MODEL,
+            "artifacts": self.artifact_proof(), "dependencies": engine._dependencies(), "model": base.MODEL,
             "base_url": config["base_url"], "messages_url": messages_url(config["base_url"]),
             "plan": fixed_plan(), "cases": design._plan(bench.BACKEND_ROOT), "limits": deepcopy(LIMITS),
-            "http_limits": deepcopy(PHASE_HTTP_LIMITS), "policy": deepcopy(POLICY),
+            "http_limits": deepcopy(PHASE_HTTP_LIMITS), "policy": deepcopy(self.execution_policy()),
             "phase_parameters": _phases(), "agent_parameters": deepcopy(AGENT_PARAMETERS),
             "initial_intent_requests": initial, "initial_rewrite_requests": rewrites,
             "offline_data_proof": task_data.offline_data_proof(), "effective_environment": history.effective_environment(),
-            "prior_ledgers": prior_ledgers(), "authorized_model_requests": 0, "proposed_model_requests": MAX_REQUESTS,
-            "judge_requests": 0, "external_business_requests": 0}
+            "prior_ledgers": self.history_proof(), "authorized_model_requests": 0, "proposed_model_requests": MAX_REQUESTS,
+            "judge_requests": 0, "external_business_requests": 0, **self.protocol_extension()}
         p = json.loads(json.dumps(p))
         self.root.mkdir(parents=True, mode=0o700, exist_ok=False)
         base._write(self.root, "protocol.json", p)
@@ -248,14 +268,15 @@ class ProspectiveTrial:
     def verify(self):
         p = bench.read_json(base._path(self.root, "protocol.json"))
         config = base._configuration()
-        expected = {"schema_version": "serveflow-prospective-execution-protocol-v1",
-            "root_binding_sha256": base._root_hash(self.root), "design_proof": design_proof(),
-            "artifacts": artifacts(), "dependencies": engine._dependencies(), "model": base.MODEL,
+        expected = {"schema_version": self.protocol_schema,
+            "root_binding_sha256": base._root_hash(self.root), "design_proof": self.source_proof(),
+            "artifacts": self.artifact_proof(), "dependencies": engine._dependencies(), "model": base.MODEL,
             "base_url": config["base_url"], "messages_url": messages_url(config["base_url"]),
             "plan": fixed_plan(), "cases": design._plan(bench.BACKEND_ROOT), "limits": LIMITS,
-            "http_limits": PHASE_HTTP_LIMITS, "policy": POLICY, "phase_parameters": _phases(),
+            "http_limits": PHASE_HTTP_LIMITS, "policy": self.execution_policy(), "phase_parameters": _phases(),
             "agent_parameters": AGENT_PARAMETERS, "offline_data_proof": task_data.offline_data_proof(),
-            "effective_environment": history.effective_environment(), "prior_ledgers": prior_ledgers()}
+            "effective_environment": history.effective_environment(), "prior_ledgers": self.history_proof(),
+            **self.protocol_extension()}
         expected = json.loads(json.dumps(expected))
         keys = set(expected) | {"created_at", "git_head", "initial_intent_requests", "initial_rewrite_requests",
                                "authorized_model_requests", "proposed_model_requests", "judge_requests", "external_business_requests"}
@@ -290,7 +311,7 @@ class ProspectiveTrial:
         state = self.ledger(p).status()
         if state["attempts"] or state["active_case"] or state["completed_cases"]:
             base._fail("prospective_already_started")
-        value = {"schema_version": "serveflow-prospective-authorization-v1", "reference": reference,
+        value = {"schema_version": self.authorization_schema, "reference": reference,
             "recorded_at": base._now(), "protocol_sha256": bench.sha256(self.root/"protocol.json"),
             "root_binding_sha256": base._root_hash(self.root), "initial_chain_hash": self.ledger(p).initial_chain_hash,
             "max_requests": max_requests, "plan": p["plan"]}
@@ -301,7 +322,7 @@ class ProspectiveTrial:
         value = bench.read_json(base._path(self.root, "authorization.json"))
         bench._exact(value, {"schema_version", "reference", "recorded_at", "protocol_sha256", "root_binding_sha256",
                              "initial_chain_hash", "max_requests", "plan"}, "prospective_approval_fields")
-        if (value["schema_version"] != "serveflow-prospective-authorization-v1"
+        if (value["schema_version"] != self.authorization_schema
                 or value["protocol_sha256"] != bench.sha256(self.root/"protocol.json")
                 or value["root_binding_sha256"] != base._root_hash(self.root)
                 or value["initial_chain_hash"] != self.ledger(p).initial_chain_hash or value["plan"] != p["plan"]
@@ -314,7 +335,7 @@ class ProspectiveTrial:
         p = self.verify(); approval = self._approval(p)
         if (delegate_factory is None) != (controlled_data is None):
             base._fail("prospective_controlled_boundary_required")
-        if delegate_factory is None and self.root != ROOT:
+        if delegate_factory is None and self.root != self.root_path:
             base._fail("prospective_fixed_live_root_required")
         if any((self.root/name).exists() for name in STOP_FILES):
             base._fail("prospective_paused")
@@ -514,7 +535,7 @@ class ProspectiveTrial:
             "unpaired_pending_unknown_or_unexecuted": lambda r: any(r[a] not in {"passed", "failed"} for a in ("A", "D"))}.items()}
         complete = (len(sealed["cases"]) == len(p["plan"]) and not state["pending"] and not state["paused"]
                     and not any((self.root/n).exists() for n in STOP_FILES) and (self.root/"cleanup-complete.json").exists())
-        return {"schema_version": "serveflow-prospective-progress-v1", "protocol_sha256": bench.sha256(self.root/"protocol.json"),
+        return {"schema_version": self.progress_schema, "protocol_sha256": bench.sha256(self.root/"protocol.json"),
             "authorization_present": (self.root/"authorization.json").exists(), "mathematical_ceiling": MAX_REQUESTS,
             "reserved_requests": state["attempts"], "closed_operations": len(sealed["operations"]),
             "sealed_physical": sum(v["output_sha256"] is not None for v in sealed["operations"].values()),
@@ -537,6 +558,15 @@ def supervise(trial):
     from evaluation import task_supervisor as guard
     if os.name != "posix" or threading.current_thread() is not threading.main_thread():
         raise guard.SupervisorError("supervisor_main_thread_posix_required")
+    # Closed class/module/root pairs; no arbitrary worker name or CLI root.
+    from evaluation.prospective_repaired_trial import RepairedProspectiveTrial
+    workers = {ProspectiveTrial: (ROOT, "evaluation.prospective_trial"),
+               RepairedProspectiveTrial: (RepairedProspectiveTrial.root_path, "evaluation.prospective_repaired_trial")}
+    if type(trial) not in workers:
+        raise guard.SupervisorError("prospective_worker_type_invalid")
+    worker_root, worker_module = workers[type(trial)]
+    if trial.root != worker_root:
+        raise guard.SupervisorError("prospective_worker_root_invalid")
     trial.verify(); trial._approval(bench.read_json(trial.root/"protocol.json"))
     root_fd = guard._open_root(trial.root)
     process, previous = None, {}
@@ -551,7 +581,7 @@ def supervise(trial):
         try:
             try:
                 if not state["cancelled"]:
-                    process = subprocess.Popen([sys.executable, "-B", "-u", "-m", "evaluation.prospective_trial", "_worker"],
+                    process = subprocess.Popen([sys.executable, "-B", "-u", "-m", worker_module, "_worker"],
                         cwd=bench.BACKEND_ROOT, shell=False, start_new_session=True, close_fds=True,
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             finally: state["spawning"] = False
@@ -579,13 +609,13 @@ def supervise(trial):
         finally: os.close(root_fd)
 
 
-def main():
+def main(trial_type=ProspectiveTrial):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("prepare", "verify", "status", "report", "review", "authorize", "run", "_worker"))
     parser.add_argument("--reference"); parser.add_argument("--max-requests", type=int)
     parser.add_argument("--review-file", type=Path)
     parser.add_argument("--confirm-explicit-authorization", action="store_true")
-    args = parser.parse_args(); trial = ProspectiveTrial()
+    args = parser.parse_args(); trial = trial_type()
     try:
         if args.command == "prepare": value = asyncio.run(trial.prepare())
         elif args.command == "authorize":
