@@ -440,22 +440,55 @@ def needs_order_evidence(message, history=None):
                 and (re.search(query, active, re.I) or re.search(r"[？?]", message)))
 
 
+_MUTATION_OWNER = r"(?:(?:我的|这笔订单的|这个订单的|该订单的|这单的|这笔|这个|该|当前|本次)\s*)?"
+_NEXT_CHARGE = r"(?:(?:下一笔|下笔|这笔|该笔|后续|下次的|下次)\s*)?(?:扣款|付款|支付|交易)"
+_MUTATION_OBJECT = (r"(?:自动续费(?:开关)?|续费(?:开关)?|订阅|订单(?:\s*DEMO-[0-9]{4})?|"
+                    r"DEMO-[0-9]{4}|交易|设备|账户|账号|银行卡|手机号|收货地址|订单地址|" + _NEXT_CHARGE + r")")
+_BA_MUTATION = (rf"(?:把|将)\s*{_MUTATION_OWNER}{_MUTATION_OBJECT}\s*"
+                r"(?:给)?(?:关闭|关掉|停止|取消|冻结|解绑|修改|更改)")
+_PRONOUN_MUTATION = r"(?:把|将)\s*它\s*(?:给)?(?:关闭|关掉|停止|取消|冻结|解绑)"
 _MUTATION = (
     r"(?:申请|发起|办理|执行|提交)?(?:退款|退货)|"
-    r"取消(?:(?:我的|这笔|这个|该|当前)\s*)?(?:订单|自动续费|订阅|DEMO-[0-9]{4})|"
-    r"(?:关闭|关掉|停止)(?:自动续费|订阅)|"
-    r"冻结(?:(?:我的|这笔|这个|该|当前)\s*)?(?:交易|付款|支付|账户|账号)|"
-    r"解绑(?:(?:我的|这个|该|当前)\s*)?(?:设备|账户|账号|银行卡|手机号)|"
-    r"(?:修改|更改)(?:(?:我的|这个|该|当前)\s*)?(?:收货地址|订单地址)"
+    rf"取消{_MUTATION_OWNER}(?:订单|自动续费|续费|订阅|DEMO-[0-9]{{4}})|"
+    rf"(?:关闭|关掉|停止|开启|打开){_MUTATION_OWNER}(?:自动续费|续费|订阅)|"
+    rf"冻结{_MUTATION_OWNER}(?:{_NEXT_CHARGE}|账户|账号)|"
+    rf"解绑{_MUTATION_OWNER}(?:设备|账户|账号|银行卡|手机号)|"
+    rf"(?:修改|更改){_MUTATION_OWNER}(?:收货地址|订单地址)|{_BA_MUTATION}"
 )
-_MUTATION_DIRECTIVE = r"(?:(?:请|麻烦|现在|立即|直接|替我|帮我|给我|我要|我想|我需要|我希望)\s*)+"
+_MUTATION_DIRECTIVE = r"(?:(?:请|麻烦|现在|立即|直接|再|替我|帮我|给我|我要|我想|我需要|我希望)\s*)+"
 _MUTATION_DECLINE = re.compile(
     r"(?:不需要|不用|不要|不想|不必|无需|无须|先别|暂不|不再|别|并非|不是)"
     r"\s*(?:(?:再|现在|立即|直接|替我|帮我|给我|执行|办理|申请|发起|提交)\s*){0,5}"
-    rf"(?:{_MUTATION})", re.I)
+    rf"(?:{_MUTATION}|{_PRONOUN_MUTATION})", re.I)
 _MUTATION_EXPLAIN = re.compile(
     r"(?:怎么|如何|怎样|能不能|可不可以|是否可以|能否|是什么意思|规则|政策|流程|条件|步骤|材料|"
     r"手续费|时效|多久|什么时候|哪天|什么状态|什么进度|现在的状态|当前状态)")
+_MUTATION_PAST = re.compile(
+    rf"(?:我|客服|系统|平台|商家|对方|他|她)?\s*(?:已经|已|昨天|此前|之前|早就)"
+    rf"\s*(?:(?:替我|帮我|给我|办理|申请|发起|完成|成功|曾经)\s*){{0,3}}(?:{_MUTATION}|{_PRONOUN_MUTATION})")
+_MUTATION_CONTEXT = re.compile(
+    r"自动续费|续费|订阅|扣款|订单|设备|账户|账号|交易|\b(?:auto[- ]?renewal|subscription|order|charge|account|transaction|device)\b", re.I)
+_MUTATION_PARTICLE = r"(?:了|掉|吧|一下|下)?"
+_EN_MUTATION = (r"(?:(?:refund|cancel|freeze|unlink)\s+(?:(?:my|this|the|next)\s+){0,2}"
+                r"(?:order|payment|transaction|account|device|subscription|charge)|"
+                r"(?:turn|switch)\s+off\s+(?:(?:my|this|the)\s+)?(?:auto[- ]?renewal|subscription))\b")
+
+
+def _mutation_text(message):
+    # Quoting a known object is not quoting an instruction. All complete quoted
+    # commands remain untrusted data and are removed, including their objects.
+    def quoted(match):
+        inner = match.group()[1:-1].strip()
+        return inner if re.fullmatch(_MUTATION_OBJECT, inner, re.I) else " "
+    text = _QUOTED.sub(quoted, message)
+    # A new explicit request after contrast/sequence has its own negation and
+    # explanation scope. Bare coordinated actions retain the preceding scope:
+    # "不要取消并冻结" is not turned into a positive freeze request.
+    return re.sub(
+        r"但是|不过|而是|(?<!不)但|然后|随后|接着|"
+        r"(?:并且|而且|并)(?=\s*(?:请|替我|帮我|解释|说明|介绍|告诉))|"
+        r"\b(?:but|then)\b|\band\b(?=\s*(?:please|now|explain|tell|describe)\b)",
+        "；", text, flags=re.I)
 
 
 def requests_business_mutation(message):
@@ -467,28 +500,43 @@ def requests_business_mutation(message):
     """
     if type(message) is not str or not 1 <= len(message) <= 2000:
         return False
-    text = _QUOTED.sub(" ", message)
-    for clause in re.split(r"[，,。！？!?；;\n]", text):
-        clause = clause.strip()
+    text = _mutation_text(message)
+    business_context = False
+    for fragment in re.findall(r"[^，,。！？!?；;\n]+[！？!?]?", text):
+        questioned = fragment.rstrip().endswith(("?", "？"))
+        clause = fragment.strip().rstrip("！？!?").strip()
+        past = _MUTATION_PAST.search(clause)
+        if past:
+            # A completed action does not swallow a separately explicit new
+            # request in the same message, even when punctuation is omitted.
+            tail = clause[past.end():]
+            follow = re.search(r"(?:现在|接下来|再)\s*(?=请|帮我|替我)", tail)
+            if follow is None:
+                continue
+            business_context |= bool(_MUTATION_CONTEXT.search(clause[:past.end()]))
+            clause = tail[follow.start():]
         if not clause or _MUTATION_DECLINE.search(clause) or _REPORTED.search(clause):
             continue
+        earlier_context = business_context
+        business_context |= bool(_MUTATION_CONTEXT.search(clause))
         # A question about performing an action is not an order to perform it.
         if _MUTATION_EXPLAIN.search(clause):
             continue
-        match = re.search(rf"{_MUTATION_DIRECTIVE}(?:{_MUTATION})", clause)
+        pronoun = re.search(_PRONOUN_MUTATION, clause)
+        antecedent = earlier_context or bool(pronoun and _MUTATION_CONTEXT.search(clause[:pronoun.start()]))
+        action = rf"(?:{_MUTATION}|{_PRONOUN_MUTATION})" if antecedent else rf"(?:{_MUTATION})"
+        match = re.search(rf"{_MUTATION_DIRECTIVE}{action}", clause)
         if match:
             remainder = clause[match.end():].strip()
             if not re.match(r"(?:的)?(?:状态|进度|记录|金额|到账|查询|核对|说明|分析|规则|政策)", remainder):
                 return True
         # An unqualified imperative is accepted only as the complete clause.
-        if re.fullmatch(rf"(?:{_MUTATION})(?:吧|一下|下)?", clause):
+        if not questioned and re.fullmatch(rf"{action}{_MUTATION_PARTICLE}", clause):
             return True
-        if (re.search(_MUTATION_DIRECTIVE, clause)
-                and re.search(r"(?:把|将)(?:我的|这个|该|当前|这笔)?(?:订单|交易|设备|自动续费|订阅|DEMO-[0-9]{4})"
-                              r"[A-Za-z0-9_\-\s]{0,32}(?:取消|关闭|退款|冻结|解绑)(?:吧|一下|下)?$", clause)):
-            return True
-        if re.search(r"\b(?:please|now|immediately)\s+(?:refund|cancel|freeze|unlink)\s+"
-                     r"(?:(?:my|this|the)\s+)?(?:order|payment|transaction|account|device|subscription)\b", clause, re.I):
-            if not re.search(r"\b(?:how|when|what|status|policy|rules|don't|do not)\b", clause, re.I):
+        if not re.search(r"\b(?:how|when|what|whether|status|policy|rules|explain|translate|don't|do not)\b", clause, re.I):
+            if re.search(rf"\b(?:please|now|immediately)\s+{_EN_MUTATION}", clause, re.I):
+                return True
+            english_pronoun = re.search(r"\b(?:please|now|immediately)\s+(?:turn|switch)\s+it\s+off\b", clause, re.I)
+            if english_pronoun and (earlier_context or _MUTATION_CONTEXT.search(clause[:english_pronoun.start()])):
                 return True
     return False

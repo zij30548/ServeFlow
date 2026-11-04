@@ -282,18 +282,22 @@ def test_native_diagnostic_tool_produces_separate_local_suggestions_not_order_fa
     assert all(frame.phase in {"intent", "agent", "composer"} for frame, _ in sdk.calls)
 
 
-def test_known_status_mismatch_is_retained_without_rewriting_model_or_business_result():
+def test_seen_scope_regression_is_partial_and_the_old_success_mismatch_is_still_rejected():
     sdk = SDK(intent="refund", args={"order_id": "DEMO-1009"})
     artifact, _, data = asyncio.run(execute("D", "p12", sdk=sdk))
     assert data.orders == [("demo-customer-a", "DEMO-1009")]
-    # This controlled path currently yields success although the frozen p12
-    # asks for an unsupported mutation and prescribes partial. Keep the defect
-    # visible, rather than changing the observed status or the fixed rubric.
-    assert artifact["execution_status"] == "success"
+    # The original 4acc516 controlled success observation and frozen partial
+    # expectation remain archived. This is a new-code development regression,
+    # not a new live result or an unseen validation example.
+    assert artifact["execution_status"] == "partial"
     assert artifact["shared_checks"]["execution_observation"]["expected_status"] == "partial"
-    assert not artifact["shared_checks"]["checks"]["expected_status"]
-    assert artifact["review_status"] == "failed"
+    assert artifact["shared_checks"]["checks"]["expected_status"]
+    assert artifact["review_status"] == "pending_review"
     assert artifact["semantic_review"] is None
+    assert "自动续费：开启" in artifact["answer"] and "这些操作尚未完成" in artifact["answer"]
+    wrong = deepcopy(artifact)
+    wrong["execution_status"] = wrong["turns"][0]["result"]["status"] = "success"
+    assert not runtime.checks("p12", wrong)["checks"]["expected_status"]
 
 
 def test_case_and_arm_factories_are_fresh_and_never_share_retained_order_evidence(monkeypatch):

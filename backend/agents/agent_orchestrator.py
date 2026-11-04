@@ -182,6 +182,7 @@ class AgentResponse:
     # Evaluation subclasses may retain unverified order prose independently
     # from typed policy/diagnostic channels. Production never sets this field.
     free_order_content: Optional[str] = field(default=None, repr=False)
+    _readonly_scope_checked: bool = field(default=False, repr=False)
 
 
 @dataclass
@@ -195,6 +196,7 @@ class AgentCallResult:
     order_evidence: Optional[OrderEvidence] = field(default=None, repr=False)
     diagnostic_evidence: Optional[DiagnosticEvidence] = field(default=None, repr=False)
     free_order_content: Optional[str] = field(default=None, repr=False)
+    _readonly_scope_checked: bool = field(default=False, repr=False)
 
 
 class AgentCallError(RuntimeError):
@@ -229,6 +231,34 @@ class Request:
     demo_order_reader: Optional[Callable[[str, str], Awaitable[Dict[str, Any]]]] = field(default=None, repr=False)
 
 
+_READONLY_SCOPE_NOTICE = (
+    "这里只能查询和整理信息，不能执行退款、关闭自动续费、冻结、解绑或其他业务变更；"
+    "这些操作尚未完成，需通过已核实的业务渠道处理。"
+)
+
+
+def _readonly_scope_result(req, result, *, safe_content=False):
+    """An actual read or model reply never completes an unsupported write.
+
+    Only program-rendered evidence/hand-off text may be retained on this path.
+    Appending a disclaimer to a model's 'already refunded' is contradictory;
+    discard that unverified prose instead. Failed execution stays failed.
+    This is an output boundary, not permission to dispatch a new operation.
+    """
+    if not requests_business_mutation(req.message):
+        return result
+    safe_content = safe_content or result._readonly_scope_checked
+    if not safe_content:
+        result.content = (("本次处理失败，未确认查询结果或完成任何业务变更。\n\n"
+                           if result.status == "failed" else "") + _READONLY_SCOPE_NOTICE)
+    elif _READONLY_SCOPE_NOTICE not in result.content:
+        result.content = result.content + "\n\n" + _READONLY_SCOPE_NOTICE
+    if result.status != "failed":
+        result.status = "partial"
+    result._readonly_scope_checked = True
+    return result
+
+
 def _project_business_result(req, *, order=None, policy=None, diagnostic=None,
                              require_order=False, require_policy=False,
                              require_diagnostic=False, incomplete=False,
@@ -238,6 +268,12 @@ def _project_business_result(req, *, order=None, policy=None, diagnostic=None,
     Requirements are per-role during execution and per-request when composing.
     A missing role/result cannot be hidden by a successful sibling role.
     """
+    mutation_requested = requests_business_mutation(req.message)
+    if mutation_requested:
+        # A common safety invariant in all evaluation arms as well: generated
+        # order prose cannot claim a transaction changed. Retain the actual
+        # typed read instead; never rewrite or "repair" the model's claim.
+        free_order_content = None
     blocks = []
     if free_order_content is not None:
         blocks.append(free_order_content)
@@ -266,13 +302,14 @@ def _project_business_result(req, *, order=None, policy=None, diagnostic=None,
         complete = complete and diagnostic is not None and diagnostic.status == "suggestions"
     # This runtime has no transaction-changing tool. Merely reading a record
     # cannot satisfy a request to execute a refund, cancellation or account edit.
-    if requests_business_mutation(req.message):
-        blocks.append("这里只能查询和整理信息，不能执行退款、冻结、解绑或其他业务变更；这些操作尚未完成，需通过已核实的业务渠道处理。")
+    if mutation_requested:
+        blocks.append(_READONLY_SCOPE_NOTICE)
         complete = False
     return AgentCallResult("\n\n".join(blocks), status="success" if complete else "partial",
                            order_evidence=order, policy_evidence=policy,
                            diagnostic_evidence=diagnostic,
-                           free_order_content=free_order_content)
+                           free_order_content=free_order_content,
+                           _readonly_scope_checked=mutation_requested)
 
 
 @dataclass
@@ -374,6 +411,9 @@ class BaseAgent:
         self.stats.total += 1
         try:
             call_result = await self._call_llm(req)
+            call_result = _readonly_scope_result(req, call_result, safe_content=(
+                call_result.free_order_content is None and any(value is not None for value in (
+                    call_result.order_evidence, call_result.policy_evidence, call_result.diagnostic_evidence))))
             ms = (time.monotonic() - t0) * 1000
             complete = call_result.status == "success"
             self.stats.record(complete, ms, req.request_id)
@@ -395,6 +435,7 @@ class BaseAgent:
                 order_evidence=call_result.order_evidence,
                 diagnostic_evidence=call_result.diagnostic_evidence,
                 free_order_content=call_result.free_order_content,
+                _readonly_scope_checked=call_result._readonly_scope_checked,
             )
         except asyncio.CancelledError:
             elapsed = (time.monotonic() - t0) * 1000
@@ -473,10 +514,10 @@ class BaseAgent:
 
         if order_required and selection.status != "resolved":
             if not policy_required:
-                return AgentCallResult(
+                return _readonly_scope_result(req, AgentCallResult(
                     "请明确提供本次要核对的一个有效演示订单号；多个或不明确的订单不能擅自选择。",
                     status="partial",
-                )
+                ), safe_content=True)
             # Answer the independently supported policy part; keep the record
             # subquestion explicitly unverified instead of suppressing both.
             order_required = False
@@ -598,10 +639,10 @@ class BaseAgent:
 
                 if (not order_required and any(self._block_value(block, "name") == "read_demo_order"
                                               for block in tool_uses)):
-                    return AgentCallResult(
+                    return _readonly_scope_result(req, AgentCallResult(
                         "本次没有可明确绑定的订单查询请求，未读取订单；请先说明要核对的订单及事项。",
                         status="partial", tools_used=list(tools_used), tool_traces=list(tool_traces),
-                    )
+                    ), safe_content=True)
                 if (required_tool == "lookup_error_code"
                         and self._block_value(tool_uses[0], "input") != {"error_code": diagnostic_code}):
                     # Preserve the actual model response in evaluation, but do
@@ -937,18 +978,16 @@ class EscalationAgent(BaseAgent):
             content += "订单争议可向人工提供商品清单、包裹与签收信息及脱敏凭证；这里尚未完成业务记录核验。\n"
         if re.search(r"盗|账户|账号|冻结|解绑|密码", req.message):
             content += "如担心账户安全，请自行前往已核实的官方安全入口处理；不要直接清空云端资料或恢复出厂设置。"
+        result = _readonly_scope_result(req, AgentResponse(
+            agent_type=self.agent_type, content=content, success=True,
+            escalate=True, tools_used=[]), safe_content=True)
         ms = (time.monotonic() - t0) * 1000
-        self.stats.success += 1
+        complete = result.status == "success"
+        self.stats.success += int(complete)
         self.stats.total_ms += ms
-        self.stats.record(True, ms, req.request_id)
-        return AgentResponse(
-            agent_type=self.agent_type,
-            content=content,
-            success=True,
-            latency_ms=ms,
-            escalate=True,
-            tools_used=[],
-        )
+        self.stats.record(complete, ms, req.request_id)
+        result.latency_ms = ms
+        return result
 
 
 class ResponseComposer:
@@ -995,8 +1034,8 @@ class ResponseComposer:
 
     async def compose_result(self, req: Request, responses: List[AgentResponse]) -> AgentCallResult:
         grounded_record = needs_order_evidence(req.message, req.history)
-        if (grounded_record or any(r.order_evidence is not None or r.diagnostic_evidence is not None for r in responses)) and not any(
-                r.agent_type is AgentType.ESCALATION for r in responses):
+        if (grounded_record or any(r.order_evidence is not None or r.diagnostic_evidence is not None for r in responses)) and (
+                requests_business_mutation(req.message) or not any(r.agent_type is AgentType.ESCALATION for r in responses)):
             if grounded_record and not self._project_order_content():
                 return await self._compose_free_order_result(req, responses)
             # Mixed record/policy/diagnosis requests retain each evidence channel.
@@ -1031,7 +1070,8 @@ class ResponseComposer:
                 status = "partial"
             if responses and not any(r.success for r in responses):
                 status = "failed"
-            return AgentCallResult(render_policy_evidence(evidence), status=status, policy_evidence=evidence)
+            return _readonly_scope_result(req, AgentCallResult(
+                render_policy_evidence(evidence), status=status, policy_evidence=evidence), safe_content=True)
         return await self._compose_text_result(req, responses)
 
     async def _compose_text_result(self, req: Request, responses: List[AgentResponse]) -> AgentCallResult:
@@ -1039,6 +1079,11 @@ class ResponseComposer:
         status = "success" if len(successful) == len(responses) and all(r.status == "success" for r in successful) else "partial"
         if not successful:
             return AgentCallResult("抱歉，所有 Agent 均处理失败。", status="failed")
+        if requests_business_mutation(req.message):
+            handoff = len(successful) == 1 and (successful[0].agent_type is AgentType.ESCALATION
+                                               or successful[0]._readonly_scope_checked)
+            return _readonly_scope_result(req, AgentCallResult(
+                successful[0].content if handoff else "", status=status), safe_content=handoff)
         if len(successful) == 1:
             return AgentCallResult(successful[0].content, status=status)
 
@@ -1240,9 +1285,12 @@ class AgentOrchestrator:
             req.entities = req.conversation_state["entities"]
 
         if self._needs_clarification(req):
+            clarification = _readonly_scope_result(req, AgentCallResult(
+                "我还不能确定您要处理的是哪类问题。请补充一下是订单物流、退款账单、账户资料，还是技术故障？"),
+                safe_content=True)
             result = OrchestratorResult(
                 request_id=req.request_id,
-                response="我还不能确定您要处理的是哪类问题。请补充一下是订单物流、退款账单、账户资料，还是技术故障？",
+                response=clarification.content,
                 agent_type=AgentType.GENERAL,
                 intent=req.intent,
                 escalated=False,
@@ -1251,6 +1299,7 @@ class AgentOrchestrator:
                 primary_agent=AgentType.GENERAL,
                 routing_reason="低置信度 OTHER 意图，先澄清用户需求",
                 routing_confidence=req.intent_confidence,
+                status=clarification.status,
             )
             self._record_tool_trace(result)
             return result
@@ -1271,6 +1320,10 @@ class AgentOrchestrator:
             response = replace(response, content=projected.content, status=projected.status,
                 order_evidence=projected.order_evidence, policy_evidence=projected.policy_evidence,
                 diagnostic_evidence=projected.diagnostic_evidence)
+
+        response = _readonly_scope_result(req, response, safe_content=(
+            response.agent_type is AgentType.ESCALATION or response.free_order_content is None
+            and any(value is not None for value in (response.order_evidence, response.policy_evidence, response.diagnostic_evidence))))
 
         # 4. 升级检查
         escalated = False
@@ -1315,6 +1368,10 @@ class AgentOrchestrator:
 
         valid_responses = [r for r in responses if isinstance(r, AgentResponse)]
         composed = await self._composer.compose_result(req, valid_responses)
+        composed = _readonly_scope_result(req, composed, safe_content=(
+            composed.free_order_content is None and any(value is not None for value in (
+                composed.order_evidence, composed.policy_evidence, composed.diagnostic_evidence))
+            or len(valid_responses) == 1 and valid_responses[0].agent_type is AgentType.ESCALATION))
         if len(valid_responses) != len(responses) and composed.status == "success":
             composed.status = "partial"
         escalated = any(isinstance(r, AgentResponse) and r.escalate for r in responses)
