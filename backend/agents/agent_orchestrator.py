@@ -55,7 +55,7 @@ from core.order_evidence import (
 )
 from core.diagnostic_evidence import (
     DiagnosticEvidence, extract_diagnostic_evidence,
-    merge_diagnostic_evidence, render_diagnostic_evidence,
+    merge_diagnostic_evidence, render_diagnostic_evidence, select_diagnostic_request,
 )
 
 logger = logging.getLogger(__name__)
@@ -293,13 +293,16 @@ def _project_business_result(req, *, order=None, policy=None, diagnostic=None,
         blocks.append("本次未取得可核验的政策资料，规则部分仍未知。")
     if require_diagnostic and diagnostic is None:
         blocks.append("技术排查部分本次未完成；未确认故障原因或修复结果。")
+    diagnostic_scope_unresolved = require_diagnostic and select_diagnostic_request(req.message).code_scope_unresolved
+    if diagnostic_scope_unresolved:
+        blocks.append("本次涉及多个错误码或本地尚未提供含义的错误码，尚未逐项核对其具体含义；现有结果仅为通用排查建议。请明确本次要先核对的一个错误码和对应现象。")
     complete = not incomplete
     if require_order:
         complete = complete and order is not None and order.status in {"found", "not_found"}
     if require_policy:
         complete = complete and policy is not None and policy.status == "sources" and not policy.mixed
     if require_diagnostic:
-        complete = complete and diagnostic is not None and diagnostic.status == "suggestions"
+        complete = complete and diagnostic is not None and diagnostic.status == "suggestions" and not diagnostic_scope_unresolved
     # This runtime has no transaction-changing tool. Merely reading a record
     # cannot satisfy a request to execute a refund, cancellation or account edit.
     if mutation_requested:
@@ -490,11 +493,12 @@ class BaseAgent:
         record_requested = needs_order_evidence(req.message, req.history)
         selection = resolve_order_id(req.message, req.history) if record_requested else None
         order_required = record_requested and self.agent_type in {AgentType.GENERAL, AgentType.BILLING}
-        diagnostic_required = record_requested and self.agent_type is AgentType.TECHNICAL
+        diagnostic_selection = select_diagnostic_request(req.message)
+        diagnostic_required = self.agent_type is AgentType.TECHNICAL and (
+            record_requested or diagnostic_selection.required)
         # Only a unique code in the user's own current message may bind an
         # error-specific lookup. Model entities are not observation evidence.
-        observed_codes = set(re.findall(r"(?<![A-Za-z0-9])(?:401|403|404|500)(?![A-Za-z0-9])", req.message))
-        diagnostic_code = next(iter(observed_codes)) if len(observed_codes) == 1 else None
+        diagnostic_code = diagnostic_selection.error_code
         order_sources, diagnostic_sources, policy_sources = [], [], []
         current_order_read = False
         required_tools = []
@@ -594,7 +598,7 @@ class BaseAgent:
                     content = extract_text_content(resp.content).strip()
                     if not content:
                         raise AgentCallError("模型未返回有效回复", tools_used, tool_traces)
-                    if order_required:
+                    if order_required or diagnostic_required:
                         # The order target/identity checks above are common to
                         # every runtime. A free-summary experiment does not
                         # turn its prose into OrderEvidence or repair it.
@@ -1034,7 +1038,8 @@ class ResponseComposer:
 
     async def compose_result(self, req: Request, responses: List[AgentResponse]) -> AgentCallResult:
         grounded_record = needs_order_evidence(req.message, req.history)
-        if (grounded_record or any(r.order_evidence is not None or r.diagnostic_evidence is not None for r in responses)) and (
+        diagnostic_requested = select_diagnostic_request(req.message).required
+        if (grounded_record or diagnostic_requested or any(r.order_evidence is not None or r.diagnostic_evidence is not None for r in responses)) and (
                 requests_business_mutation(req.message) or not any(r.agent_type is AgentType.ESCALATION for r in responses)):
             if grounded_record and not self._project_order_content():
                 return await self._compose_free_order_result(req, responses)
@@ -1044,17 +1049,20 @@ class ResponseComposer:
             orders = [r.order_evidence for r in responses if r.success and r.order_evidence is not None]
             policies = [r.policy_evidence for r in responses if r.success and r.policy_evidence is not None]
             diagnostics = [r.diagnostic_evidence for r in responses if r.success and r.diagnostic_evidence is not None]
-            return _project_business_result(
+            projected = _project_business_result(
                 req, order=merge_order_evidence(orders) if orders else None,
                 policy=merge_policy_evidence(policies, mixed=has_record_question(req.message)) if policies else None,
                 diagnostic=merge_diagnostic_evidence(diagnostics) if diagnostics else None,
                 require_order=grounded_record,
                 require_policy=requires_policy_evidence(req.message, req.history),
-                require_diagnostic=(any(r.agent_type is AgentType.TECHNICAL for r in responses)
+                require_diagnostic=(diagnostic_requested or any(r.agent_type is AgentType.TECHNICAL for r in responses)
                     or req.intent in {IntentCategory.TECHNICAL, IntentCategory.TECHNICAL_LOGIN, IntentCategory.TECHNICAL_CRASH}
                     or bool(AgentOrchestrator._domain_evidence(req.message)[AgentType.TECHNICAL])),
-                incomplete=any(not r.success or r.status != "success" for r in responses),
+                incomplete=not responses or any(not r.success or r.status != "success" for r in responses),
             )
+            if not responses or not any(r.success for r in responses):
+                projected.status = "failed"
+            return projected
         if any(response.policy_evidence is not None for response in responses) or (
                 requires_policy_evidence(req.message, req.history)
                 and not any(response.agent_type is AgentType.ESCALATION for response in responses)):
@@ -1311,8 +1319,8 @@ class AgentOrchestrator:
 
         # 2. 执行主 Agent（含降级）
         response = await self._execute(req, decision.primary_agent)
-        if response.success and any(value is not None for value in (
-                response.order_evidence, response.policy_evidence, response.diagnostic_evidence)):
+        if response.success and (select_diagnostic_request(req.message).required or any(value is not None for value in (
+                response.order_evidence, response.policy_evidence, response.diagnostic_evidence))):
             # A route with an unavailable specialist can shrink to one role.
             # Recheck the entire request's evidence requirements even then;
             # a successful order read cannot hide an omitted technical task.

@@ -279,6 +279,10 @@ def render_order_evidence(evidence):
                       f"订单记录更新时间：{order['record_updated_at']}",
                       f"订单类型：{dict(physical='实物', digital='数字', bundle='组合')[order['order_type']]}；币种：CNY",
                       f"订单金额：{_amount(order['total_amount_minor'])}；付款状态：{dict(paid='已付款', unpaid='未付款', refunded='已退款')[order['payment_status']]}（{order['payment_status']}）",
+                      # The validated current source has no lifecycle/cancellation
+                      # field. This explains that limit without adding a fact to
+                      # the snapshot or treating payment/fulfilment as cancellation.
+                      "订单取消状态：未知（当前快照未提供取消状态）；付款状态及付款/发货记录是否存在，均不能证明订单已取消或未取消。",
                       "商品明细："])
         for row in order["items"]:
             lines.append(f"- {_text(row['name'])}（商品ID：{_text(row['item_id'])}；类型：{row['item_type']}），数量 {row['quantity']}，单价 {_amount(row['unit_amount_minor'])}")

@@ -87,7 +87,9 @@ def test_escalation_agent_is_a_real_non_llm_handoff_node():
 
 def test_composer_fallback_preserves_primary_and_supporting_results():
     composer = ResponseComposer(FakeClient(error=RuntimeError("provider down")), "test-model")
-    req = make_request()
+    # The text fallback remains for ordinary summaries. An explicit HTTP fault
+    # must instead preserve the typed diagnostic requirement (separate tests).
+    req = make_request(message="请整理两份反馈摘要。")
     responses = [
         AgentResponse(AgentType.TECHNICAL, "先排查 Token 是否过期。", True),
         AgentResponse(AgentType.BILLING, "请提供两笔扣款的时间和金额。", True),
@@ -174,7 +176,7 @@ def test_tool_input_validation_rejects_unknown_fields():
         raise AssertionError("unknown tool fields should be rejected")
 
 
-def test_tool_use_round_trip_executes_only_whitelisted_tool():
+def test_required_technical_lookup_executes_native_tool_without_summary():
     class ToolUseBlock:
         type = "tool_use"
         id = "toolu_1"
@@ -215,12 +217,13 @@ def test_tool_use_round_trip_executes_only_whitelisted_tool():
     assert response.tool_traces[0]["tool_name"] == "lookup_error_code"
     assert response.tool_traces[0]["input"] == {"error_code": "401"}
     assert response.tool_traces[0]["success"] is True
-    assert len(client.calls) == 2
-    assert {tool["name"] for tool in client.calls[0]["tools"]} == {
-        "lookup_error_code",
-        "build_diagnostic_plan",
-    }
-    assert "tool_result" in str(client.calls[1]["messages"])
+    assert len(client.calls) == 1
+    assert [tool["name"] for tool in client.calls[0]["tools"]] == ["lookup_error_code"]
+    assert client.calls[0]["tool_choice"] == {"type": "tool", "name": "lookup_error_code"}
+    assert response.diagnostic_evidence.units[0].error_code == "401"
+    assert "参考含义：认证失败" in response.content
+    assert "已根据 401 错误码给出排查建议。" not in response.content
+    assert len(client.responses) == 1  # No free-form continuation or retry.
 
 
 def test_concurrent_requests_keep_tool_traces_isolated():
@@ -296,7 +299,8 @@ def test_recovery_probe_allows_only_one_request_and_recovers():
         async def reply(**kwargs):
             entered.set()
             await release.wait()
-            return SimpleNamespace(content=[{'type':'text','text':'恢复成功'}])
+            return SimpleNamespace(content=[{'type':'tool_use','id':'probe_lookup',
+                'name':'lookup_error_code','input':{'error_code':'401'}}], stop_reason='tool_use')
         agent = TechnicalAgent(SimpleNamespace(messages=SimpleNamespace(create=reply)), 'test')
         agent.stats.set_penalty(.8)
         assert not agent.stats.available()

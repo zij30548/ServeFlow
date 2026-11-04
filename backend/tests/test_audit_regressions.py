@@ -4,7 +4,7 @@ import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 import pytest
-from agents.agent_orchestrator import TechnicalAgent, AgentStats, AgentCallResult, AgentType, AgentResponse, AgentOrchestrator
+from agents.agent_orchestrator import TechnicalAgent, AgentStats, AgentCallResult, AgentType, AgentResponse, AgentOrchestrator, ResponseComposer
 from test_agent_orchestrator import make_request
 from core.intent_recognizer import IntentRecognizer, IntentCategory
 from tooling.tool_manager import MCPToolManager, Tool, CircuitBreaker, CircuitState
@@ -134,9 +134,13 @@ def test_internal_intent_recognition_passes_entities():
             seen.append(req.entities)
             return AgentResponse(kind,'ok',True)
         orch._execute=execute
+        no_model = SimpleNamespace(messages=SimpleNamespace(create=AsyncMock(side_effect=AssertionError('no ungrounded summary'))))
+        orch._composer = ResponseComposer(no_model, 'controlled-model')
         orch._record_tool_trace=lambda r:None
-        await orch.run(make_request(intent=None,entities={}))
+        result = await orch.run(make_request(intent=None,entities={}))
         assert seen == [{'error_code':['401']}]
+        assert result.status == 'partial' and '技术排查部分本次未完成' in result.response
+        no_model.messages.create.assert_not_awaited()
     asyncio.run(run())
 
 
