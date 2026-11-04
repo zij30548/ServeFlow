@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from copy import deepcopy
+from contextlib import nullcontext
 import hashlib
 import json
 import os
@@ -303,6 +304,21 @@ class BusinessRegression(repair.TaskRepair):
     def execution_policy(self):
         return POLICY
 
+    def http_limits(self):
+        return deepcopy(engine.HTTP_LIMITS)
+
+    def sdk_timeout_s(self):
+        return 8
+
+    def deadline_policy(self):
+        return None
+
+    def review_policy(self):
+        return deepcopy(REVIEW_POLICY)
+
+    def grading_version(self):
+        return "task-business-v4"
+
     def make_transport(self, *args, **kwargs):
         return engine.TaskHTTPTransport(*args, **kwargs)
 
@@ -327,8 +343,8 @@ class BusinessRegression(repair.TaskRepair):
             "root_binding_sha256": base._root_hash(self.root), "artifacts": self.artifact_proof(),
             "cases_sha256": canonical_payload_hash({"cases": values}), "dependencies": engine._dependencies(),
             "model": base.MODEL, "base_url": config["base_url"], "messages_url": messages_url(config["base_url"]),
-            "limits": deepcopy(LIMITS), "http_limits": deepcopy(engine.HTTP_LIMITS), "policy": deepcopy(self.execution_policy()),
-            "review_policy": deepcopy(REVIEW_POLICY), "phase_parameters": deepcopy(engine.PHASE_PARAMETERS),
+            "limits": deepcopy(LIMITS), "http_limits": self.http_limits(), "policy": deepcopy(self.execution_policy()),
+            "review_policy": self.review_policy(), "phase_parameters": deepcopy(engine.PHASE_PARAMETERS),
             "agent_parameters": deepcopy(engine.AGENT_PARAMETERS), "plan": fixed_plan(), "initial_intent_requests": initial,
             "offline_data_proof": engine.offline_data_proof(), "prior_proof": self.historical_proof(),
             "effective_environment": effective_environment(), "data_proof_sha256": repair.data_binding(),
@@ -346,8 +362,8 @@ class BusinessRegression(repair.TaskRepair):
         if (p["schema_version"] != self.protocol_schema or p["batch"] != self.batch or p["candidate"] != self.candidate
                 or p["root_binding_sha256"] != base._root_hash(self.root) or p["model"] != base.MODEL
                 or p["base_url"] != config["base_url"] or p["messages_url"] != messages_url(config["base_url"])
-                or p["limits"] != LIMITS or p["http_limits"] != engine.HTTP_LIMITS or p["policy"] != self.execution_policy()
-                or p["review_policy"] != REVIEW_POLICY or p["dependencies"] != engine._dependencies()
+                or p["limits"] != LIMITS or p["http_limits"] != self.http_limits() or p["policy"] != self.execution_policy()
+                or p["review_policy"] != self.review_policy() or p["dependencies"] != engine._dependencies()
                 or p["phase_parameters"] != json.loads(json.dumps(engine.PHASE_PARAMETERS))
                 or p["agent_parameters"] != json.loads(json.dumps(engine.AGENT_PARAMETERS))
                 or p["plan"] != fixed_plan() or type(p["authorized_model_requests"]) is not int
@@ -439,10 +455,10 @@ class BusinessRegression(repair.TaskRepair):
                     data.assert_healthy()
                 transport = self.make_transport(config["base_url"], self.root, ledger, lease, admission,
                                                 delegate_factory=delegate_factory)
-                http = httpx.AsyncClient(transport=transport, timeout=8, follow_redirects=False,
+                http = httpx.AsyncClient(transport=transport, timeout=self.sdk_timeout_s(), follow_redirects=False,
                     trust_env=False, headers={"Accept-Encoding": "identity"})
                 sdk = AsyncAnthropic(api_key=config.get("api_key", "controlled-only"), base_url=config["base_url"],
-                    max_retries=0, timeout=8, http_client=http)
+                    max_retries=0, timeout=self.sdk_timeout_s(), http_client=http)
                 def healthy():
                     if transport.fault:
                         base._fail("task_transport_stopped")
@@ -452,12 +468,18 @@ class BusinessRegression(repair.TaskRepair):
                         continue
                     healthy()
                     ledger.start_case(case["id"], lease=lease)
-                    with base._quiet_clients():
+                    policy = self.deadline_policy()
+                    if policy is None:
+                        deadline_context = nullcontext()
+                    else:
+                        from core.model_deadline import eval_deadlines
+                        deadline_context = eval_deadlines(policy)
+                    with base._quiet_clients(), deadline_context:
                         result = await self.run_case(case, sdk, data, ensure_healthy=healthy)
                     result.update({"protocol_sha256": bench.sha256(self.root / "protocol.json"),
                         "evidence_kind": transport.kind, "data_proof_sha256": proof_hash,
                         "order_projection": projection_checks(case, result),
-                        "business_execution": business_execution_checks(case, result), "grading_version": "task-business-v4"})
+                        "business_execution": business_execution_checks(case, result), "grading_version": self.grading_version()})
                     filename = f"case-{case['id']}.json"
                     base._write(self.root, filename, result)
                     ledger.finish_case(case["id"], bench.sha256(self.root / filename),
@@ -512,7 +534,7 @@ class BusinessRegression(repair.TaskRepair):
                 projections = projection_checks(case, artifact)
                 execution = business_execution_checks(case, artifact)
                 if (artifact.get("order_projection") != projections or artifact.get("business_execution") != execution
-                        or artifact.get("grading_version") != "task-business-v4"):
+                        or artifact.get("grading_version") != self.grading_version()):
                     base._fail("task_business_projection_changed")
                 legacy_hard = (artifact["execution_status"] == "success" and not artifact["deterministic"]["blockers"]
                                and all(artifact["deterministic"]["checks"].values()))
@@ -553,7 +575,7 @@ class BusinessRegression(repair.TaskRepair):
             usage[key] = {"known_sum": sum(known) if known else None, "known_requests": len(known),
                           "unknown_requests": state["attempts"] - len(known)}
         return {"schema_version": self.report_schema, "batch": self.batch, "candidate": self.candidate,
-            "protocol_sha256": bench.sha256(self.root / "protocol.json"), "review_policy": deepcopy(REVIEW_POLICY),
+            "protocol_sha256": bench.sha256(self.root / "protocol.json"), "review_policy": self.review_policy(),
             "planned_cases": 12, "planned_turns": 13, "planned_denominator": 12,
             "authorized_requests": MAX_REQUESTS if (self.root / "authorization.json").exists() and self._approval(p) else 0,
             "ledger": state, "cases": rows,

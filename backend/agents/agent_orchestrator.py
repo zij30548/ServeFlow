@@ -520,16 +520,21 @@ class BaseAgent:
                     "system": self._build_system_prompt(req),
                     "messages": messages,
                 }
+                required_tool = required_tools[0] if required_tools else None
                 if tools:
+                    # A program-bound step exposes only its required tool.
+                    # Keep the role registry for validation and optional later
+                    # rounds, but do not invite unrelated parallel selections
+                    # while a named single-tool action is required.
+                    exposed_tools = (tools[required_tool],) if required_tool else tools.values()
                     request_kwargs["tools"] = [
                         {
                             "name": spec.name,
                             "description": spec.description,
                             "input_schema": spec.input_schema,
                         }
-                        for spec in tools.values()
+                        for spec in exposed_tools
                     ]
-                required_tool = required_tools[0] if required_tools else None
                 if required_tool:
                     request_kwargs["tool_choice"] = {"type": "tool", "name": required_tool}
                 request_kwargs.update(nonthinking_options(self._client, self._model))

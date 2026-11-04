@@ -120,14 +120,23 @@ async def test_native_read_is_allowed_for_every_valid_arm_and_never_synthesized(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("arm", ["A", "B", "C", "D"])
-async def test_all_arms_have_identical_prompt_tools_and_generation_parameters(arm):
+async def test_all_arms_keep_prompt_parameters_and_narrow_only_required_tools(arm):
     production_client, experimental_client = Client(native()), Client(native(), text("原样答案"))
     await BillingAgent(production_client, "controlled-model").handle(request())
-    await agent(arm, experimental_client).handle(request())
+    experimental_agent = agent(arm, experimental_client)
+    await experimental_agent.handle(request())
     expected, actual = deepcopy(production_client.calls[0]), deepcopy(experimental_client.calls[0])
+    production_tools, experimental_tools = expected.pop("tools"), actual.pop("tools")
     expected.pop("tool_choice", None)
     actual.pop("tool_choice", None)
     assert actual == expected
+    assert [tool["name"] for tool in production_tools] == ["read_demo_order"]
+    if arm in {"B", "D"}:
+        assert experimental_tools == production_tools
+    else:
+        assert experimental_tools == [{"name": spec.name, "description": spec.description,
+            "input_schema": spec.input_schema} for spec in experimental_agent.get_tools().values()]
+        assert "read_demo_order" in {tool["name"] for tool in experimental_tools}
     assert not any(label in actual["system"] for label in ("arm A", "arm B", "arm C", "arm D"))
 
 
