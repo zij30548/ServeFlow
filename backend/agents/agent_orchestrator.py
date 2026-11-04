@@ -1595,6 +1595,12 @@ class AgentOrchestrator:
         evidence = {role: {word for word in words if (
             bool(re.search(rf"(?<![a-z0-9_]){re.escape(word)}(?![a-z0-9_])", text))
             if word.isascii() else word in text)} for role, words in keywords.items()}
+        # A single order intent cannot erase a separately requested diagnosis.
+        # Reuse the same bounded current-message guard as native execution.
+        diagnostic = select_diagnostic_request(message)
+        definition = r"(?<!原因)是什么(?!原因)|什么意思|什么含义|什么定义|如何理解|怎么理解"
+        if diagnostic.required and (diagnostic.error_code is not None or not re.search(definition, text)):
+            evidence[AgentType.TECHNICAL].add("explicit_diagnostic_request")
         # Quoted action names and definition questions do not authorize another
         # actor. Keep quoted error symptoms in `text` for ordinary diagnostics.
         commands = re.sub(r'“[^”\n]*”|「[^」\n]*」|"[^"\n]*"|(?<!\w)\x27[^\x27\n]*\x27(?!\w)', " ", text)
@@ -1614,7 +1620,6 @@ class AgentOrchestrator:
             rf"{subject}{clause}{{0,12}}"
             rf"{activation_symptom}"
         )
-        definition = r"(?<!原因)是什么(?!原因)|什么意思|什么含义|什么定义|如何理解|怎么理解"
         for current in re.split(r"[，。！？；\n]", commands):
             if re.search(definition, current):
                 continue

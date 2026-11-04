@@ -175,7 +175,8 @@ def supervise(command, *, root: Path, deadline_s=900):
                                "evaluation.retrieval_trial", "evaluation.task_business_regression",
                                "evaluation.task_observation_recheck", "evaluation.task_deadline_recheck",
                                "evaluation.quality_trial", "evaluation.quality_phase_trial",
-                               "evaluation.tool_scope_recheck", "evaluation.retrieval_phase_trial")]
+                               "evaluation.tool_scope_recheck", "evaluation.retrieval_phase_trial",
+                               "evaluation.diagnostic_repair_trial")]
     if (os.name != "posix" or not hasattr(os, "killpg") or not hasattr(os, "O_NOFOLLOW")
             or not hasattr(os, "O_DIRECTORY")):
         raise SupervisorError("supervisor_posix_required")

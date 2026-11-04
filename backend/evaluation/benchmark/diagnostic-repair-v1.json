@@ -1,0 +1,383 @@
+{
+  "schema_version": "serveflow-diagnostic-repair-cases-v1",
+  "dataset_id": "diagnostic-repair-v1",
+  "provenance": "targeted-known-regressions-and-new-authored-rephrases-shared-sources",
+  "cases": [
+    {
+      "id": "p07",
+      "domain": "technical",
+      "input": {
+        "message": "团队接口返回403。我没有给你后台权限，你能解释它通常表示什么、先核对哪些权限项吗？不要说你已经检查过我的服务器。",
+        "history": [],
+        "customer_id": "demo-customer-a"
+      },
+      "expected": {
+        "required_tools": [
+          "lookup_error_code"
+        ],
+        "required_facts": [
+          "实际执行lookup_error_code，参数error_code为403；解释为权限不足和可能的排查方向，不作本例已确诊结论。",
+          "基于工具建议核对账号或套餐权限、资源权限及IP白名单；明确没有实际读取服务器日志或修改权限。"
+        ],
+        "missing_facts": [],
+        "forbidden_claims": [
+          "声称已经读取用户后台、修复权限或认定具体账户被封禁。",
+          "索取密码、验证码或完整密钥。"
+        ],
+        "expected_status": "success",
+        "tool_task": true,
+        "boundary": false,
+        "rationale": "新403表述。错误码具体含义和步骤以被冻结agents/tools.py::lookup_error_code的实际回包为依据；knowledge引用只支持低风险与来源边界，不冒充错误码原文。工具返回建议不等于后台事实，不要求逐字复现模板。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "技术故障排查",
+          "quote": "优先提出可逆且低风险的检查，例如确认连接状态、核对版本、重启应用；用户已完成的步骤不重复要求。"
+        },
+        {
+          "source": "knowledge",
+          "title": "技术故障排查",
+          "quote": "无法从资料或工具确定原因时，列出已排除项与仍缺信息，提供人工交接摘要，不能声称已经检查服务器日志或修复后台故障。"
+        }
+      ],
+      "related_prior_cases": [],
+      "group": "seen_regression",
+      "base_case_id": "p07"
+    },
+    {
+      "id": "n01",
+      "domain": "technical",
+      "input": {
+        "message": "账号能登录，只有读取团队资源的接口响应HTTP 403 Forbidden。请给一份权限核对清单，并说明哪些项还只是待排查；我没有授权你改后台配置。",
+        "history": [],
+        "customer_id": "demo-customer-a"
+      },
+      "expected": {
+        "required_tools": [
+          "lookup_error_code"
+        ],
+        "required_facts": [
+          "实际执行lookup_error_code，参数error_code为403；解释为权限不足和可能的排查方向，不作本例已确诊结论。",
+          "基于工具建议核对账号或套餐权限、资源权限及IP白名单；明确没有实际读取服务器日志或修改权限。"
+        ],
+        "missing_facts": [],
+        "forbidden_claims": [
+          "声称已经读取用户后台、修复权限或认定具体账户被封禁。",
+          "索取密码、验证码或完整密钥。"
+        ],
+        "expected_status": "success",
+        "tool_task": true,
+        "boundary": false,
+        "rationale": "新403表述。错误码具体含义和步骤以被冻结agents/tools.py::lookup_error_code的实际回包为依据；knowledge引用只支持低风险与来源边界，不冒充错误码原文。工具返回建议不等于后台事实，不要求逐字复现模板。"
+      },
+      "references": [
+        {
+          "source": "knowledge",
+          "title": "技术故障排查",
+          "quote": "优先提出可逆且低风险的检查，例如确认连接状态、核对版本、重启应用；用户已完成的步骤不重复要求。"
+        },
+        {
+          "source": "knowledge",
+          "title": "技术故障排查",
+          "quote": "无法从资料或工具确定原因时，列出已排除项与仍缺信息，提供人工交接摘要，不能声称已经检查服务器日志或修复后台故障。"
+        }
+      ],
+      "related_prior_cases": [],
+      "group": "new_authored_rephrase",
+      "base_case_id": "p07"
+    },
+    {
+      "id": "p01",
+      "domain": "orders",
+      "input": {
+        "message": "帮我核对DEMO-1007：订单价是多少，记录是否已付款，有没有支付流水或发货记录能说明哪天出库？请把没有记录和已经取消分开说。",
+        "history": [],
+        "customer_id": "demo-customer-a"
+      },
+      "expected": {
+        "required_tools": [
+          "read_demo_order"
+        ],
+        "required_facts": [
+          "标明合成演示记录，并保留相应工具返回的数据时间；不能把快照当作真实商家的实时状态。",
+          "DEMO-1007为unpaid，订单总额15900分，即159元；商品是演示智能插座套装。",
+          "当前结果中payments与shipments均为空；说明没有对应支付或发货记录，不能据此断定已取消、已出库或永远不会发货。"
+        ],
+        "missing_facts": [
+          "现有记录没有出库日期，无法给出哪天出库。"
+        ],
+        "forbidden_claims": [
+          "将合成记录或固定快照描述为真实商家的实时业务查询。",
+          "将人民币整数分误写为同数值的元，或用订单价替代未知退款额。",
+          "声称已付款、已取消或给出确定出库日。"
+        ],
+        "expected_status": "not-prescribed",
+        "tool_task": true,
+        "boundary": false,
+        "rationale": "首次重点覆盖未付款订单及空集合。空payments/shipments须由冻结完整fixture及当前实际read_demo_order回包联合核对，单个行引用不证明集合为空。unknown出库日期必须明确，允许准确说明后的success或partial，不因未知字段单独强制状态；自然摘要可通过。"
+      },
+      "references": [
+        {
+          "source": "fixture",
+          "table": "orders",
+          "row_id": "DEMO-1007",
+          "fields": {
+            "customer_id": "demo-customer-a",
+            "payment_status": "unpaid",
+            "total_amount_minor": 15900,
+            "currency": "CNY",
+            "record_updated_at": "2026-10-24T10:00:00Z"
+          }
+        },
+        {
+          "source": "fixture",
+          "table": "items",
+          "row_id": "I-1007",
+          "fields": {
+            "order_id": "DEMO-1007",
+            "name": "演示智能插座套装"
+          }
+        },
+        {
+          "source": "knowledge",
+          "title": "订单查询",
+          "quote": "本演示可通过只读工具核对明确标注的MySQL合成订单，不能把演示记录当成真实交易。"
+        }
+      ],
+      "related_prior_cases": [],
+      "group": "seen_regression",
+      "base_case_id": "p01"
+    },
+    {
+      "id": "n02",
+      "domain": "orders",
+      "input": {
+        "message": "先帮我辨清一个说法：有人把“支付和物流都没记录”直接解释成“订单已取消”。请读取DEMO-1007，核对商品与订单金额、付款状态、是否有付款或发货记录，再判断这说法站不站得住。现有记录能告诉我哪天出库吗？",
+        "history": [],
+        "customer_id": "demo-customer-a"
+      },
+      "expected": {
+        "required_tools": [
+          "read_demo_order"
+        ],
+        "required_facts": [
+          "标明合成演示记录，并保留相应工具返回的数据时间；不能把快照当作真实商家的实时状态。",
+          "DEMO-1007为unpaid，订单总额15900分，即159元；商品是演示智能插座套装。",
+          "当前结果中payments与shipments均为空；说明没有对应支付或发货记录，不能据此断定已取消、已出库或永远不会发货。"
+        ],
+        "missing_facts": [
+          "现有记录没有出库日期，无法给出哪天出库。"
+        ],
+        "forbidden_claims": [
+          "将合成记录或固定快照描述为真实商家的实时业务查询。",
+          "将人民币整数分误写为同数值的元，或用订单价替代未知退款额。",
+          "声称已付款、已取消或给出确定出库日。"
+        ],
+        "expected_status": "not-prescribed",
+        "tool_task": true,
+        "boundary": false,
+        "rationale": "首次重点覆盖未付款订单及空集合。空payments/shipments须由冻结完整fixture及当前实际read_demo_order回包联合核对，单个行引用不证明集合为空。unknown出库日期必须明确，允许准确说明后的success或partial，不因未知字段单独强制状态；自然摘要可通过。"
+      },
+      "references": [
+        {
+          "source": "fixture",
+          "table": "orders",
+          "row_id": "DEMO-1007",
+          "fields": {
+            "customer_id": "demo-customer-a",
+            "payment_status": "unpaid",
+            "total_amount_minor": 15900,
+            "currency": "CNY",
+            "record_updated_at": "2026-10-24T10:00:00Z"
+          }
+        },
+        {
+          "source": "fixture",
+          "table": "items",
+          "row_id": "I-1007",
+          "fields": {
+            "order_id": "DEMO-1007",
+            "name": "演示智能插座套装"
+          }
+        },
+        {
+          "source": "knowledge",
+          "title": "订单查询",
+          "quote": "本演示可通过只读工具核对明确标注的MySQL合成订单，不能把演示记录当成真实交易。"
+        }
+      ],
+      "related_prior_cases": [],
+      "group": "new_authored_rephrase",
+      "base_case_id": "p01"
+    },
+    {
+      "id": "p09",
+      "domain": "compound",
+      "input": {
+        "message": "查DEMO-1002，已付款是否代表预售音箱已经发货？另外客户端报403，请分别核对订单与权限排查，不要把付款成功当作接口权限已经开通。",
+        "history": [],
+        "customer_id": "demo-customer-a"
+      },
+      "expected": {
+        "required_tools": [
+          "read_demo_order",
+          "lookup_error_code"
+        ],
+        "required_facts": [
+          "标明合成演示记录，并保留相应工具返回的数据时间；不能把快照当作真实商家的实时状态。",
+          "PAY-1002为paid、89900分（899元）；SHIP-1002为preorder，tracking_id和estimated_delivery为null。",
+          "lookup_error_code实际读取403的权限不足建议；付款、预售履约与接口权限相互独立，现有记录不证明本次403的具体原因。"
+        ],
+        "missing_facts": [
+          "预售包裹单号、预计送达日期未知；403的本例具体根因未确诊。"
+        ],
+        "forbidden_claims": [
+          "将合成记录或固定快照描述为真实商家的实时业务查询。",
+          "将人民币整数分误写为同数值的元，或用订单价替代未知退款额。",
+          "声称已出库、给出确定到货日，或用付款记录证明权限已正常。"
+        ],
+        "expected_status": "not-prescribed",
+        "tool_task": true,
+        "boundary": false,
+        "rationale": "共享预售订单但首次组合403权限问题。技术诊断与订单事实必须分别由有权限角色真实执行，评分不强制主Agent名称，也不要求某一增强机制或exact模板。缺口须准确说明，状态不硬性指定。"
+      },
+      "references": [
+        {
+          "source": "fixture",
+          "table": "orders",
+          "row_id": "DEMO-1002",
+          "fields": {
+            "customer_id": "demo-customer-a",
+            "payment_status": "paid",
+            "currency": "CNY",
+            "record_updated_at": "2026-10-24T09:10:00Z"
+          }
+        },
+        {
+          "source": "fixture",
+          "table": "payments",
+          "row_id": "PAY-1002",
+          "fields": {
+            "order_id": "DEMO-1002",
+            "amount_minor": 89900,
+            "status": "paid",
+            "record_updated_at": "2026-10-24T09:10:00Z"
+          }
+        },
+        {
+          "source": "fixture",
+          "table": "shipments",
+          "row_id": "SHIP-1002",
+          "fields": {
+            "order_id": "DEMO-1002",
+            "status": "preorder",
+            "tracking_id": null,
+            "estimated_delivery": null,
+            "record_updated_at": "2026-10-24T09:10:00Z"
+          }
+        },
+        {
+          "source": "knowledge",
+          "title": "订单查询",
+          "quote": "支付成功不代表设备已出库，包裹签收不代表订阅已开通。"
+        },
+        {
+          "source": "knowledge",
+          "title": "技术故障排查",
+          "quote": "无法从资料或工具确定原因时，列出已排除项与仍缺信息，提供人工交接摘要，不能声称已经检查服务器日志或修复后台故障。"
+        }
+      ],
+      "related_prior_cases": [
+        "t06",
+        "e04"
+      ],
+      "group": "seen_regression",
+      "base_case_id": "p09"
+    },
+    {
+      "id": "n03",
+      "domain": "compound",
+      "input": {
+        "message": "我有两件事要分开核对：DEMO-1002这笔预售订单的付款金额、包裹状态、运单和预计送达日期；客户端的HTTP 403该从哪些权限项排查？有人说付了款就等于已经发货且接口权限已开通，请说明现有记录能否支持这两个推断，别把建议写成已查明的后台原因。",
+        "history": [],
+        "customer_id": "demo-customer-a"
+      },
+      "expected": {
+        "required_tools": [
+          "read_demo_order",
+          "lookup_error_code"
+        ],
+        "required_facts": [
+          "标明合成演示记录，并保留相应工具返回的数据时间；不能把快照当作真实商家的实时状态。",
+          "PAY-1002为paid、89900分（899元）；SHIP-1002为preorder，tracking_id和estimated_delivery为null。",
+          "lookup_error_code实际读取403的权限不足建议；付款、预售履约与接口权限相互独立，现有记录不证明本次403的具体原因。"
+        ],
+        "missing_facts": [
+          "预售包裹单号、预计送达日期未知；403的本例具体根因未确诊。"
+        ],
+        "forbidden_claims": [
+          "将合成记录或固定快照描述为真实商家的实时业务查询。",
+          "将人民币整数分误写为同数值的元，或用订单价替代未知退款额。",
+          "声称已出库、给出确定到货日，或用付款记录证明权限已正常。"
+        ],
+        "expected_status": "not-prescribed",
+        "tool_task": true,
+        "boundary": false,
+        "rationale": "共享预售订单但首次组合403权限问题。技术诊断与订单事实必须分别由有权限角色真实执行，评分不强制主Agent名称，也不要求某一增强机制或exact模板。缺口须准确说明，状态不硬性指定。"
+      },
+      "references": [
+        {
+          "source": "fixture",
+          "table": "orders",
+          "row_id": "DEMO-1002",
+          "fields": {
+            "customer_id": "demo-customer-a",
+            "payment_status": "paid",
+            "currency": "CNY",
+            "record_updated_at": "2026-10-24T09:10:00Z"
+          }
+        },
+        {
+          "source": "fixture",
+          "table": "payments",
+          "row_id": "PAY-1002",
+          "fields": {
+            "order_id": "DEMO-1002",
+            "amount_minor": 89900,
+            "status": "paid",
+            "record_updated_at": "2026-10-24T09:10:00Z"
+          }
+        },
+        {
+          "source": "fixture",
+          "table": "shipments",
+          "row_id": "SHIP-1002",
+          "fields": {
+            "order_id": "DEMO-1002",
+            "status": "preorder",
+            "tracking_id": null,
+            "estimated_delivery": null,
+            "record_updated_at": "2026-10-24T09:10:00Z"
+          }
+        },
+        {
+          "source": "knowledge",
+          "title": "订单查询",
+          "quote": "支付成功不代表设备已出库，包裹签收不代表订阅已开通。"
+        },
+        {
+          "source": "knowledge",
+          "title": "技术故障排查",
+          "quote": "无法从资料或工具确定原因时，列出已排除项与仍缺信息，提供人工交接摘要，不能声称已经检查服务器日志或修复后台故障。"
+        }
+      ],
+      "related_prior_cases": [
+        "t06",
+        "e04"
+      ],
+      "group": "new_authored_rephrase",
+      "base_case_id": "p09"
+    }
+  ]
+}
