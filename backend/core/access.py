@@ -8,8 +8,8 @@ import os
 def identity(authorization):
     raw = os.getenv('ECHOMIND_API_TOKENS', '').strip()
     if not raw:
-        if os.getenv('ECHOMIND_ENV', 'development') == 'production':
-            raise ValueError('production 模式必须设置 ECHOMIND_API_TOKENS')
+        if os.getenv('ECHOMIND_ENV', 'development').lower() in {'production', 'protected-demo'}:
+            raise ValueError('受保护模式必须设置 ECHOMIND_API_TOKENS')
         return None
     entries = json.loads(raw)
     if not isinstance(entries, dict) or not entries:

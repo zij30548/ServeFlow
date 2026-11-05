@@ -16,6 +16,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -26,7 +27,7 @@ from typing import Any, Dict, List, Optional
 import chromadb
 import redis.asyncio as redis
 from redis.exceptions import WatchError
-from anthropic import AsyncAnthropic
+from core.model_client import AsyncAnthropic
 
 from core.llm_utils import extract_text_content
 from core.provider_options import nonthinking_options
@@ -179,8 +180,11 @@ class MemoryManager:
         raw = await self._redis.get(self.receipt_key(user_id, conv_id, request_id))
         return json.loads(raw) if raw else None
 
-    async def commit_turn(self, user_id, conv_id, request_id, message, response, trace=None, *, state=None):
+    async def commit_turn(self, user_id, conv_id, request_id, message, response, trace=None, *, state=None, trace_owner=None):
         """原子保存一整轮及响应回执；由 conversation 锁保护。"""
+        if trace_owner is not None and (type(trace_owner) is not str or trace_owner != user_id
+                or not trace_owner or len(trace_owner) > 128):
+            raise ValueError("trace_owner_invalid")
         await self._migrate_legacy_keys(user_id, conv_id)
         def raw(role, content):
             return json.dumps({"role": role, "content": self._safe_text(content),
@@ -205,6 +209,8 @@ class MemoryManager:
                 from core.redaction import redact
                 encoded_trace = json.dumps(redact(trace))
                 pipe.setex("trace:" + response["request_id"], 7 * 86400, encoded_trace)
+                if trace_owner is not None:
+                    pipe.setex("trace_owner:" + response["request_id"], 7 * 86400, trace_owner)
                 pipe.lpush("trace:recent", response["request_id"])
                 pipe.ltrim("trace:recent", 0, 199)
             await pipe.execute()
@@ -212,6 +218,20 @@ class MemoryManager:
     async def get_trace(self, request_id):
         raw = await self._redis.get("trace:" + request_id)
         return json.loads(raw) if raw else None
+
+    async def get_trace_for_user(self, request_id, user_id):
+        """Protected demo reads require owner metadata from the same commit.
+
+        Old/unowned records and an expired owner never fall back to the global
+        in-process trace list. One MGET observes both keys together.
+        """
+        if (type(request_id) is not str or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", request_id)
+                or type(user_id) is not str or not user_id or len(user_id) > 128):
+            return None
+        owner, raw = await self._redis.mget(["trace_owner:" + request_id, "trace:" + request_id])
+        if owner != user_id or not raw:
+            return None
+        return json.loads(raw)
 
     async def recent_traces(self, limit):
         keys = await self._redis.lrange("trace:recent", 0, max(1, min(limit, 200))-1)

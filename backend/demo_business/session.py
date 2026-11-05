@@ -34,7 +34,27 @@ def _decode(value: str) -> bytes:
     return base64.b64decode(value + '=' * (-len(value) % 4), altchars=b'-_', validate=True)
 
 
+def _read_key_file():
+    filename = os.getenv('SERVEFLOW_DEMO_SESSION_KEY_FILE', '')
+    if not filename:
+        raise DemoSessionError('demo_session_key_required')
+    path = Path(filename)
+    try:
+        info = path.lstat()
+        if (not path.is_absolute() or not stat.S_ISREG(info.st_mode)
+                or info.st_mode & 0o077 or info.st_uid != os.getuid()
+                or info.st_nlink != 1 or info.st_size != 32):
+            raise OSError()
+        key = path.read_bytes()
+    except OSError:
+        raise DemoSessionError('demo_session_key_invalid') from None
+    return key
+
+
 class DemoSessionService:
+    protected = False
+    cookie_secure = False
+
     def __init__(self, key: bytes, origins: tuple[str, ...], clock=time.time):
         if len(key) != 32 or not origins:
             raise DemoSessionError('demo_session_configuration_invalid')
@@ -60,21 +80,12 @@ class DemoSessionService:
 
     @classmethod
     def from_env(cls):
-        if os.getenv('ECHOMIND_ENV', 'development').lower() == 'production':
+        mode = os.getenv('ECHOMIND_ENV', 'development').lower()
+        if mode == 'production':
             raise DemoSessionError('demo_requires_local_development')
-        filename = os.getenv('SERVEFLOW_DEMO_SESSION_KEY_FILE', '')
-        if not filename:
-            raise DemoSessionError('demo_session_key_required')
-        path = Path(filename)
-        try:
-            info = path.lstat()
-            if (not path.is_absolute() or not stat.S_ISREG(info.st_mode)
-                    or info.st_mode & 0o077 or info.st_uid != os.getuid()
-                    or info.st_nlink != 1 or info.st_size != 32):
-                raise OSError()
-            key = path.read_bytes()
-        except OSError:
-            raise DemoSessionError('demo_session_key_invalid') from None
+        if mode == 'protected-demo':
+            return ProtectedDemoSessionService(_read_key_file(), os.getenv('SERVEFLOW_DEMO_PUBLIC_ORIGIN', ''))
+        key = _read_key_file()
         origins = tuple(os.getenv('SERVEFLOW_DEMO_ORIGINS', '').split(','))
         return cls(key, origins)
 
@@ -126,3 +137,74 @@ class DemoSessionService:
 
     def workspace_id(self, claims):
         return 'sf_demo_' + claims['sid']
+
+
+class ProtectedDemoSessionService(DemoSessionService):
+    """HTTPS demo browser session bound to an authenticated proxy visitor.
+
+    v1 localhost cookies do not verify here, even if an operator reuses the key.
+    Visitor names are not returned or written into cookies; an HMAC binds them.
+    """
+    protected = True
+    cookie_secure = True
+
+    def __init__(self, key: bytes, origin: str, clock=time.time):
+        from core.protected_demo import public_origin, ProtectedDemoError
+        if type(key) is not bytes or len(key) != 32:
+            raise DemoSessionError('demo_session_configuration_invalid')
+        try:
+            origin = public_origin(origin)
+        except ProtectedDemoError:
+            raise DemoSessionError('demo_session_origin_invalid') from None
+        self._key, self.origins, self._clock = key, (origin,), clock
+
+    def _owner(self, principal):
+        from core.protected_demo import VISITOR_PATTERN
+        if type(principal) is not str or not VISITOR_PATTERN.fullmatch(principal):
+            raise DemoSessionError('demo_session_identity_invalid')
+        return hmac.digest(self._key, ('protected-demo-owner-v2:' + self.origins[0] + ':' + principal).encode(), 'sha256').hex()
+
+    def _signature(self, body):
+        return hmac.digest(self._key, ('protected-demo-session-v2:' + self.origins[0] + ':' + body).encode(), 'sha256')
+
+    def issue(self, customer_id='demo-customer-a', *, principal):
+        if customer_id not in {'demo-customer-a', 'demo-customer-b'}:
+            raise DemoSessionError('demo_customer_invalid')
+        now = int(self._clock())
+        claims = {'v': 2, 'sid': secrets.token_hex(16), 'customer': customer_id,
+                  'iat': now, 'exp': now + LIFETIME, 'owner': self._owner(principal)}
+        body = _encode(json.dumps(claims, sort_keys=True, separators=(',', ':')).encode())
+        return body + '.' + _encode(self._signature(body)), claims
+
+    def read(self, token, *, principal):
+        expected_owner = self._owner(principal)
+        if not token:
+            raise DemoSessionError('demo_session_required')
+        try:
+            if type(token) is not str or len(token) > 1024:
+                raise ValueError
+            body, signature = token.split('.')
+            if not hmac.compare_digest(_decode(signature), self._signature(body)):
+                raise ValueError
+            claims = json.loads(_decode(body))
+            if (type(claims) is not dict or set(claims) != {'v', 'sid', 'customer', 'iat', 'exp', 'owner'}
+                    or type(claims['v']) is not int or claims['v'] != 2
+                    or type(claims['sid']) is not str or not re.fullmatch('[a-f0-9]{32}', claims['sid'])
+                    or claims['customer'] not in {'demo-customer-a', 'demo-customer-b'}
+                    or type(claims['iat']) is not int or type(claims['exp']) is not int
+                    or claims['exp'] != claims['iat'] + LIFETIME
+                    or claims['iat'] > self._clock() + 30
+                    or type(claims['owner']) is not str or not re.fullmatch('[a-f0-9]{64}', claims['owner'])
+                    or not hmac.compare_digest(claims['owner'], expected_owner)):
+                raise ValueError
+            if claims['exp'] <= self._clock():
+                raise DemoSessionError('demo_session_expired')
+            return claims
+        except DemoSessionError:
+            raise
+        except (ValueError, TypeError, KeyError, UnicodeError):
+            raise DemoSessionError('demo_session_invalid') from None
+
+    def csrf(self, claims):
+        return _encode(hmac.digest(self._key, ('protected-demo-csrf-v2:' + self.origins[0] + ':'
+            + claims['sid'] + ':' + claims['owner']).encode(), 'sha256'))

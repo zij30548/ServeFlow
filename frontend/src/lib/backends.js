@@ -143,6 +143,7 @@ export async function requestChat(type, settings, message, options = {}) {
     const safe = new Error(chatFailureMessage(error))
     safe.status = error.status
     safe.name = error.name
+    safe.responseBody = { error_code: demoFailureCode(error) }
     throw safe
   }
 
@@ -167,7 +168,20 @@ function boundedSignal(signal, timeout) {
   return signal ? AbortSignal.any([signal, deadline]) : deadline
 }
 
+const DEMO_FAILURES = Object.freeze({
+  demo_model_quota_exhausted: '演示模型调用额度已用完，请联系管理员；等待不会自动恢复额度，不会自动重试。',
+  demo_model_quota_unavailable: '演示计数服务暂不可用，已停止新的模型请求；请联系管理员核查，不会自动重试。',
+  demo_model_request_rejected: '本次模型请求未通过演示环境校验，已停止处理；不会自动重试。',
+  demo_model_provider_unavailable: '模型服务本次未取得有效结果；已发送请求可能仍计费，不会自动重试。'
+})
+function demoFailureCode(error) {
+  const code = error?.responseBody?.error_code || error?.responseBody?.detail
+  return typeof code === 'string' && Object.hasOwn(DEMO_FAILURES, code) ? code : null
+}
+
 export function chatFailureMessage(error) {
+  const code = demoFailureCode(error)
+  if (code) return DEMO_FAILURES[code]
   if ([401, 403, 428].includes(error?.status)) return '当前会话已失效，请重新读取演示身份。'
   if (error?.status === 429) return '请求过于频繁，请稍后再试；不会自动重试。'
   if (['AbortError', 'TimeoutError'].includes(error?.name) || error?.status === 504) {

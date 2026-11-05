@@ -39,6 +39,12 @@ TABLE_COLUMNS = {
     "entitlements": ("entitlement_id", "order_id", "status", "package_name", "auto_renew", "expires_at", "record_updated_at"),
     "refunds": ("refund_id", "order_id", "status", "amount_minor", "record_updated_at"),
 }
+def _allowed_hosts():
+    # A fixed Compose service name is permitted only by the explicit perimeter
+    # mode. Ordinary local/production callers retain the original loopback set.
+    return {"127.0.0.1", "localhost", "mysql"} if os.getenv("ECHOMIND_ENV", "development").lower() == "protected-demo" else {"127.0.0.1", "localhost"}
+
+
 TABLE_PREFIX = "sf_demo_"
 MAX_RELATED_ROWS = 12
 
@@ -60,7 +66,7 @@ class DemoDatabaseConfig:
     password: str = field(repr=False)
 
     def __post_init__(self):
-        if (self.host not in {"127.0.0.1", "localhost"}
+        if (self.host not in _allowed_hosts()
                 or type(self.port) is not int or not 1 <= self.port <= 65535
                 or not isinstance(self.database, str) or not DATABASE_PATTERN.fullmatch(self.database)
                 or not isinstance(self.username, str) or not self.username
@@ -75,7 +81,7 @@ class DemoDatabaseConfig:
             parsed = urlsplit(value)
             database = unquote(parsed.path.removeprefix("/"))
             if (parsed.scheme not in {"mysql", "mysql+pymysql"}
-                    or parsed.hostname not in {"127.0.0.1", "localhost"}
+                    or parsed.hostname not in _allowed_hosts()
                     or parsed.query or parsed.fragment
                     or not parsed.username
                     or not DATABASE_PATTERN.fullmatch(database)):

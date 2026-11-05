@@ -29,7 +29,8 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
-from anthropic import APITimeoutError, AsyncAnthropic
+from anthropic import APITimeoutError
+from core.model_client import AsyncAnthropic
 
 from agents.tools import (
     AgentToolSpec,

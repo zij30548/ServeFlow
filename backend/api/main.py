@@ -34,6 +34,8 @@ logging.basicConfig(
     level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")),
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
+from core.protected_demo import configure_protected_logging
+configure_protected_logging()
 logger = logging.getLogger(__name__)
 
 BANNER = "ServeFlow · Customer Service Runtime"
@@ -75,11 +77,18 @@ async def lifespan(app: FastAPI):
 
     from core.access import identity
     identity("")  # 启动时验证生产鉴权配置
+    from core.protected_demo import ProtectedDemoConfig
+    protected = ProtectedDemoConfig.from_env()
+    if protected is not None:
+        from core.protected_demo_quota import verify
+        verify()  # Exhausted demos still start their read-only health/monitor.
     # Optional, isolated demo data; no DDL or seeding in the web process.
     from demo_business.store import DemoBusinessStore
     from demo_business.session import DemoSessionService
     _demo_store = DemoBusinessStore.from_env()
     _demo_sessions = DemoSessionService.from_env() if _demo_store is not None else None
+    if protected is not None and (_demo_store is None or _demo_sessions is None):
+        raise RuntimeError("protected_demo_business_configuration_required")
     print(BANNER, flush=True)
 
     from agents.agent_orchestrator import AgentOrchestrator, Request, build_shared_rag_tools
@@ -264,13 +273,19 @@ app.add_middleware(
 @app.middleware("http")
 async def access_control(request: HTTPRequest, call_next):
     from core.access import identity
+    from core.protected_demo import ProtectedDemoConfig, ProtectedDemoError, authorize_proxy
     from fastapi.responses import JSONResponse
     try:
+        protected = ProtectedDemoConfig.from_env()
         account = identity(request.headers.get("authorization", ""))
+        request.state.protected_demo = protected is not None
+        request.state.protected_demo_user = authorize_proxy(request, account, protected) if protected is not None else None
+    except ProtectedDemoError as error:
+        return JSONResponse({"detail": error.code}, status_code=error.status_code)
     except (ValueError, TypeError):
         return JSONResponse({"detail": "服务鉴权配置无效"}, status_code=503)
     request.state.account = account
-    if account is not None and request.url.path != "/health" and request.method != "OPTIONS":
+    if protected is None and account is not None and request.url.path != "/health" and request.method != "OPTIONS":
         if not account:
             return JSONResponse({"detail": "需要有效 Bearer Token"}, status_code=401)
         reader = request.url.path in {"/chat", "/search", "/knowledge/stats", "/skills", "/mcp", "/mcp/"}
@@ -280,7 +295,15 @@ async def access_control(request: HTTPRequest, call_next):
     started = time.monotonic()
     if is_chat and _monitor is not None and "requests_total" in _monitor._prom:
         _monitor._prom["requests_total"].inc()
-    response = await call_next(request)
+    if protected is not None:
+        from core.protected_demo_quota import request_scope, ProtectedDemoQuotaError
+        try:
+            with request_scope():
+                response = await call_next(request)
+        except ProtectedDemoQuotaError as error:
+            return JSONResponse({"detail": error.code, "error_code": error.code}, status_code=error.status_code)
+    else:
+        response = await call_next(request)
     if is_chat:
         elapsed = (time.monotonic() - started) * 1000
         response.headers["Server-Timing"] = f"chat;dur={elapsed:.1f}"
@@ -364,7 +387,11 @@ def _require_demo_session(request: HTTPRequest, unsafe=False):
     if _demo_store is None or _demo_sessions is None:
         raise HTTPException(404, 'demo_not_enabled')
     try:
-        claims = _demo_sessions.read(request.cookies.get(COOKIE_NAME))
+        protected = bool(getattr(request.state, "protected_demo", False))
+        if protected != bool(getattr(_demo_sessions, "protected", False)):
+            raise HTTPException(503, 'demo_session_mode_mismatch')
+        kwargs = {"principal": request.state.protected_demo_user} if protected else {}
+        claims = _demo_sessions.read(request.cookies.get(COOKIE_NAME), **kwargs)
         if unsafe:
             _demo_sessions.verify_write(claims, request.headers.get('origin'),
                                         request.headers.get('x-serveflow-demo-csrf'))
@@ -382,13 +409,17 @@ async def demo_session(request: HTTPRequest, response: Response):
     origin = request.headers.get('origin')
     if request.headers.get('sec-fetch-site') == 'cross-site' or (origin and origin not in _demo_sessions.origins):
         raise HTTPException(403, 'demo_origin_rejected')
+    protected = bool(getattr(request.state, "protected_demo", False))
+    if protected != bool(getattr(_demo_sessions, "protected", False)):
+        raise HTTPException(503, 'demo_session_mode_mismatch')
+    kwargs = {"principal": request.state.protected_demo_user} if protected else {}
     token = request.cookies.get(COOKIE_NAME)
     try:
-        claims = _demo_sessions.read(token)
+        claims = _demo_sessions.read(token, **kwargs)
     except DemoSessionError:
-        token, claims = _demo_sessions.issue()
+        token, claims = _demo_sessions.issue(**kwargs)
         response.set_cookie(COOKIE_NAME, token, max_age=LIFETIME, httponly=True,
-                            secure=False, samesite='strict', path='/')
+                            secure=_demo_sessions.cookie_secure, samesite='strict', path='/')
     response.headers['Cache-Control'] = 'no-store'
     return {
         'enabled': True, 'is_demo': True,
@@ -423,7 +454,13 @@ async def chat(req: ChatRequest, http_request: HTTPRequest):
     if _orchestrator is None or _memory is None:
         raise HTTPException(503, "服务未就绪")
 
-    demo_claims = _require_demo_session(http_request, unsafe=True) if _demo_store is not None else None
+    protected = bool(getattr(http_request.state, "protected_demo", False))
+    demo_claims = _require_demo_session(http_request, unsafe=True) if _demo_store is not None or protected else None
+    if protected:
+        from core.protected_demo_quota import ensure_available, raise_if_request_blocked
+        if req.conv_id is not None and (type(req.conv_id) is not str or len(req.conv_id) > 128
+                or req.conv_id and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", req.conv_id)):
+            raise HTTPException(400, "protected_demo_conversation_invalid")
 
     account = getattr(http_request.state, "account", None)
     if account:
@@ -452,6 +489,8 @@ async def chat(req: ChatRequest, http_request: HTTPRequest):
                 previous = ChatResponse(**receipt["response"])
                 if previous.status != "failed" or not previous.retryable:
                     return render(previous)
+            if protected:
+                ensure_available()  # A cached receipt does not need a new send permit.
             # 1. 读取记忆上下文
             mem_ctx = await _memory.get_context(req.user_id, conv_id, query=req.message)
 
@@ -466,6 +505,8 @@ async def chat(req: ChatRequest, http_request: HTTPRequest):
                              if callable(references) else history)
 
             intent_result = await _orchestrator.recognize_intent(req.message, history=history)
+            if protected:
+                raise_if_request_blocked()
             full_context = mem_ctx.to_prompt_text()
 
             orch_req = OrcReq(
@@ -497,6 +538,8 @@ async def chat(req: ChatRequest, http_request: HTTPRequest):
 
             # 3. 执行
             result = await _orchestrator.run(orch_req)
+            if protected:
+                raise_if_request_blocked()
 
             response = ChatResponse(
                 conv_id=conv_id,
@@ -522,8 +565,12 @@ async def chat(req: ChatRequest, http_request: HTTPRequest):
                 retryable=result.retryable,
                 error_code=result.error_code,
             )
+            commit_options = {"state": orch_req.conversation_state}
+            if protected:
+                raise_if_request_blocked()
+                commit_options["trace_owner"] = req.user_id
             await _memory.commit_turn(req.user_id, conv_id, client_id, req.message, response.model_dump(),
-                                      _orchestrator.get_tool_trace(result.request_id), state=orch_req.conversation_state)
+                                      _orchestrator.get_tool_trace(result.request_id), **commit_options)
             if response.status != "failed" and _profile_updater is not None:
                 _profile_updater.submit(req.user_id, conv_id)
             return render(response)
@@ -534,20 +581,29 @@ async def chat(req: ChatRequest, http_request: HTTPRequest):
 
 
 @app.get("/monitor")
-async def monitor_summary():
+async def monitor_summary(request: HTTPRequest):
     """实时监控摘要：Agent 成功率、工具统计、告警、优化建议。"""
     if _monitor is None:
         raise HTTPException(503, "服务未就绪")
-    return _monitor.summary()
+    snapshot = _monitor.summary()
+    if bool(getattr(request.state, "protected_demo", False)):
+        from core.protected_demo import monitor_snapshot
+        return monitor_snapshot(snapshot)
+    return snapshot
 
 
 @app.get("/trace/tool/{request_id}", response_model=ToolTraceResponse)
-async def get_tool_trace(request_id: str):
+async def get_tool_trace(request_id: str, request: HTTPRequest):
     """查看某次请求的工具调用明细。"""
+    protected = bool(getattr(request.state, "protected_demo", False))
+    claims = _require_demo_session(request) if protected else None
     if _orchestrator is None:
         raise HTTPException(503, "服务未就绪")
-    trace = await _memory.get_trace(request_id) if _memory else None
-    trace = trace or _orchestrator.get_tool_trace(request_id)
+    if protected:
+        trace = await _memory.get_trace_for_user(request_id, _demo_sessions.workspace_id(claims)) if _memory else None
+    else:
+        trace = await _memory.get_trace(request_id) if _memory else None
+        trace = trace or _orchestrator.get_tool_trace(request_id)
     return ToolTraceResponse(
         request_id=request_id,
         found=trace is not None,

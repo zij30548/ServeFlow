@@ -1,0 +1,200 @@
+name: serveflow-customer-demo
+
+x-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: "2m"
+    max-file: "3"
+
+x-api-base: &api-base
+  image: serveflow-customer-demo-api:local
+  platform: linux/amd64
+  build:
+    context: ../..
+    dockerfile: deploy/demo/Dockerfile.api
+  read_only: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  # Used only by the short bootstrap; setuid clears process capabilities.
+  cap_add:
+    - CHOWN
+    - SETUID
+    - SETGID
+    - DAC_OVERRIDE
+  tmpfs:
+    - /run/serveflow:rw,nosuid,nodev,noexec,size=4m,mode=0700
+    - /tmp:rw,nosuid,nodev,noexec,size=64m,mode=1777
+  volumes:
+    - app_data:/var/lib/serveflow
+  logging: *bounded-logging
+  pids_limit: 128
+  mem_limit: 1g
+  cpus: 1.0
+
+services:
+  web:
+    image: serveflow-customer-demo-web:local
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: deploy/demo/Dockerfile.web
+    command: ["web"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      DEMO_PUBLIC_ORIGIN: ${DEMO_PUBLIC_ORIGIN:?set the reviewed HTTPS origin}
+    secrets:
+      - gateway_config
+      - demo_htpasswd
+    networks:
+      - gateway
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    tmpfs:
+      - /run/serveflow:rw,nosuid,nodev,noexec,size=4m,mode=0700
+      - /tmp:rw,nosuid,nodev,noexec,size=16m,mode=1777
+    healthcheck:
+      test: ["CMD", "python3", "-B", "/opt/serveflow/deploy/demo/runtime.py", "web-health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *bounded-logging
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.5
+
+  api:
+    <<: *api-base
+    command: ["api"]
+    restart: unless-stopped
+    environment:
+      DEMO_PUBLIC_ORIGIN: ${DEMO_PUBLIC_ORIGIN:?set the reviewed HTTPS origin}
+    secrets:
+      - api_config
+    networks:
+      - gateway
+      - data
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-B", "/opt/serveflow/deploy/demo/runtime.py", "api-health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+
+  redis:
+    image: redis:7.4.2-alpine
+    platform: linux/amd64
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory", "128mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    logging: *bounded-logging
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 0.5
+
+  mysql:
+    image: mysql:8.4.4
+    platform: linux/amd64
+    restart: unless-stopped
+    command:
+      - --mysqlx=OFF
+      - --skip-log-bin
+      - --partial-revokes=ON
+      - --innodb-buffer-pool-size=128M
+      - --max-connections=20
+      - --performance-schema=OFF
+      - --local-infile=OFF
+      - --skip-name-resolve
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+      # Only the isolated tools service receives this credential. No host port.
+      MYSQL_ROOT_HOST: "%"
+    secrets:
+      - mysql_root_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - data
+    healthcheck:
+      # Liveness only. Authentication/schema/grants are verified by explicit ops.
+      # No password is interpolated into shell, argv or healthcheck output.
+      test: ["CMD", "mysqladmin", "ping", "--host=127.0.0.1", "--silent"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 60s
+    security_opt:
+      - no-new-privileges:true
+    logging: *bounded-logging
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1.0
+
+  ops:
+    <<: *api-base
+    profiles: ["tools"]
+    command: ["verify"]
+    restart: "no"
+    environment:
+      DEMO_PUBLIC_ORIGIN: ${DEMO_PUBLIC_ORIGIN:?set the reviewed HTTPS origin}
+    secrets:
+      - api_config
+      - mysql_root_password
+    networks:
+      - data
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+networks:
+  gateway:
+    driver: bridge
+  data:
+    driver: bridge
+    internal: true
+
+volumes:
+  app_data:
+  redis_data:
+  mysql_data:
+
+secrets:
+  api_config:
+    file: ${DEMO_PRIVATE_DIR:?set the absolute private directory}/api.json
+  gateway_config:
+    file: ${DEMO_PRIVATE_DIR:?set the absolute private directory}/gateway.json
+  demo_htpasswd:
+    file: ${DEMO_PRIVATE_DIR:?set the absolute private directory}/htpasswd
+  mysql_root_password:
+    file: ${DEMO_PRIVATE_DIR:?set the absolute private directory}/mysql-root-password

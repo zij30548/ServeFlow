@@ -1,0 +1,71 @@
+pid /run/serveflow/nginx.pid;
+error_log /dev/stderr crit;
+worker_processes 1;
+events { worker_connections 256; }
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    charset utf-8;
+    access_log off;
+    server_tokens off;
+    client_body_temp_path /tmp/client_body;
+    proxy_temp_path /tmp/proxy;
+    # One explicit public origin. Never forward an arbitrary client upstream.
+    map $http_host $demo_host_allowed { default 0; "__PUBLIC_AUTHORITY__" 1; }
+    map "$request_method:$uri" $demo_route_allowed {
+        default 0;
+        "GET:/api/python/health" 1;
+        "GET:/api/python/demo/session" 1;
+        "GET:/api/python/monitor" 1;
+        "POST:/api/python/chat" 1;
+        "~^GET:/api/python/demo/orders/DEMO-[0-9]{4}$" 1;
+        "~^GET:/api/python/trace/tool/[A-Za-z0-9_-]{1,128}$" 1;
+    }
+    limit_req_zone $remote_user zone=demo_visitor:1m rate=2r/m;
+    limit_req_zone $server_name zone=demo_global:1m rate=6r/m;
+    limit_conn_zone $server_name zone=demo_chat:1m;
+    server {
+        listen 8080;
+        server_name __PUBLIC_HOST__;
+        if ($demo_host_allowed = 0) { return 421; }
+        root /usr/share/nginx/html;
+        auth_basic "Protected customer demonstration";
+        auth_basic_user_file /run/serveflow/htpasswd;
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy no-referrer always;
+        add_header X-Frame-Options DENY always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+        client_max_body_size 64k;
+        client_header_timeout 15s;
+        client_body_timeout 30s;
+        keepalive_timeout 20s;
+        limit_req_status 429;
+        limit_conn_status 429;
+        error_page 429 = @limited;
+        location @limited {
+            default_type application/json;
+            add_header Retry-After 30 always;
+            return 429 '{"detail":"demo_rate_limited","error_code":"demo_rate_limited"}';
+        }
+        location = /api/python/chat {
+            if ($request_method != POST) { return 403; }
+            if ($args != "") { return 400; }
+            limit_req zone=demo_visitor burst=1 nodelay;
+            limit_req zone=demo_global burst=1 nodelay;
+            limit_conn demo_chat 1;
+            include /run/serveflow/proxy.inc;
+            proxy_pass http://api:8816/chat;
+        }
+        location ^~ /api/ {
+            if ($demo_route_allowed = 0) { return 403; }
+            if ($args != "") { return 400; }
+            include /run/serveflow/proxy.inc;
+            rewrite ^/api/python(/.*)$ $1 break;
+            proxy_pass http://api:8816;
+        }
+        location / {
+            limit_except GET HEAD { deny all; }
+            try_files $uri $uri/ /index.html;
+        }
+    }
+}

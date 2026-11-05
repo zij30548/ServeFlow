@@ -22,7 +22,7 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from anthropic import AsyncAnthropic
+from core.model_client import AsyncAnthropic
 
 from core.llm_utils import extract_text_content
 from core.provider_options import nonthinking_options

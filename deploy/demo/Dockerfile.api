@@ -1,0 +1,67 @@
+# syntax=docker/dockerfile:1
+# Build Linux dependencies inside the target image. Never copy a host .venv.
+FROM python:3.12.14-slim-bookworm AS dependencies
+ENV PYTHONDONTWRITEBYTECODE=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY backend/requirements.txt backend/requirements-demo.txt /tmp/requirements/
+RUN python -m venv /opt/venv \
+    && /opt/venv/bin/python -m pip install --no-cache-dir \
+       -r /tmp/requirements/requirements.txt -r /tmp/requirements/requirements-demo.txt \
+    && /opt/venv/bin/python -m pip freeze --all > /opt/requirements-resolved.txt
+
+FROM python:3.12.14-slim-bookworm AS model-cache
+ENV PYTHONDONTWRITEBYTECODE=1
+COPY deploy/demo/model_cache.py /opt/serveflow/deploy/demo/model_cache.py
+# This downloads only the fixed, hash-bound portable MiniLM files; no paid API.
+RUN python -B /opt/serveflow/deploy/demo/model_cache.py fetch \
+    /opt/serveflow/model-cache/onnx_models/all-MiniLM-L6-v2
+
+FROM python:3.12.14-slim-bookworm AS runtime
+ENV PATH=/opt/venv/bin:$PATH \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    ORT_DISABLE_TELEMETRY=1 \
+    HOME=/home/serveflow \
+    TOKENIZERS_PARALLELISM=false \
+    OMP_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates libgomp1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 serveflow \
+    && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin serveflow \
+    && mkdir -p /home/serveflow/.cache /var/lib/serveflow \
+    && ln -s /opt/serveflow/model-cache /home/serveflow/.cache/chroma
+COPY --from=dependencies /opt/venv /opt/venv
+COPY --from=dependencies /opt/requirements-resolved.txt /opt/serveflow/requirements-resolved.txt
+COPY --from=model-cache /opt/serveflow/model-cache /opt/serveflow/model-cache
+WORKDIR /opt/serveflow/backend
+COPY backend/api ./api
+COPY backend/agents ./agents
+COPY backend/config ./config
+COPY backend/core ./core
+COPY backend/demo_business ./demo_business
+COPY backend/evaluation ./evaluation
+COPY backend/knowledge ./knowledge
+COPY backend/memory ./memory
+COPY backend/monitor ./monitor
+COPY backend/skills ./skills
+COPY backend/tooling ./tooling
+COPY deploy/demo/runtime.py deploy/demo/settings.py deploy/demo/model_cache.py /opt/serveflow/deploy/demo/
+COPY LICENSE NOTICE.md /opt/serveflow/
+COPY deploy/demo/licenses /opt/serveflow/third-party-licenses
+# Public code only, inside this image. find does not follow symbolic links.
+# A restrictive checkout umask must not make root-owned code unreadable after
+# privilege drop. Never normalize host files, secrets, data, venv or model files.
+RUN find /opt/serveflow/backend /opt/serveflow/deploy -type d -exec chmod 0755 {} + \
+    && find /opt/serveflow/backend /opt/serveflow/deploy -type f -exec chmod 0644 {} + \
+    && find /opt/serveflow/third-party-licenses -type d -exec chmod 0755 {} + \
+    && find /opt/serveflow/third-party-licenses -type f -exec chmod 0644 {} + \
+    && chmod 0644 /opt/serveflow/LICENSE /opt/serveflow/NOTICE.md
+EXPOSE 8816
+# Root is only the private-secret/data-root bootstrap. runtime.py must drop to
+# UID/GID 10001 before importing or serving the application. No host data mounts.
+ENTRYPOINT ["python", "-B", "/opt/serveflow/deploy/demo/runtime.py"]
+CMD ["api"]

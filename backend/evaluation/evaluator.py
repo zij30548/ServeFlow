@@ -27,7 +27,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from anthropic import AsyncAnthropic
+from core.model_client import AsyncAnthropic
 
 from core.llm_utils import extract_text_content
 from core.provider_options import nonthinking_options

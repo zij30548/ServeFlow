@@ -1,0 +1,25 @@
+# syntax=docker/dockerfile:1
+FROM node:24.22.0-bookworm-slim AS frontend-build
+WORKDIR /build/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/index.html frontend/vite.config.js ./
+COPY frontend/src ./src
+COPY frontend/public ./public
+RUN npm run build
+
+FROM nginx:1.28.1-alpine AS runtime
+# stdlib-only bootstrap reads gateway secrets and execs Nginx as UID/GID 101.
+# It never receives a model key or any MySQL credential.
+RUN apk add --no-cache python3
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+COPY --from=frontend-build /build/frontend/dist /usr/share/nginx/html
+COPY deploy/demo/runtime.py deploy/demo/settings.py deploy/demo/nginx.conf.template /opt/serveflow/deploy/demo/
+COPY LICENSE NOTICE.md /opt/serveflow/
+# Only the image's public bootstrap/templates; no host or private-data changes.
+RUN find /opt/serveflow/deploy -type d -exec chmod 0755 {} + \
+    && find /opt/serveflow/deploy -type f -exec chmod 0644 {} + \
+    && chmod 0644 /opt/serveflow/LICENSE /opt/serveflow/NOTICE.md
+EXPOSE 8080
+ENTRYPOINT ["python3", "-B", "/opt/serveflow/deploy/demo/runtime.py"]
+CMD ["web"]

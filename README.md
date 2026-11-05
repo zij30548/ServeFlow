@@ -2,7 +2,7 @@
 
 面向复杂客服任务的多Agent协作系统。用户通过对话咨询，系统识别诉求、选择处理角色，按需查阅政策或读取业务工具，并展示处理结果。前端只有**对话**与**监控**两个工作界面。
 
-当前项目已替换原TripPilot旅行应用。它是客服开发／演示项目，尚不具备直接公开给真实客户使用的完整生产安全条件。
+当前项目已替换原TripPilot旅行应用。它是客服开发／演示项目。现已准备[受保护客户演示部署](#受保护客户演示部署)，不开放真实商家交易或公众注册；Linux容器与服务器验证尚待执行，不能直接当作公开生产系统。
 
 ## 功能
 
@@ -85,7 +85,7 @@ npm run dev
 
 打开 **http://127.0.0.1:5173/**。浏览器通过同源`/api/python`访问后端；开发代理默认指向回环8816。如需更改，使用可信服务端变量`SERVEFLOW_BACKEND_ORIGIN`，不要把密钥写入前端变量或运行时配置。
 
-选择快捷问题只填写输入框，主动发送才进入模型链路。分类、Agent、检索改写／重排和后台记忆都可能产生模型费用；没有完整产品级硬额度，部署者须另行配置费用保护。
+选择快捷问题只填写输入框，主动发送才进入模型链路。分类、Agent、检索改写／重排和后台记忆都可能产生模型费用。本地开发模式没有产品级硬额度；下面的受保护演示模式另有持久发送许可上限，不能把它当作通用生产计费系统。
 
 ### 可选MySQL演示
 
@@ -104,6 +104,81 @@ uv pip install --python .venv/bin/python -r requirements-demo.txt
 初始化使用专用管理员连接；Web连接只授予该库SELECT。配置签名密钥文件及精确本机来源后，页面显示可折叠的演示数据入口。没有配置则功能关闭，不会自动建库。已有数据只验证，不覆盖或重置；DDL失败／提交结果不明时停止检查，不盲目重跑。
 
 合成客户A／B及演示Cookie只用于本机样例，不能代替真实客户登录与业务授权。演示记录具有固定快照时间，不能声称查到实时商家物流。
+
+## 受保护客户演示部署
+
+目标是邀请少量客户查看**合成客服数据**，不是开放注册平台。新增的[Compose配置](deploy/demo/compose.yaml)使用独立MySQL、Redis、嵌入式Chroma、FastAPI与静态Vue/Nginx。无需恢复应用登录／注册界面，访问者使用浏览器的访问密码。每位受邀者使用不同用户名，演示Cookie还区分浏览器会话；这不是真实商户账号、企业租户或订单授权体系。
+
+### 保护范围
+
+- 全站由Nginx Basic Auth保护，必须从精确配置的HTTPS来源访问。浏览器不会获得模型密钥、数据库密码或后端Bearer。服务端把访问者身份与随机会话绑定，Cookie为Secure、HttpOnly、SameSite Strict；写请求仍校验Origin与CSRF。
+- 只开放聊天、自己的合成订单／单条工具追踪及不含对话正文的汇总监控。知识写入、管理、评测、热加载和文档接口在网关、后端双重拒绝；外部MCP、Webhook和远程Embedding关闭。
+- 只发布`127.0.0.1:8080`，由宿主HTTPS站点转发；API、MySQL和Redis不映射宿主端口。API/Web完成读取私密配置的短bootstrap后降权运行，源码只读。私密配置不能作为前端构建参数。
+- 网关聊天限流：每访问用户名2次／分钟、全局6次／分钟、各允许1次突发，同时最多1个聊天连接。这是入口频率保护，不代表一次聊天只有一次模型请求。
+- 受保护API运行链路的模型步骤，包括分类、检索、角色、合并及后台记忆，共用**生命周期发送许可**。默认100，创建配置时可选1–1000；每次实际网络发送前文件锁下持久占额，SDK重试关闭。已发送失败、取消、不确定结果及已占额但确认未发送均不自动返额；未完成记录或计数故障阻止新增发送。不是每日额度、每账号额度或精确人民币成本上限，不会因等一会儿、重启或重新初始化而恢复。已提交成功回执在耗尽后仍能读取。保留的离线研究CLI不属于对客入口，不应交给访客或用演示凭据另行运行。
+- 保护模式的标准Python日志只保留安全事件，不保留模型正文／用户正文／凭据；第三方原生库stderr仍须在Linux验收中核对。Docker日志轮转每服务2MiB×3。合成对话仍会保存在私有Redis/Chroma卷中，不能输入真实客户隐私。
+
+### 准备与启动（由部署者执行）
+
+需要Linux x86_64、Docker Engine与Compose v2、宿主HTTPS入口及已验证的证书。以下只是执行说明，本次没有连接或修改云服务器；不要覆盖旧TripPilot站点、服务或数据。四个常驻服务的内存上限合计约1.875GiB，尚未实测峰值；旧1.6GiB主机能否承载仍须验证，不能只凭Swap判断足够。
+
+1. 在目标机安装`apache2-utils`以提供`htpasswd`，准备代码目录外、仅管理员可读的配置。命令交互读取访问密码与百炼密钥，不在参数、历史或文档填写密钥。`/opt/serveflow-demo`须先由管理员创建并交给操作用户，`private`须不存在。
+
+   ```sh
+   python3 -B deploy/demo/configure.py init \
+     --directory /opt/serveflow-demo/private \
+     --origin https://demo.example.com --username presenter --model-limit 100
+   python3 -B deploy/demo/configure.py check --directory /opt/serveflow-demo/private
+   ```
+
+   将示例域名换成自己的真实HTTPS域名；北京业务空间地址可通过`--model-origin`显式指定。只允许北京官方Anthropic兼容地址，模型仍固定当前Flash；此命令不验证凭据有效性，也不发送模型请求。生成四个0600文件，目录0700；已有或不完整配置会停止，不自动覆盖。不要复制项目现有`.env`或数据库。
+
+2. 使用显式变量，禁止让Compose自动读取工作区`.env`。先核对配置，再在Linux内构建原生依赖和前端；镜像不复制Mac虚拟环境或构建。固定官方本地向量模型在构建时下载并核验归档及六文件SHA256，运行时不自动下载。构建需要访问软件源，不是模型或业务API验收。
+
+   ```sh
+   export DEMO_PRIVATE_DIR=/opt/serveflow-demo/private
+   export DEMO_PUBLIC_ORIGIN=https://demo.example.com
+   docker compose --env-file /dev/null -f deploy/demo/compose.yaml config --quiet
+   docker compose --env-file /dev/null -f deploy/demo/compose.yaml build
+   docker compose --env-file /dev/null -f deploy/demo/compose.yaml up -d mysql redis
+   ```
+
+3. 显式初始化**全新的合成演示库和发送许可**，再启动应用。MySQL root密钥只交给MySQL与一次性ops，不交给常驻API；API只有该库SELECT权限。已有业务库只验证，不重新导入、分配或重置密码；初始化中断须检查，不能删卷重来。
+
+   ```sh
+   docker compose --env-file /dev/null -f deploy/demo/compose.yaml --profile tools run --rm ops init
+   docker compose --env-file /dev/null -f deploy/demo/compose.yaml --profile tools run --rm ops quota-init
+   docker compose --env-file /dev/null -f deploy/demo/compose.yaml --profile tools run --rm ops verify
+   docker compose --env-file /dev/null -f deploy/demo/compose.yaml up -d api web
+   docker compose --env-file /dev/null -f deploy/demo/compose.yaml ps
+   docker compose --env-file /dev/null -f deploy/demo/compose.yaml --profile tools run --rm ops quota-status
+   ```
+
+   使用固定Compose项目名`serveflow-customer-demo`的三个独立卷，不挂载用户旧库。正常重启保留卷与额度。**禁止`down -v`、删除usage或恢复旧额度目录来获得新许可。**修改许可配置也不能绕过已初始化记录的一致性检查。
+
+4. 由管理员审阅[宿主TLS模板](deploy/demo/host-tls.conf.example)，换域名与证书路径，确认无端口／站点冲突后单独安装、检查并reload。证书签发和服务器操作不在此次交付内。未就绪前不要开放HTTP或将8080改绑公网。
+
+   ```sh
+   curl --head https://demo.example.com/  # 未认证应401
+   curl --user presenter https://demo.example.com/api/python/health  # 交互输入密码，应200
+   curl --user presenter https://demo.example.com/api/python/eval/run  # 应403
+   ```
+
+   然后在浏览器确认访问密码、演示身份、监控与HTTPS Cookie；这是部署检查，不必点击发送。聊天会消费新演示许可。先核对实际Linux镜像启动、原生向量模型、MySQL只读权限、bcrypt访问密码、跨会话拒绝、取消和内存，再邀请客户；任何失败保留现场，不静默换模型或重置计数。
+
+### 访问撤销、更新与数据
+
+最多10个受邀用户名。管理员可用`htpasswd -B -C 10 /opt/serveflow-demo/private/htpasswd 新用户名`交互添加／改密，或`htpasswd -D /opt/serveflow-demo/private/htpasswd 用户名`撤销；不得使用命令行明文密码的`-b`。保留至少一个账号，重新执行配置`check`。工具可能替换文件inode，因此随后须`docker compose --env-file /dev/null -f deploy/demo/compose.yaml up -d --force-recreate web`重新挂载，不能只reload；撤销不保证已经发送的模型停止计费。Basic Auth可能被浏览器缓存，可关闭全部相关窗口或使用独立浏览器配置测试撤销，没有实现应用登录／退出系统。
+
+更新代码应重建并一起重建启动API/Web，避免网关缓存旧容器IP；保留配置与三个卷。回退镜像不回退数据／会话／发送许可。冷备份应先停止API、再干净停止MySQL/Redis，确认无写入后备份三卷和私密配置；运行中备份须使用各存储支持的一致性方案，不能直接复制活跃数据库文件。备份须加密、限制读取，恢复到新的隔离目录演练；当前未交付自动备份恢复或可安全回滚额度的工具。管理员整目录回滚／删除仍可绕过文件计数，文件哈希链不是防恶意管理员或独立审计账本。
+
+### 本次检查与待验
+
+代码、配置和受控验证见本节末更新记录；证据保存在本机忽略目录`backend/data/deploy-checks/protected-demo-20261106-v1/`。官方镜像标签及amd64元数据已核对，独立Compose CLI已解析完整配置；这不代表镜像已构建。Python传递依赖仍在镜像构建时解析，镜像内记录`requirements-resolved.txt`，尚未形成全传递锁定／供应链审计结论。
+
+本机没有Docker引擎；**Docker/Linux启动、权限降权、Alpine bcrypt、真实MySQL/Redis集成、Linux ONNX、服务器资源、证书和公网访问仍待目标机验证**。原生macOS Nginx仅以受控HTTP上游检查模板、访问限制、转发、限流与取消，使用测试专用SHA密码验证代理流程（macOS crypt不接受bcrypt）；正式配置仍只接受bcrypt，未降低部署规则。未连接云服务器、创建真实客户账号或进行真实模型／业务调用。打包不改变现有回答质量、知识覆盖与历史超时限制。
+
+2026-11-06检查：源码冻结后的后端完整回归**4125通过、10跳过**（未配置专用MySQL测试库），部署离线测试**159通过**，前端**58通过**且生产构建成功；普通检查通过隔离启动器拒绝真实网络和项目`.env`。受控原生Nginx检查15项通过，Compose默认与tools profile均可解析，差异和本地链接检查通过。首轮全量在并行修改期间有1项评测发送前守卫`send_admission_failed`，记录保留；源码固定后该文件29项与最终全量均通过，未删除断言或放松冻结检查。原5个缓存、4277份旧证据、环境文件及旧205/480台账哈希保持；本轮真实模型／外部业务API均0次，软件元数据和验证工具下载不混记成业务验收。停止在部署包准备，目标机验证完成前不宣称演示站已上线。
 
 ## 检查
 

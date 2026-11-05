@@ -10,6 +10,29 @@ const reply = overrides => ({ conv_id: 'qa-conversation', request_id: 'qa-reques
   status: 'success', retryable: false, error_code: null, ...overrides })
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b }); return { promise, resolve, reject } }
 
+test('demo hard quota and counter failures retain safe codes without suggesting a timed reset or exposing server text', async () => {
+  const previous = globalThis.fetch
+  try {
+    for (const [code, status, expected] of [
+      ['demo_model_quota_exhausted', 429, /额度.*管理员/],
+      ['demo_model_quota_unavailable', 503, /计数.*管理员/],
+      ['demo_model_provider_unavailable', 503, /已发送.*计费/]
+    ]) {
+      let calls = 0
+      globalThis.fetch = async () => { calls++; return new Response(JSON.stringify({ error_code: code, detail: 'PRIVATE SERVER TEXT' }), { status }) }
+      await assert.rejects(() => requestChat('python', settings(), `controlled ${code}`), error => {
+        assert.match(chatFailureMessage(error), expected)
+        assert.doesNotMatch(error.message, /PRIVATE|稍后再试/)
+        assert.equal(error.responseBody.error_code, code)
+        return true
+      })
+      assert.equal(calls, 1)
+    }
+    assert.match(chatFailureMessage({ status: 429 }), /稍后/)
+    assert.doesNotMatch(chatFailureMessage({ status: 503, responseBody: { error_code: 'PRIVATE UNKNOWN' } }), /PRIVATE/)
+  } finally { globalThis.fetch = previous }
+})
+
 test('structured failed chat keeps identity and status, replaces arbitrary prose and error codes with fixed messages', async () => {
   const previous = globalThis.fetch
   globalThis.fetch = async () => new Response(JSON.stringify(reply({ status: 'failed', retryable: true,
