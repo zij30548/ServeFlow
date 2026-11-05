@@ -1,0 +1,1895 @@
+{
+  "schema_version": "serveflow-expanded-intents-v1",
+  "dataset_id": "expanded-intents-v1",
+  "suite": "intent",
+  "provenance": "synthetic-authored-not-independent-human-blind-test",
+  "status": "offline-candidate-before-real-execution",
+  "model_calls": 0,
+  "authorization_granted": false,
+  "label_set": [
+    "order_status",
+    "logistics",
+    "refund",
+    "invoice",
+    "payment_issue",
+    "account_security",
+    "technical_login",
+    "technical_crash",
+    "human_handoff",
+    "request",
+    "greeting",
+    "other"
+  ],
+  "split_design": {
+    "development": 24,
+    "validation": 36,
+    "per_label": {
+      "development": 2,
+      "validation": 3
+    },
+    "rule": "运行识别器和查看本批模型输出前按表达场景族分组；同family不得跨组。冻结验证不是独立人类盲测。"
+  },
+  "model_input_fields": [
+    "input.message",
+    "input.history"
+  ],
+  "excluded_from_model_input": [
+    "id",
+    "split",
+    "family_id",
+    "expected",
+    "review_status",
+    "references",
+    "novelty",
+    "related_prior_case_ids",
+    "tags"
+  ],
+  "source_bindings": [
+    {
+      "path": "backend/core/intent_recognizer.py",
+      "sha256": "b99d0911dab8f4b1202e7b4e965a65513bd02c998c2ada9b40fd1404309b2fae"
+    },
+    {
+      "path": "backend/evaluation/benchmark/intent-v1.json",
+      "sha256": "731447a8362918b22e29afbffbd496ff263bfa548ad2d776adb2f5ffb7a069a0"
+    },
+    {
+      "path": "backend/evaluation/benchmark/intent-recheck-v2.json",
+      "sha256": "fb4079c744034061b5025adb4660f5004cb499957712d1ca91ed8ca28d1fe9ef"
+    }
+  ],
+  "scope_limitations": [
+    "标签与原评测相同：九个细粒度业务类，加request/greeting/other三个常用类，不称为十二个全新细类。",
+    "由了解系统业务的开发者编写，未根据识别器输出挑选或修改标签；精确去重不证明语义独立。问候/空诉求等类别的语义空间很窄，表达族隔离不等于业务事实独立。",
+    "消息中的订单、账户或支付现象是意图分类的合成用户陈述，不是真实业务事实；标签不代表拥有执行相应写操作的权限。",
+    "将来仅可比较同批共享LLM观察的仅LLM与融合决策，不与旧题成绩直接相减；本文件不构成新的真实调用授权。"
+  ],
+  "cases": [
+    {
+      "id": "xi001",
+      "split": "development",
+      "family_id": "collection_order_readiness",
+      "input": {
+        "message": "这是一张到店自提单，商品还没有交给快递。我只查门店是否已经备齐、订单有没有变成可提货，不需要配送轨迹。",
+        "history": []
+      },
+      "expected": {
+        "intent": "order_status",
+        "intent_group": "query",
+        "rationale": "查询门店订单备货及可提货阶段，明确排除承运轨迹。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.ORDER_STATUS",
+          "quote": "ORDER_STATUS = \"order_status\"        # 订单状态"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i01"
+      ],
+      "tags": [
+        "negation",
+        "status_vs_logistics"
+      ]
+    },
+    {
+      "id": "xi002",
+      "split": "development",
+      "family_id": "recurring_order_creation",
+      "input": {
+        "message": "本周这次配送有没有在系统里生成正式子订单？先别暂停服务，我只确认这期订单是否建立。",
+        "history": []
+      },
+      "expected": {
+        "intent": "order_status",
+        "intent_group": "query",
+        "rationale": "核对本期子订单生成状态，不要求暂停或核查支付。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.ORDER_STATUS",
+          "quote": "ORDER_STATUS = \"order_status\"        # 订单状态"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "creation_status",
+        "negation"
+      ]
+    },
+    {
+      "id": "xi003",
+      "split": "validation",
+      "family_id": "onsite_service_order_acceptance",
+      "input": {
+        "message": "预约的安装单显示等待处理，想确认是已经有师傅接单，还是仍在等派单；不用替我改时间。",
+        "history": []
+      },
+      "expected": {
+        "intent": "order_status",
+        "intent_group": "query",
+        "rationale": "目标是服务订单接单和派单阶段，排除修改预约。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.ORDER_STATUS",
+          "quote": "ORDER_STATUS = \"order_status\"        # 订单状态"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "service_order",
+        "status_vs_action"
+      ]
+    },
+    {
+      "id": "xi004",
+      "split": "validation",
+      "family_id": "digital_order_issuance",
+      "input": {
+        "message": "对，我问的是这张采购单有没有审核完并生成授权交付单，不是问软件为什么不能登录。",
+        "history": [
+          {
+            "role": "user",
+            "content": "公司购买的软件还没有拿到交付单，采购单目前写着审批中。"
+          },
+          {
+            "role": "assistant",
+            "content": "你是要查询采购单的处理进度，还是排查客户端登录？"
+          }
+        ]
+      },
+      "expected": {
+        "intent": "order_status",
+        "intent_group": "query",
+        "rationale": "历史绑定数字采购订单，当前询问审核和交付单生成，不是认证故障。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.ORDER_STATUS",
+          "quote": "ORDER_STATUS = \"order_status\"        # 订单状态"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "context",
+        "domain_disambiguation"
+      ]
+    },
+    {
+      "id": "xi005",
+      "split": "validation",
+      "family_id": "backorder_replenishment_stage",
+      "input": {
+        "message": "补货那单上写等待配货，仓库现在是已分配到货品，还是仍然缺货？我不催快递，只查订单配货进度。",
+        "history": []
+      },
+      "expected": {
+        "intent": "order_status",
+        "intent_group": "query",
+        "rationale": "核对缺货订单的仓内配货阶段，不是承运配送轨迹。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.ORDER_STATUS",
+          "quote": "ORDER_STATUS = \"order_status\"        # 订单状态"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i01"
+      ],
+      "tags": [
+        "fulfillment_stage",
+        "negation"
+      ]
+    },
+    {
+      "id": "xi006",
+      "split": "development",
+      "family_id": "locker_collection_code",
+      "input": {
+        "message": "快件已经进了智能柜，我把取件短信误删了，想核对这件包裹的领取方式和取件信息。",
+        "history": []
+      },
+      "expected": {
+        "intent": "logistics",
+        "intent_group": "query",
+        "rationale": "对象为已投柜包裹的领取信息，非账号短信认证。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.LOGISTICS",
+          "quote": "LOGISTICS = \"logistics\"              # 物流配送"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "pickup",
+        "code_not_authentication"
+      ]
+    },
+    {
+      "id": "xi007",
+      "split": "development",
+      "family_id": "return_transport_tracking",
+      "input": {
+        "message": "退货款不用查，我只想看寄回去的这个运单到哪个中转点了，有没有到退货仓。",
+        "history": []
+      },
+      "expected": {
+        "intent": "logistics",
+        "intent_group": "query",
+        "rationale": "虽有退货背景，当前明确只核对逆向运输轨迹。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.LOGISTICS",
+          "quote": "LOGISTICS = \"logistics\"              # 物流配送"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i15"
+      ],
+      "tags": [
+        "reverse_logistics",
+        "negation"
+      ]
+    },
+    {
+      "id": "xi008",
+      "split": "validation",
+      "family_id": "cross_border_customs_progress",
+      "input": {
+        "message": "国际包裹显示海关处理中，想了解这票件目前卡在清关还是等承运商提走，不咨询退税或付款。",
+        "history": []
+      },
+      "expected": {
+        "intent": "logistics",
+        "intent_group": "query",
+        "rationale": "问题限定包裹清关和承运交接状态，非支付或退款。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.LOGISTICS",
+          "quote": "LOGISTICS = \"logistics\"              # 物流配送"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "cross_border",
+        "transport_stage"
+      ]
+    },
+    {
+      "id": "xi009",
+      "split": "validation",
+      "family_id": "delivery_attempt_evidence",
+      "input": {
+        "message": "我不是要求撤单；运单说今天两次派送无人接听，想核查派送时间和投递异常记录。",
+        "history": []
+      },
+      "expected": {
+        "intent": "logistics",
+        "intent_group": "query",
+        "rationale": "当前核对运单派送尝试，不要求订单变更。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.LOGISTICS",
+          "quote": "LOGISTICS = \"logistics\"              # 物流配送"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i08"
+      ],
+      "tags": [
+        "delivery_attempt",
+        "negation"
+      ]
+    },
+    {
+      "id": "xi010",
+      "split": "validation",
+      "family_id": "split_parcel_missing_route",
+      "input": {
+        "message": "另一个包裹还没出现后续轨迹，能先查它是不是已经交给了承运网点？这回只问第二个包裹。",
+        "history": [
+          {
+            "role": "user",
+            "content": "这单分成两个包裹，第一个已经收到了，第二个只有电子面单。"
+          },
+          {
+            "role": "assistant",
+            "content": "你希望核对哪个包裹的后续运输？"
+          }
+        ]
+      },
+      "expected": {
+        "intent": "logistics",
+        "intent_group": "query",
+        "rationale": "历史明确拆包，当前核对第二包裹承运交接与轨迹。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.LOGISTICS",
+          "quote": "LOGISTICS = \"logistics\"              # 物流配送"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "context",
+        "split_parcel"
+      ]
+    },
+    {
+      "id": "xi011",
+      "split": "development",
+      "family_id": "partial_line_refund",
+      "input": {
+        "message": "一单里有主机和配件，我只准备退未拆封的配件并拿回对应货款，主机保留，售后该怎么申请？",
+        "history": []
+      },
+      "expected": {
+        "intent": "refund",
+        "intent_group": "billing",
+        "rationale": "发起商品行级退货退款，非整单撤销或新付款问题。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.REFUND",
+          "quote": "REFUND = \"refund\"                    # 退款/退货"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "partial_return",
+        "scope"
+      ]
+    },
+    {
+      "id": "xi012",
+      "split": "development",
+      "family_id": "subscription_refund_progress",
+      "input": {
+        "message": "订阅已经取消了，这次不是再关续费，我只查售后同意返还的那笔费用现在退到哪一步。",
+        "history": []
+      },
+      "expected": {
+        "intent": "refund",
+        "intent_group": "billing",
+        "rationale": "询问已同意售后退款的进度，取消订阅是背景。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.REFUND",
+          "quote": "REFUND = \"refund\"                    # 退款/退货"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-recheck-v2:n17"
+      ],
+      "tags": [
+        "refund_progress",
+        "negation"
+      ]
+    },
+    {
+      "id": "xi013",
+      "split": "validation",
+      "family_id": "refund_rejection_reconsideration",
+      "input": {
+        "message": "售后把我的退货退款申请驳回了，我补拍了破损位置，想知道怎样让这份退款申请重新审核。",
+        "history": []
+      },
+      "expected": {
+        "intent": "refund",
+        "intent_group": "billing",
+        "rationale": "请求复核被驳回的退款，未要求真人接管。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.REFUND",
+          "quote": "REFUND = \"refund\"                    # 退款/退货"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "review_reconsideration"
+      ]
+    },
+    {
+      "id": "xi014",
+      "split": "validation",
+      "family_id": "refund_amount_dispute",
+      "input": {
+        "message": "我不是说买的时候多扣钱，是这次售后只退回部分金额；想查退款为什么少了，并申请复核退款计算。",
+        "history": []
+      },
+      "expected": {
+        "intent": "refund",
+        "intent_group": "billing",
+        "rationale": "争议限定售后的退款计算，不是原付款异常。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.REFUND",
+          "quote": "REFUND = \"refund\"                    # 退款/退货"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i24"
+      ],
+      "tags": [
+        "refund_vs_payment",
+        "negation"
+      ]
+    },
+    {
+      "id": "xi015",
+      "split": "validation",
+      "family_id": "refund_application_withdrawal",
+      "input": {
+        "message": "对，这张售后申请先撤回，我决定保留商品；请说明撤回退款申请要走哪个入口，不要重新下单。",
+        "history": [
+          {
+            "role": "user",
+            "content": "我前天提交了仅退款申请，目前还没有审核完成。"
+          },
+          {
+            "role": "assistant",
+            "content": "你现在仍要继续申请退款吗？"
+          }
+        ]
+      },
+      "expected": {
+        "intent": "refund",
+        "intent_group": "billing",
+        "rationale": "撤回对象是退款申请，业务域仍为售后退款。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.REFUND",
+          "quote": "REFUND = \"refund\"                    # 退款/退货"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "context",
+        "refund_application_action"
+      ]
+    },
+    {
+      "id": "xi016",
+      "split": "development",
+      "family_id": "consolidated_invoice_request",
+      "input": {
+        "message": "同一次公司采购分成了几张订单，财务要一张合并的电子发票，想了解开票和订单关联该怎样提交。",
+        "history": []
+      },
+      "expected": {
+        "intent": "invoice",
+        "intent_group": "billing",
+        "rationale": "目标是合并开票，提到订单不等于查询订单进度。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.INVOICE",
+          "quote": "INVOICE = \"invoice\"                  # 发票"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "multiple_orders",
+        "invoice_scope"
+      ]
+    },
+    {
+      "id": "xi017",
+      "split": "development",
+      "family_id": "invoice_legal_name_correction",
+      "input": {
+        "message": "不是银行卡姓名的问题；已经开出的票据把公司法定名称写成了简称，怎样更正这张发票？",
+        "history": []
+      },
+      "expected": {
+        "intent": "invoice",
+        "intent_group": "billing",
+        "rationale": "更正已开票据名称，明确排除支付账户变更。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.INVOICE",
+          "quote": "INVOICE = \"invoice\"                  # 发票"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i17"
+      ],
+      "tags": [
+        "negation",
+        "legal_name"
+      ]
+    },
+    {
+      "id": "xi018",
+      "split": "validation",
+      "family_id": "invoice_after_refund_accounting",
+      "input": {
+        "message": "退款已经完成，钱不用查了。财务问原来的增值税发票需要红冲还是作废，请说明票据这一步怎么处理。",
+        "history": []
+      },
+      "expected": {
+        "intent": "invoice",
+        "intent_group": "billing",
+        "rationale": "当前为退款后的票据处理，明确排除退款进度。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.INVOICE",
+          "quote": "INVOICE = \"invoice\"                  # 发票"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "topic_shift",
+        "invoice_vs_refund"
+      ]
+    },
+    {
+      "id": "xi019",
+      "split": "validation",
+      "family_id": "invoice_amount_basis",
+      "input": {
+        "message": "优惠券抵扣后实际付了更少的钱，我现在不质疑扣款，只想确认申请发票时票面金额应该依据什么。",
+        "history": []
+      },
+      "expected": {
+        "intent": "invoice",
+        "intent_group": "billing",
+        "rationale": "询问开票金额依据，明确不争议实扣金额。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.INVOICE",
+          "quote": "INVOICE = \"invoice\"                  # 发票"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "negation",
+        "invoice_amount"
+      ]
+    },
+    {
+      "id": "xi020",
+      "split": "validation",
+      "family_id": "invoice_file_verification_fields",
+      "input": {
+        "message": "这张电子票下载好了，我要做真伪查验，票号、代码和校验信息分别到哪里找？不需要改账号密码。",
+        "history": []
+      },
+      "expected": {
+        "intent": "invoice",
+        "intent_group": "billing",
+        "rationale": "目标为票据查验字段，不是账户认证。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.INVOICE",
+          "quote": "INVOICE = \"invoice\"                  # 发票"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i19"
+      ],
+      "tags": [
+        "document_fields",
+        "invoice_vs_security"
+      ]
+    },
+    {
+      "id": "xi021",
+      "split": "development",
+      "family_id": "installment_fee_discrepancy",
+      "input": {
+        "message": "确认分期时写着免手续费，扣款明细却多了一笔分期服务费，我要核对这笔支付收费有没有对错。",
+        "history": []
+      },
+      "expected": {
+        "intent": "payment_issue",
+        "intent_group": "billing",
+        "rationale": "争议是实际支付费用与确认条件不符，非发票或已批准退款。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.PAYMENT_ISSUE",
+          "quote": "PAYMENT_ISSUE = \"payment_issue\"      # 支付/扣款异常"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i24"
+      ],
+      "tags": [
+        "fee_discrepancy"
+      ]
+    },
+    {
+      "id": "xi022",
+      "split": "development",
+      "family_id": "discount_payment_reconciliation",
+      "input": {
+        "message": "礼品卡余额已经被扣掉，但银行卡又收了未抵扣的全价；先不申请退款，请核对这次组合支付。",
+        "history": []
+      },
+      "expected": {
+        "intent": "payment_issue",
+        "intent_group": "billing",
+        "rationale": "当前核对组合支付的过量扣款，排除退款申请。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.PAYMENT_ISSUE",
+          "quote": "PAYMENT_ISSUE = \"payment_issue\"      # 支付/扣款异常"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "mixed_payment",
+        "negation"
+      ]
+    },
+    {
+      "id": "xi023",
+      "split": "validation",
+      "family_id": "uncaptured_preauthorization",
+      "input": {
+        "message": "交易没有完成扣款，只留下银行预授权冻结，订单也没成立；我想核查这笔支付授权状态，不是退货退款。",
+        "history": []
+      },
+      "expected": {
+        "intent": "payment_issue",
+        "intent_group": "billing",
+        "rationale": "目标是支付预授权状态，明确未发生售后退款。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.PAYMENT_ISSUE",
+          "quote": "PAYMENT_ISSUE = \"payment_issue\"      # 支付/扣款异常"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "authorization_not_refund",
+        "negation"
+      ]
+    },
+    {
+      "id": "xi024",
+      "split": "validation",
+      "family_id": "payment_gateway_refusal",
+      "input": {
+        "message": "登录没问题，商品页也正常，只有提交银行卡付款时返回支付网关拒绝；需要排查这一步的支付失败。",
+        "history": []
+      },
+      "expected": {
+        "intent": "payment_issue",
+        "intent_group": "billing",
+        "rationale": "错误限定在支付执行，非认证或通用页面崩溃。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.PAYMENT_ISSUE",
+          "quote": "PAYMENT_ISSUE = \"payment_issue\"      # 支付/扣款异常"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i25"
+      ],
+      "tags": [
+        "payment_vs_technical",
+        "negative_symptom"
+      ]
+    },
+    {
+      "id": "xi025",
+      "split": "validation",
+      "family_id": "foreign_currency_charge_reconciliation",
+      "input": {
+        "message": "报销票据以后再说，我先核对这笔外币购买：结算页显示的币种和银行卡入账币种不一样，这次支付怎么换算的？",
+        "history": []
+      },
+      "expected": {
+        "intent": "payment_issue",
+        "intent_group": "billing",
+        "rationale": "当前核对入账币种换算，非发票获取，不判断真实汇率或收费。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.PAYMENT_ISSUE",
+          "quote": "PAYMENT_ISSUE = \"payment_issue\"      # 支付/扣款异常"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "currency_reconciliation",
+        "topic_shift"
+      ]
+    },
+    {
+      "id": "xi026",
+      "split": "development",
+      "family_id": "unrecognized_api_credential",
+      "input": {
+        "message": "安全中心出现了我没创建的访问密钥，我担心有人控制了账号，想先撤销陌生凭据并保护账户。",
+        "history": []
+      },
+      "expected": {
+        "intent": "account_security",
+        "intent_group": "account",
+        "rationale": "核心为未授权凭据和账号保护，非普通API报错。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.ACCOUNT_SECURITY",
+          "quote": "ACCOUNT_SECURITY = \"account_security\" # 账户安全"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "credential_security"
+      ]
+    },
+    {
+      "id": "xi027",
+      "split": "development",
+      "family_id": "phishing_disclosure_response",
+      "input": {
+        "message": "我把短信验证码告诉了冒充客服的人，现在担心他接管账户；请先告诉我怎样止损，不要让我再发验证码。",
+        "history": []
+      },
+      "expected": {
+        "intent": "account_security",
+        "intent_group": "account",
+        "rationale": "用户报告凭据泄露风险，非登录验证码收不到。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.ACCOUNT_SECURITY",
+          "quote": "ACCOUNT_SECURITY = \"account_security\" # 账户安全"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "credential_disclosure",
+        "no_secret_request"
+      ]
+    },
+    {
+      "id": "xi028",
+      "split": "validation",
+      "family_id": "recovery_code_exposure",
+      "input": {
+        "message": "我能正常登录，但有人看到了我保存的备用恢复码；想让旧恢复码失效并重新保护账号，而不是查订单。",
+        "history": []
+      },
+      "expected": {
+        "intent": "account_security",
+        "intent_group": "account",
+        "rationale": "主诉为恢复凭据泄露；能登录不消除账户风险。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.ACCOUNT_SECURITY",
+          "quote": "ACCOUNT_SECURITY = \"account_security\" # 账户安全"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "normal_login_security_risk",
+        "negation"
+      ]
+    },
+    {
+      "id": "xi029",
+      "split": "validation",
+      "family_id": "third_party_authorization_risk",
+      "input": {
+        "message": "对，那个外部应用我没有授权过。怎样先撤销它对账户的访问，防止继续读取资料？",
+        "history": [
+          {
+            "role": "user",
+            "content": "账户授权列表里有个不认识的外部应用，显示能读取我的资料。"
+          },
+          {
+            "role": "assistant",
+            "content": "这个第三方应用是你本人同意连接的吗？"
+          }
+        ]
+      },
+      "expected": {
+        "intent": "account_security",
+        "intent_group": "account",
+        "rationale": "历史确定陌生第三方授权，当前撤销访问属于账户安全。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.ACCOUNT_SECURITY",
+          "quote": "ACCOUNT_SECURITY = \"account_security\" # 账户安全"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "context",
+        "third_party_access"
+      ]
+    },
+    {
+      "id": "xi030",
+      "split": "validation",
+      "family_id": "sim_swap_account_recovery",
+      "input": {
+        "message": "运营商确认我的号码被别人补卡了，账号仍绑着那个号码，我想尽快保护账户，别把这当普通短信延迟。",
+        "history": []
+      },
+      "expected": {
+        "intent": "account_security",
+        "intent_group": "account",
+        "rationale": "用户陈述明确的号码接管风险，不是普通收码认证故障。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.ACCOUNT_SECURITY",
+          "quote": "ACCOUNT_SECURITY = \"account_security\" # 账户安全"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i27"
+      ],
+      "tags": [
+        "account_takeover",
+        "negative_disambiguation"
+      ]
+    },
+    {
+      "id": "xi031",
+      "split": "development",
+      "family_id": "sso_callback_failure",
+      "input": {
+        "message": "公司统一登录完成后跳回网站，页面提示登录回调校验失败，始终进不了账号；密码本身能在公司入口用。",
+        "history": []
+      },
+      "expected": {
+        "intent": "technical_login",
+        "intent_group": "technical",
+        "rationale": "故障在登录回调认证，未进入已登录业务页面。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.TECHNICAL_LOGIN",
+          "quote": "TECHNICAL_LOGIN = \"technical_login\"  # 登录认证故障"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "sso",
+        "authentication"
+      ]
+    },
+    {
+      "id": "xi032",
+      "split": "development",
+      "family_id": "passkey_authentication_failure",
+      "input": {
+        "message": "我用自己的通行密钥按了指纹验证，浏览器说认证完成，网站却仍要求重新登录，能排查这条登录链路吗？",
+        "history": []
+      },
+      "expected": {
+        "intent": "technical_login",
+        "intent_group": "technical",
+        "rationale": "通行密钥认证未能完成，非泄露风险或普通业务崩溃。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.TECHNICAL_LOGIN",
+          "quote": "TECHNICAL_LOGIN = \"technical_login\"  # 登录认证故障"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "passkey",
+        "authentication"
+      ]
+    },
+    {
+      "id": "xi033",
+      "split": "validation",
+      "family_id": "desktop_login_popup_failure",
+      "input": {
+        "message": "点登录后认证弹窗一闪就关，账号首页一直进不去；其他网页正常，我要排查登录弹窗，不是修改密码。",
+        "history": []
+      },
+      "expected": {
+        "intent": "technical_login",
+        "intent_group": "technical",
+        "rationale": "故障限定认证前的登录弹窗，排除密码变更操作。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.TECHNICAL_LOGIN",
+          "quote": "TECHNICAL_LOGIN = \"technical_login\"  # 登录认证故障"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "login_popup",
+        "negation"
+      ]
+    },
+    {
+      "id": "xi034",
+      "split": "validation",
+      "family_id": "session_exchange_failure",
+      "input": {
+        "message": "还是进不去，它在身份提供方验证后提示会话票据无效，然后退回登录页；没有进入任何已登录页面。",
+        "history": [
+          {
+            "role": "user",
+            "content": "通过企业身份认证后，网站接收会话票据失败。"
+          },
+          {
+            "role": "assistant",
+            "content": "重新打开登录页再认证，是否能进入账号？"
+          }
+        ]
+      },
+      "expected": {
+        "intent": "technical_login",
+        "intent_group": "technical",
+        "rationale": "历史绑定会话票据交换失败，非已登录页面崩溃。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.TECHNICAL_LOGIN",
+          "quote": "TECHNICAL_LOGIN = \"technical_login\"  # 登录认证故障"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-recheck-v2:n05"
+      ],
+      "tags": [
+        "context",
+        "session_authentication"
+      ]
+    },
+    {
+      "id": "xi035",
+      "split": "validation",
+      "family_id": "otp_delivery_blocked_authentication",
+      "input": {
+        "message": "手机号仍是我的，也没有陌生设备；但登录需要的短信校验码一直收不到，导致这一步认证无法完成。",
+        "history": []
+      },
+      "expected": {
+        "intent": "technical_login",
+        "intent_group": "technical",
+        "rationale": "无明确被盗迹象，主诉是登录验证码不可达。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.TECHNICAL_LOGIN",
+          "quote": "TECHNICAL_LOGIN = \"technical_login\"  # 登录认证故障"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i32"
+      ],
+      "tags": [
+        "negative_disambiguation",
+        "otp_delivery"
+      ]
+    },
+    {
+      "id": "xi036",
+      "split": "development",
+      "family_id": "authenticated_table_render_freeze",
+      "input": {
+        "message": "已经登录成功，打开订单统计表后整个页面卡死，滚动和按钮都不动，其他页面正常，想排查这个页面故障。",
+        "history": []
+      },
+      "expected": {
+        "intent": "technical_crash",
+        "intent_group": "technical",
+        "rationale": "故障在已登录页面渲染和交互，不是认证。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.TECHNICAL_CRASH",
+          "quote": "TECHNICAL_CRASH = \"technical_crash\"  # 崩溃/错误码"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i39"
+      ],
+      "tags": [
+        "authenticated_page",
+        "render_freeze"
+      ]
+    },
+    {
+      "id": "xi037",
+      "split": "development",
+      "family_id": "export_process_crash",
+      "input": {
+        "message": "点击导出账单文件时桌面客户端直接退出，重开还能登录；我想解决导出时的崩溃，不是改账单金额。",
+        "history": []
+      },
+      "expected": {
+        "intent": "technical_crash",
+        "intent_group": "technical",
+        "rationale": "导出引发进程退出，账单只是背景而非金额争议。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.TECHNICAL_CRASH",
+          "quote": "TECHNICAL_CRASH = \"technical_crash\"  # 崩溃/错误码"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "export_crash",
+        "billing_as_background"
+      ]
+    },
+    {
+      "id": "xi038",
+      "split": "validation",
+      "family_id": "search_endpoint_server_error",
+      "input": {
+        "message": "登录和付款都正常，只有站内搜索请求返回502，结果区域空白；需要排查这个服务端错误，先别解释搜索商品。",
+        "history": []
+      },
+      "expected": {
+        "intent": "technical_crash",
+        "intent_group": "technical",
+        "rationale": "明确业务请求502与渲染异常，非一般商品查询。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.TECHNICAL_CRASH",
+          "quote": "TECHNICAL_CRASH = \"technical_crash\"  # 崩溃/错误码"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "server_error",
+        "search_not_query"
+      ]
+    },
+    {
+      "id": "xi039",
+      "split": "validation",
+      "family_id": "video_playback_client_exit",
+      "input": {
+        "message": "是的，一播放介绍视频客户端就自己消失；账号登录一直正常，只有播放时退出。",
+        "history": [
+          {
+            "role": "user",
+            "content": "商品介绍视频点播放后，客户端突然退出。"
+          },
+          {
+            "role": "assistant",
+            "content": "退出是否只在开始播放视频时发生？"
+          }
+        ]
+      },
+      "expected": {
+        "intent": "technical_crash",
+        "intent_group": "technical",
+        "rationale": "历史绑定播放导致客户端异常退出，非认证问题。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.TECHNICAL_CRASH",
+          "quote": "TECHNICAL_CRASH = \"technical_crash\"  # 崩溃/错误码"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i37"
+      ],
+      "tags": [
+        "context",
+        "playback_crash"
+      ]
+    },
+    {
+      "id": "xi040",
+      "split": "validation",
+      "family_id": "form_submit_unhandled_exception",
+      "input": {
+        "message": "资料编辑页面提交后弹出未处理异常，表单内容消失了，但我仍保持登录；想排查这个提交故障，不是让你修改资料。",
+        "history": []
+      },
+      "expected": {
+        "intent": "technical_crash",
+        "intent_group": "technical",
+        "rationale": "请求排查提交异常，明确排除直接修改资料。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.TECHNICAL_CRASH",
+          "quote": "TECHNICAL_CRASH = \"technical_crash\"  # 崩溃/错误码"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "negation",
+        "submit_exception"
+      ]
+    },
+    {
+      "id": "xi041",
+      "split": "development",
+      "family_id": "human_accessibility_assistance",
+      "input": {
+        "message": "自动提示我看不清楚，想请在岗真人客服通过语音接着协助我，不要继续给机器操作清单。",
+        "history": []
+      },
+      "expected": {
+        "intent": "human_handoff",
+        "intent_group": "escalation",
+        "rationale": "明确请求真人接续，不能仅当一般使用问题自动答复。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.HUMAN_HANDOFF",
+          "quote": "HUMAN_HANDOFF = \"human_handoff\"      # 转人工"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i45"
+      ],
+      "tags": [
+        "accessibility",
+        "human_takeover"
+      ]
+    },
+    {
+      "id": "xi042",
+      "split": "development",
+      "family_id": "human_claim_review_takeover",
+      "input": {
+        "message": "这份争议材料我希望交给有权限的售后专员本人处理，请把当前会话转交真人，而不是让机器人再解释政策。",
+        "history": []
+      },
+      "expected": {
+        "intent": "human_handoff",
+        "intent_group": "escalation",
+        "rationale": "明确要求真人接管，售后资料是背景，主诉为人工交接。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.HUMAN_HANDOFF",
+          "quote": "HUMAN_HANDOFF = \"human_handoff\"      # 转人工"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "human_specialist",
+        "policy_not_requested"
+      ]
+    },
+    {
+      "id": "xi043",
+      "split": "validation",
+      "family_id": "human_live_takeover_after_automation",
+      "input": {
+        "message": "前面的步骤已经都试过了；现在请停止自动排查，由值班工作人员本人接手这个会话。",
+        "history": []
+      },
+      "expected": {
+        "intent": "human_handoff",
+        "intent_group": "escalation",
+        "rationale": "要求停止自动排查并由真人接管，非继续询问技术步骤。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.HUMAN_HANDOFF",
+          "quote": "HUMAN_HANDOFF = \"human_handoff\"      # 转人工"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i42"
+      ],
+      "tags": [
+        "negative_disambiguation",
+        "human_takeover"
+      ]
+    },
+    {
+      "id": "xi044",
+      "split": "validation",
+      "family_id": "human_supervisor_callback_confirmation",
+      "input": {
+        "message": "可以，请按我刚才说的安排主管本人回电，接下来的事情由他跟我谈，不用再发自动说明。",
+        "history": [
+          {
+            "role": "user",
+            "content": "这笔争议我希望直接由主管本人电话沟通。"
+          },
+          {
+            "role": "assistant",
+            "content": "你是希望安排主管人工回访，而不是继续文字自动答复吗？"
+          }
+        ]
+      },
+      "expected": {
+        "intent": "human_handoff",
+        "intent_group": "escalation",
+        "rationale": "历史明确主管本人回访，当前确认人工交接而非泛泛不满。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.HUMAN_HANDOFF",
+          "quote": "HUMAN_HANDOFF = \"human_handoff\"      # 转人工"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i43",
+        "intent-v1:i45"
+      ],
+      "tags": [
+        "context",
+        "human_callback"
+      ]
+    },
+    {
+      "id": "xi045",
+      "split": "validation",
+      "family_id": "quoted_agent_name_not_routing_target",
+      "input": {
+        "message": "商品名字里有“经理”两个字，不是让你查那个名字；我的要求是把这段聊天接给真人客服，由他来继续。",
+        "history": []
+      },
+      "expected": {
+        "intent": "human_handoff",
+        "intent_group": "escalation",
+        "rationale": "商品名引述不决定路由，明确真人接管才是主诉。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.HUMAN_HANDOFF",
+          "quote": "HUMAN_HANDOFF = \"human_handoff\"      # 转人工"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "quotation",
+        "human_takeover"
+      ]
+    },
+    {
+      "id": "xi046",
+      "split": "development",
+      "family_id": "pause_recurring_delivery_action",
+      "input": {
+        "message": "下周我不在家，请暂停一次自动补货配送，之后的周期保留；不是查物流，也不申请退款。",
+        "history": []
+      },
+      "expected": {
+        "intent": "request",
+        "intent_group": "request",
+        "rationale": "要求改变一次未来配送安排，意图分类不代表拥有写权限。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.REQUEST",
+          "quote": "REQUEST    = \"request\"     # 请求操作"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "action_not_status",
+        "negation"
+      ]
+    },
+    {
+      "id": "xi047",
+      "split": "development",
+      "family_id": "gift_message_edit_action",
+      "input": {
+        "message": "请把这张未付款订单的赠言改成“祝新居愉快”，其他选项别动；我不是询问原来写了什么。",
+        "history": []
+      },
+      "expected": {
+        "intent": "request",
+        "intent_group": "request",
+        "rationale": "要求修改订单赠言，非状态查询或退款。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.REQUEST",
+          "quote": "REQUEST    = \"request\"     # 请求操作"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i48"
+      ],
+      "tags": [
+        "quotation",
+        "action_not_query"
+      ]
+    },
+    {
+      "id": "xi048",
+      "split": "validation",
+      "family_id": "cart_line_deletion_action",
+      "input": {
+        "message": "购物车里多了一件杯子，请删掉那一项，其余商品留着；没有付款，不需要办退货。",
+        "history": []
+      },
+      "expected": {
+        "intent": "request",
+        "intent_group": "request",
+        "rationale": "删除未付款购物车条目，明确排除售后退款。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.REQUEST",
+          "quote": "REQUEST    = \"request\"     # 请求操作"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-recheck-v2:n12"
+      ],
+      "tags": [
+        "action_scope",
+        "refund_negation"
+      ]
+    },
+    {
+      "id": "xi049",
+      "split": "validation",
+      "family_id": "delivery_address_correction_action",
+      "input": {
+        "message": "是的，只改收件地址的楼层，联系人、电话和商品都不动；不要替我取消订单。",
+        "history": [
+          {
+            "role": "user",
+            "content": "一张还没出库的订单收件楼层写错了。"
+          },
+          {
+            "role": "assistant",
+            "content": "这张订单你是希望更正地址，而不是取消吗？"
+          }
+        ]
+      },
+      "expected": {
+        "intent": "request",
+        "intent_group": "request",
+        "rationale": "历史绑定未出库订单地址修改，当前限定操作范围，非轨迹查询。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.REQUEST",
+          "quote": "REQUEST    = \"request\"     # 请求操作"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i50"
+      ],
+      "tags": [
+        "context",
+        "bounded_action"
+      ]
+    },
+    {
+      "id": "xi050",
+      "split": "validation",
+      "family_id": "unpaid_line_configuration_action",
+      "input": {
+        "message": "请把待付款订单里的鼠标从有线款换成无线款，数量仍是一件；我不是咨询两款参数差异。",
+        "history": []
+      },
+      "expected": {
+        "intent": "request",
+        "intent_group": "request",
+        "rationale": "明确更改未付款订单配置，排除产品咨询，不代表已执行。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.REQUEST",
+          "quote": "REQUEST    = \"request\"     # 请求操作"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i49"
+      ],
+      "tags": [
+        "negation",
+        "configuration_action"
+      ]
+    },
+    {
+      "id": "xi051",
+      "split": "development",
+      "family_id": "first_contact_formal_greeting",
+      "input": {
+        "message": "客服同事好，刚来到这里，先向你问候一下。",
+        "history": []
+      },
+      "expected": {
+        "intent": "greeting",
+        "intent_group": "greeting",
+        "rationale": "只有问候，没有业务问题或办理诉求。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.GREETING",
+          "quote": "GREETING   = \"greeting\"    # 问候"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i54"
+      ],
+      "tags": [
+        "greeting_only"
+      ]
+    },
+    {
+      "id": "xi052",
+      "split": "development",
+      "family_id": "seasonal_greeting",
+      "input": {
+        "message": "新年好呀，向今天值班的你问个好，暂时没有事情要办理。",
+        "history": []
+      },
+      "expected": {
+        "intent": "greeting",
+        "intent_group": "greeting",
+        "rationale": "节日问候且明确无办理事项。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.GREETING",
+          "quote": "GREETING   = \"greeting\"    # 问候"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "greeting_only",
+        "no_business_action"
+      ]
+    },
+    {
+      "id": "xi053",
+      "split": "validation",
+      "family_id": "morning_salutation_only",
+      "input": {
+        "message": "清晨好，来跟客服小伙伴打声招呼。",
+        "history": []
+      },
+      "expected": {
+        "intent": "greeting",
+        "intent_group": "greeting",
+        "rationale": "仅时间性招呼，无业务诉求。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.GREETING",
+          "quote": "GREETING   = \"greeting\"    # 问候"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-recheck-v2:n16"
+      ],
+      "tags": [
+        "greeting_only"
+      ]
+    },
+    {
+      "id": "xi054",
+      "split": "validation",
+      "family_id": "returning_contact_salutation",
+      "input": {
+        "message": "好久不见，今天回来先跟你说声你好，还没想问具体事情。",
+        "history": []
+      },
+      "expected": {
+        "intent": "greeting",
+        "intent_group": "greeting",
+        "rationale": "当前只问候，不能从回访背景推断未给出的业务。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.GREETING",
+          "quote": "GREETING   = \"greeting\"    # 问候"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i55"
+      ],
+      "tags": [
+        "returning_contact",
+        "greeting_only"
+      ]
+    },
+    {
+      "id": "xi055",
+      "split": "validation",
+      "family_id": "evening_greeting_after_closure",
+      "input": {
+        "message": "事情已经处理完啦，晚上好，来给你打个招呼。",
+        "history": [
+          {
+            "role": "user",
+            "content": "前面的问题已经解决，不需要再查。"
+          },
+          {
+            "role": "assistant",
+            "content": "明白，本次事项已结束。"
+          }
+        ]
+      },
+      "expected": {
+        "intent": "greeting",
+        "intent_group": "greeting",
+        "rationale": "前史事项结束，当前是问候，没有继续核验请求。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.GREETING",
+          "quote": "GREETING   = \"greeting\"    # 问候"
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [],
+      "tags": [
+        "context",
+        "closed_topic"
+      ]
+    },
+    {
+      "id": "xi056",
+      "split": "development",
+      "family_id": "input_placeholder_quoted_terms",
+      "input": {
+        "message": "“退款、发票、转人工”只是我贴过来的占位文字，没有要办理其中任何一项。",
+        "history": []
+      },
+      "expected": {
+        "intent": "other",
+        "intent_group": "other",
+        "rationale": "关键词为占位引述，明确不是实际业务请求。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.OTHER",
+          "quote": "OTHER      = \"other\""
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-recheck-v2:n08"
+      ],
+      "tags": [
+        "quotation",
+        "negated_intents"
+      ]
+    },
+    {
+      "id": "xi057",
+      "split": "development",
+      "family_id": "receipt_acknowledgement",
+      "input": {
+        "message": "了解，我先收藏这段说明，暂时不用继续处理。",
+        "history": []
+      },
+      "expected": {
+        "intent": "other",
+        "intent_group": "other",
+        "rationale": "仅确认收到和暂停，未提出新问题或人工要求。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.OTHER",
+          "quote": "OTHER      = \"other\""
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i57"
+      ],
+      "tags": [
+        "acknowledgement",
+        "no_new_request"
+      ]
+    },
+    {
+      "id": "xi058",
+      "split": "validation",
+      "family_id": "non_request_descriptive_sentence",
+      "input": {
+        "message": "窗外的树叶是绿色的，桌上放着一只空杯子。",
+        "history": []
+      },
+      "expected": {
+        "intent": "other",
+        "intent_group": "other",
+        "rationale": "纯描述陈述，无客服业务、问候或办理请求。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.OTHER",
+          "quote": "OTHER      = \"other\""
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i58"
+      ],
+      "tags": [
+        "non_business_statement"
+      ]
+    },
+    {
+      "id": "xi059",
+      "split": "validation",
+      "family_id": "unintended_dictation",
+      "input": {
+        "message": "刚才输入法把旁人的话录进来了，不是对你提问，请忽略那条内容。",
+        "history": [
+          {
+            "role": "user",
+            "content": "甲乙丙，下一站去哪里来着。"
+          },
+          {
+            "role": "assistant",
+            "content": "你可以再说明是否有需要客服处理的事项。"
+          }
+        ]
+      },
+      "expected": {
+        "intent": "other",
+        "intent_group": "other",
+        "rationale": "解释上一条不是本人诉求，当前未提出新业务。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.OTHER",
+          "quote": "OTHER      = \"other\""
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-v1:i60"
+      ],
+      "tags": [
+        "context",
+        "unintended_input"
+      ]
+    },
+    {
+      "id": "xi060",
+      "split": "validation",
+      "family_id": "quoted_test_payload_not_action",
+      "input": {
+        "message": "这是一段输入框测试字符串：【订单已发货？立即退款！】。引号里的内容不是真实诉求，本次不用查询或办理。",
+        "history": []
+      },
+      "expected": {
+        "intent": "other",
+        "intent_group": "other",
+        "rationale": "明确说明为输入测试，不能把引述的订单/退款当实际请求。"
+      },
+      "review_status": "reviewed",
+      "references": [
+        {
+          "source": "backend/core/intent_recognizer.py",
+          "symbol": "IntentCategory.OTHER",
+          "quote": "OTHER      = \"other\""
+        }
+      ],
+      "novelty": "新编表达与场景；标签体系和客服业务域与旧题共享，关联旧题另列。精确去重和表达族分组不表示语义或来源事实完全独立。",
+      "related_prior_case_ids": [
+        "intent-recheck-v2:n22"
+      ],
+      "tags": [
+        "quotation",
+        "test_payload",
+        "negation"
+      ]
+    }
+  ]
+}
