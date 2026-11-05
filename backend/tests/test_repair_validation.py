@@ -113,10 +113,11 @@ def test_model_input_never_projects_expected_sources_or_trusted_context():
     assert row["case"]["input"]["message"] != "changed"
 
 
-def test_actual_business_source_is_unchanged_and_closed_old_sender_stays_closed():
-    proof = prep.source_proof()
-    assert proof["business_modified"] is False
-    assert proof["current_files"] - proof["baseline_files"] == 3
+def test_closed_preparation_rejects_new_execution_sources_without_rebinding():
+    # The next independently frozen execution adds files. Never widen this
+    # completed preparation's source allowlist or replace its protocol hash.
+    with pytest.raises(bench.BenchmarkError, match="repair_unapproved_source_set"):
+        prep.source_proof()
     from evaluation import expanded_trial
     with pytest.raises(Exception, match="expanded_unapproved_source_set"):
         expanded_trial.source_proof()

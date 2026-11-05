@@ -18,7 +18,7 @@
 
 模型负责理解、路由和选择工具；政策资料、订单记录及技术建议分别保留来源边界。覆盖到的事实查询由程序展示校验后的工具结果，普通接待仍可自然回复。未知、错误和不确定结果应如实保留，不能将模型回复当作真实交易凭证。
 
-当前评测口径见[量化结论校准与新题冻结](#量化结论校准与新题离线冻结2026-11-04)，历史记录见[对照暂停](#修复版新题真实对照与暂停记录2026-11-04)及[原六题失败](#六场景定向真实复验结果2026-11-04)，业务补修见[按问题解释证据](#订单日期缺口与证据关系的离线补修2026-11-04)，已见六题结果见[修复版六题回归](#订单说明修复版六题真实复验结果2026-11-05)，旧12题成绩见[完整A/D任务对照](#当前版本完整ad任务对照结果2026-11-05)，新题见[问题冻结](#扩充题集与离线问题冻结2026-11-05)和[执行接线](#扩充评测执行接线与零调用冻结2026-11-05)，最近真实结果见[108题对照](#扩充108题真实对照结果2026-11-05)，修复见[失败分支补修](#扩充评测失败分支的离线补修2026-11-05)，当前停止点见[修复版16场景离线准备](#修复版16场景的离线验收准备2026-11-05)。下方各轮记录保留原版本、失败及分母，不能拼接成总体准确率。
+当前评测口径见[量化结论校准与新题冻结](#量化结论校准与新题离线冻结2026-11-04)，历史记录见[对照暂停](#修复版新题真实对照与暂停记录2026-11-04)及[原六题失败](#六场景定向真实复验结果2026-11-04)，业务补修见[按问题解释证据](#订单日期缺口与证据关系的离线补修2026-11-04)，已见六题结果见[修复版六题回归](#订单说明修复版六题真实复验结果2026-11-05)，旧12题成绩见[完整A/D任务对照](#当前版本完整ad任务对照结果2026-11-05)，新题见[问题冻结](#扩充题集与离线问题冻结2026-11-05)和[执行接线](#扩充评测执行接线与零调用冻结2026-11-05)，最近真实结果见[108题对照](#扩充108题真实对照结果2026-11-05)，修复见[失败分支补修](#扩充评测失败分支的离线补修2026-11-05)，场景见[修复版16场景离线准备](#修复版16场景的离线验收准备2026-11-05)，当前停止点见[16场景独立执行准备](#修复版16场景的独立执行准备2026-11-05)。下方各轮记录保留原版本、失败及分母，不能拼接成总体准确率。
 
 ## 目录
 
@@ -1470,6 +1470,42 @@ ORT_DISABLE_TELEMETRY=1 .venv/bin/python -B -m evaluation.repair_validation veri
 本次相关离线检查**251项通过**，命令为`.venv/bin/python -B -m pytest -q -p no:cacheprovider tests/test_repair_validation.py tests/test_expanded_validation.py tests/test_expanded_trial.py tests/test_benchmark.py tests/test_benchmark_metrics.py tests/test_task_data.py`，环境`ORT_DISABLE_TELEMETRY=1`。覆盖旧题完整保留、依据／范围／身份、模型输入白名单、不可覆盖冻结、源码与资料漂移、双hash及重新捕获、无发送入口；其中SDK记录是受控捕获，不是16次真实调用或质量成绩。实际validate／prepare／verify通过。未改前端或业务，无需重跑整套业务构建／浏览器验收。
 
 **停止于离线场景、标准和首发请求冻结，`live_sender_ready=false`。** 本工具没有`run`、`authorize`或`_worker`入口，也没有创建发送ledger。下一步仍需为这16位置准备独立持久计数／执行适配、验证并发重启和不确定发送，再冻结执行工具并申请新的明确额度；不能换plan或改ROOT复用闭合的132位置／6题发送器。当前96只是可审阅的预算建议，不是“仅等授权就能立即发送”的就绪声明。原应用数据库、Redis、持久Chroma、配置及线上服务均未操作。
+
+### 修复版16场景的独立执行准备（2026-11-05）
+
+在`2d1645a`的场景冻结上接入[独立计数器](backend/evaluation/repair_execution_budget.py)、[生产链路运行适配](backend/evaluation/repair_execution_runtime.py)和[执行入口](backend/evaluation/repair_execution_trial.py)。**本轮只完成离线接线、受控验证及零调用冻结，真实模型、数据库及外部业务调用均0；当前没有新的真实调用授权。** 原准备协议的授权0、调用0及`live_sender_ready=false`保留，描述的是原准备工具；本次执行就绪状态属于另一个绑定原协议的新执行记录，未回改旧文件。
+
+- 固定RT01–RT08任务，再RR01–RR08检索，逐项一次；各自前4项已见回归、后4项新表述分开报告。实际使用生产Orchestrator／原生工具和同索引检索，不运行Judge、后台记忆或远程Embedding；模型输入不附加题号、gold、评审标准或可信客户身份。
+- 独立目录`backend/data/benchmarks/repair-execution-v1/`绑定原协议、题集、旧台账哈希及当前代码。源码校验以原227文件为基线，只增加6个评测／测试文件并允许3处精确哈希的评测hook，不放宽原发送器。原16个首请求需在内存重新捕获并与原冻结的canonical及wire哈希一致；后续动态工具／重排请求先封存再计数。
+- 新授权必须绑定当前协议、目录及台账起点，且上限不超过**96次**；当前授权及发送均**0**。所有分类、角色、检索和合并步骤共享这一上限，最多3个在途；阶段数学包络200不是额度。旧237/480批次及未用243次均不接续。授权校验、固定目录和未开始检查在提取／使用模型密钥、打开真实数据或创建发送客户端之前完成。
+- 发送前原子占额，文件锁和进程租约阻止并发或重启补发；失败、取消、结果不明不退额。残留尝试、版本／来源／配置变化、计数或传输异常均暂停，不自动恢复。沿用分类8秒、角色15秒、合并8秒、改写10秒、重排30秒，SDK30秒，审计30秒，整批900秒边界；不延长业务模型等待，也不启用请求重试。
+- 任务检查实际原生调用、参数、客户归属及证据绑定，完整性等七维仍须逐题评阅。检索单列结构／物理请求及降级观察，再分别统计两臂排名与无匹配；错误或失败产生的空列表不能算正确拒识。受控记录只允许受控评阅，不能借人工标签变成真实模型成绩；`quality_pass_claim`始终为false，不以接口、工具或执行完成代替质量通过。
+
+受控测试覆盖全16项真实SDK内存传输、计数上限／并发／重启／未知发送、取消、阶段预算、首包与动态请求封存、实际handler关联、版本及ABA隔离、评阅和检索来源拒绝；它们验证程序保护，不给出修复版真实准确率。两组不重叠的相关检查分别**202、398项通过，共600项**；`git diff --check`、语法、本地链接及敏感信息检查通过。无前端、业务模型、提示、Schema、语料、规则或依赖变更，不重复构建或浏览器验收。
+
+执行协议SHA256为`1e11e64c66b006c402b1a46c6e6bfaa4fed703f3f61a5119225fee8bb31224d8`，原准备协议仍为`18fd46bab820b2dbb9ec13b73fd3f84d35ba5f86c8bf2136b0f5ba63ca103172`。本地新增`repair-execution-preflight-v1/offline-execution-verification.json`及`zero-call-report.json`记录600项检查、0授权／发送、16项未执行；原4104份历史证据与5个原缓存逐项哈希复核不变。这些私有证据不入库。可在`backend/`重现相关测试：
+
+```sh
+.venv/bin/python -B -m pytest -q \
+  tests/test_repair_execution_budget.py tests/test_repair_execution_runtime.py \
+  tests/test_repair_validation.py tests/test_expanded_trial.py \
+  tests/test_phase_deadline_transport.py tests/test_task_supervisor.py
+.venv/bin/python -B -m pytest -q \
+  tests/test_task_budget.py tests/test_expanded_budget.py tests/test_task_runtime.py \
+  tests/test_expanded_task_runtime.py tests/test_expanded_observation_runtime.py \
+  tests/test_retrieval_baseline.py tests/test_task_transport.py \
+  tests/test_task_deadline_transport.py tests/test_benchmark_metrics.py \
+  tests/test_repair_execution_trial.py
+```
+
+可只读检查当前准备状态（在`backend/`运行）：
+
+```sh
+ORT_DISABLE_TELEMETRY=1 .venv/bin/python -B -m evaluation.repair_execution_trial verify
+ORT_DISABLE_TELEMETRY=1 .venv/bin/python -B -m evaluation.repair_execution_trial report
+```
+
+**停止于独立执行工具离线准备完成。** 当前16项全部未执行，尚无修复版真实质量结论。下一步须先取得绑定本批的新明确额度，才可创建授权并运行固定计划；不是继续使用旧批余额，也不是本轮已经完成真实复验。原应用数据库、Redis、持久Chroma、配置及线上服务未操作。
 
 ## 当前限制
 

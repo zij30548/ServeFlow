@@ -231,7 +231,13 @@ def test_completed_source_freeze_rejects_later_business_repairs_without_rebindin
     # trees; the real working tree is intentionally a different version now.
     with pytest.raises(Exception, match="expanded_unapproved_source_set"):
         module.source_proof()
-    assert bench.sha256(bench.BACKEND_ROOT/module.HOOK)==module.HOOK_HASH
+    # The current supervisor has a new narrowly scoped worker; the historical
+    # source still matches its original freeze, without rewriting old hashes.
+    import hashlib
+    import subprocess
+    historical = subprocess.check_output(["git", "show", "2b46ce69e3e6dd6705f9119b5ffb9926bc57b299:backend/"+module.HOOK],
+                                         cwd=bench.BACKEND_ROOT.parent)
+    assert hashlib.sha256(historical).hexdigest()==module.HOOK_HASH
     assert bench.sha256(module.QUESTION_PATH)==module.QUESTION_HASH
 
 
