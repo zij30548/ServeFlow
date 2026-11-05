@@ -178,7 +178,7 @@ def supervise(command, *, root: Path, deadline_s=900):
                                "evaluation.tool_scope_recheck", "evaluation.retrieval_phase_trial",
                                "evaluation.diagnostic_repair_trial", "evaluation.order_answer_recheck",
                                "evaluation.current_task_ablation", "evaluation.expanded_trial",
-                               "evaluation.repair_execution_trial")]
+                               "evaluation.repair_execution_trial", "evaluation.repair_execution_continuation")]
     if (os.name != "posix" or not hasattr(os, "killpg") or not hasattr(os, "O_NOFOLLOW")
             or not hasattr(os, "O_DIRECTORY")):
         raise SupervisorError("supervisor_posix_required")
@@ -202,6 +202,9 @@ def supervise(command, *, root: Path, deadline_s=900):
     if (command[4] == "evaluation.repair_execution_trial"
             and Path(root) != Path(__file__).resolve().parent.parent/"data/benchmarks/repair-execution-v1"):
         raise SupervisorError("repair_execution_worker_root_invalid")
+    if (command[4] == "evaluation.repair_execution_continuation"
+            and Path(root) != Path(__file__).resolve().parent.parent/"data/benchmarks/repair-execution-v1"):
+        raise SupervisorError("repair_continuation_worker_root_invalid")
     maximum = 3600 if command in quality_workers else 900
     if type(deadline_s) not in (int, float) or not math.isfinite(deadline_s) or not 0 < deadline_s <= maximum:
         raise SupervisorError("supervisor_deadline_invalid")
