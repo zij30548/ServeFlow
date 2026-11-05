@@ -1,9 +1,9 @@
 <template>
   <div class="app-shell" :class="`view-${activeView}`">
     <aside class="navigation-rail" aria-label="主导航">
-      <a class="brand" href="#" @click.prevent="activeView = 'chat'" aria-label="智应 ServeFlow 首页">
+      <a class="brand" href="#" @click.prevent="activeView = 'chat'" aria-label="智应客服协同系统 首页">
         <span class="brand-mark"><BrandMark /></span>
-        <span class="brand-copy"><span class="brand-name">ServeFlow</span><span class="brand-caption">智应 · 客服协作</span></span>
+        <span class="brand-copy"><span class="brand-name">智应</span><span class="brand-caption">客服协同系统</span></span>
       </a>
       <button class="new-chat-button" @click="activeView = 'chat'; clearConversation()">
         <AppIcon name="plus" />
@@ -42,9 +42,9 @@
           <AppIcon name="chevron" />
           <strong>{{ currentView.label }}</strong>
         </div>
-        <a class="mobile-brand" href="#" @click.prevent="activeView = 'chat'" aria-label="智应 ServeFlow 首页">
+        <a class="mobile-brand" href="#" @click.prevent="activeView = 'chat'" aria-label="智应客服协同系统 首页">
           <span class="brand-mark"><BrandMark /></span>
-          <span>ServeFlow</span>
+          <span>智应客服协同系统</span>
         </a>
         <div class="topbar-tools">
           <span class="connection-status" :title="statusText || healthLabel">
@@ -117,14 +117,14 @@
               <div v-if="!messages.length" class="welcome">
                 <div class="welcome-mark" aria-hidden="true"><BrandMark /></div>
                 <h1>今天，需要解决什么？</h1>
-                <p>智应 ServeFlow · 面向复杂客服任务的多 Agent 协作系统</p>
+                <p>智应客服协同系统 · 面向复杂客服任务的多 Agent 协作系统</p>
               </div>
               <template v-else>
                 <article v-for="item in messages" :key="item.id" :class="['message', item.role, { 'message-error': item.error }]">
                   <span v-if="item.role === 'assistant'" class="message-avatar"><BrandMark /></span>
                   <div class="message-content">
                     <div class="message-meta">
-                      <strong>{{ item.role === 'user' ? '你' : '智应 ServeFlow' }}</strong>
+                      <strong>{{ item.role === 'user' ? '你' : '智应客服协同系统' }}</strong>
                       <span v-if="item.error" class="error-label">请求失败</span>
                       <span v-else-if="item.status === 'partial'" class="error-label">部分完成</span>
                       <small v-else-if="item.role === 'assistant'">Agent</small>
