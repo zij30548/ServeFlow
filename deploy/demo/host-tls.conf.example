@@ -6,8 +6,17 @@ server {
     server_name DEMO_HOST;
     access_log off;
     error_log /var/log/nginx/serveflow-demo-error.log crit;
-    # Keep any operator-owned ACME challenge location outside this template.
-    return 308 https://DEMO_HOST$request_uri;
+    # Keep this exception after enabling TLS so webroot renewals still work.
+    location ^~ /.well-known/acme-challenge/ {
+        auth_basic off;
+        root /var/lib/serveflow-acme;
+        default_type text/plain;
+        limit_except GET HEAD { deny all; }
+        try_files $uri =404;
+    }
+    location / {
+        return 308 https://DEMO_HOST$request_uri;
+    }
 }
 server {
     listen 443 ssl;

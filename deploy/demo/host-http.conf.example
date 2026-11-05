@@ -1,0 +1,21 @@
+# Certificate bootstrap only. Replace DEMO_HOST before explicit installation.
+# Serve public ACME tokens; do not proxy the application or prompt for passwords
+# over HTTP. No certificate paths are referenced before issuance.
+server {
+    listen 80;
+    server_name DEMO_HOST;
+    server_tokens off;
+    access_log off;
+    error_log /var/log/nginx/serveflow-demo-error.log crit;
+    client_max_body_size 64k;
+    location ^~ /.well-known/acme-challenge/ {
+        auth_basic off;
+        root /var/lib/serveflow-acme;
+        default_type text/plain;
+        limit_except GET HEAD { deny all; }
+        try_files $uri =404;
+    }
+    location / {
+        return 503;
+    }
+}

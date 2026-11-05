@@ -158,7 +158,17 @@ uv pip install --python .venv/bin/python -r requirements-demo.txt
 
    使用固定Compose项目名`serveflow-customer-demo`的三个独立卷，不挂载用户旧库。正常重启保留卷与额度。**禁止`down -v`、删除usage或恢复旧额度目录来获得新许可。**修改许可配置也不能绕过已初始化记录的一致性检查。
 
-4. 由管理员审阅[宿主TLS模板](deploy/demo/host-tls.conf.example)，换域名与证书路径，确认无端口／站点冲突后单独安装、检查并reload。证书签发和服务器操作不在此次交付内。未就绪前不要开放HTTP或将8080改绑公网。
+4. 由管理员在目标机显式配置HTTPS。证书尚未签发时，先审阅并安装[宿主HTTP验证模板](deploy/demo/host-http.conf.example)：只有固定`/var/lib/serveflow-acme`下的`/.well-known/acme-challenge/`允许公开GET／HEAD，其他HTTP路径503，不转发应用或提示访问密码。验证文件可从公网读取后再签发独立证书；保留旧域名证书。模板只写入新的、已核对不存在的站点文件，不覆盖旧配置。
+
+   使用[Certbot webroot](https://eff-certbot.readthedocs.io/en/stable/using.html#webroot)签发时，命令中的示例域名须与配置及DNS一致：
+
+   ```sh
+   sudo certbot certonly --webroot -w /var/lib/serveflow-acme \
+     --cert-name demo.example.com -d demo.example.com \
+     --deploy-hook '/usr/sbin/nginx -t && /usr/bin/systemctl reload nginx'
+   ```
+
+   证书存在、域名匹配且有效后，才安装[宿主TLS模板](deploy/demo/host-tls.conf.example)，换域名及证书路径、检查并reload。仅切换本演示域名已核对归属的启用链接，保留HTTP与HTTPS两个源文件；不要同时启用两个同域名80端口server。最终HTTP配置仍保留ACME验证位置，将其他路径的308放在`location /`中，避免server级return先行截断验证。确认目标机的Certbot定时续期任务，并对新cert-name单独执行一次`certbot renew --dry-run`；成功后续期仍需reload，deploy-hook用于此目的。证书操作由部署者执行，本机自签测试不能替代公开证书验收。8080继续仅监听回环。
 
    ```sh
    curl --head https://demo.example.com/  # 未认证应401
@@ -187,6 +197,8 @@ uv pip install --python .venv/bin/python -r requirements-demo.txt
 2026-11-06网页只读启动补修：操作者提供的Linux回执确认前后端镜像构建成功、演示MySQL初始化和只读验证成功、额度100／已用0／未决0，Redis、MySQL和API健康；web反复退出1、OOM为false。日志明确为默认错误日志权限拒绝，以及`/var/cache/nginx/fastcgi_temp`写入只读文件系统失败。先前只覆盖client-body和proxy临时目录，漏掉了已编译协议模块的启动路径。现将FastCGI/uWSGI/SCGI临时路径也显式放入既有`/tmp` tmpfs，配置使用内置`stderr`，启动参数增加`-e stderr`以覆盖解析配置前的默认日志。保留UID101降权、只读根目录、原tmpfs容量、访问认证及所有数据／额度。
 
 部署相关184项通过。本机复制同版本Nginx源码，将编译默认路径指向不可写0500目录：旧模板和旧参数真实退出1，修补后语法、启动及18项受控检查通过，包括401保护、受控认证静态200、代理、取消及限流。此为macOS非root进程的权限模拟，非Linux容器只读文件系统验收；SHA仅用于本机测试，正式bcrypt未变。证据在`backend/data/deploy-checks/protected-demo-nginx-readonly-20261106-v1/`，原失败保留。仅修web分支，无需重建健康的API：更新后停止web、`build web`，再`up -d --no-build --no-deps --force-recreate --wait --wait-timeout 90 web`；不运行init／quota-init、不删除卷或重置额度。Linux修补版web健康及公网HTTPS仍待操作者续验。模型／外部业务调用0次，未操作云服务器。
+
+2026-11-06HTTPS接入准备：操作者回执确认网页补修后四个容器均healthy、回环未认证HTTP401、额度100／已用0／未决0；空闲容器内存快照合计约476MiB，不是负载峰值或容量保证。新域名已解析到目标机，现有证书只覆盖旧Trip域名，尚未取得新域名证书。增加独立HTTP验证模板，并修正最终TLS模板保留同一个webroot续期入口；不改变Docker、模型或业务数据。部署189项通过，原生Nginx受控HTTP与自签TLS22项通过；该检查使用临时自签证书和受控上游，不是云端或公开CA验收，临时私钥已清理。新证据为`backend/data/deploy-checks/protected-demo-https-20261106-v1/`。真实模型／外部业务调用0次，未代操云服务器或签发真实证书。
 
 ## 检查
 
