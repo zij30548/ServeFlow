@@ -127,7 +127,7 @@ async def test_cross_owner_not_found_is_a_usable_non_disclosing_result():
 
 class Retrieval:
     def __init__(self): self.calls = []
-    async def search_with_rewrite(self, name, query, top_k=3):
+    async def search_with_rewrite(self, name, query, top_k=3, context=None):
         self.calls.append((name, query))
         return SimpleNamespace(success=True, reranked=False, error=None, data=[{
             "document_id": "a" * 64, "title": "受控规则", "content": "仅作受控政策依据，不是订单状态。",

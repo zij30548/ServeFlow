@@ -72,7 +72,7 @@ def test_bad_parameters_do_not_trip_circuit():
     asyncio.run(run())
 
 
-def test_rerank_repairs_missing_and_duplicate_indices_and_records_status():
+def test_rerank_rejects_missing_and_duplicate_indices_and_records_fallback_status():
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
     async def run():
@@ -80,7 +80,10 @@ def test_rerank_repairs_missing_and_duplicate_indices_and_records_status():
         manager._client.messages.create = AsyncMock(return_value=SimpleNamespace(
             content=[{'type':'text','text':'```json\n[2,2]\n```'}], stop_reason='end_turn'))
         data, changed = await manager._rerank_with_status('query', ['a','b','c','d'], 3)
-        assert changed and data == ['c','a','b']
+        # New full-evidence version rejects malformed rankings instead of
+        # silently completing them and claiming rerank success. Historical
+        # outputs and their original scores remain unchanged.
+        assert not changed and data == ['a','b','c']
         manager._client.messages.create = AsyncMock(return_value=SimpleNamespace(
             content=[{'type':'text','text':'[9]'}], stop_reason='end_turn'))
         data, changed = await manager._rerank_with_status('query', ['a','b','c'], 2)

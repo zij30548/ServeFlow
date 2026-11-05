@@ -18,6 +18,7 @@ from demo_business.store import load_fixture
 from evaluation.task_evidence import fixture_order_result
 from evaluation.task_runtime import build_runtime, execute_case
 from evaluation.task_transport import CURRENT, BoundClient
+from tooling.retrieval_grounding import query_units
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -99,7 +100,8 @@ class ControlledSDK:
             return self.text(json.dumps({"intent": intent, "confidence": 0.99,
                                          "reasoning": "controlled classification"}))
         if frame.phase == "rag_rewrite":
-            return self.text(json.dumps(["设备配件拆单配送", "数字订阅快递单号", "统一到货时间与免邮门槛"]))
+            data = json.loads(kwargs["messages"][0]["content"].rsplit("\n", 1)[-1])
+            return self.text(json.dumps(data["allowed_units"][:3], ensure_ascii=False))
         if frame.phase == "rag_rerank":
             return self.text("[0,1,2,3,4]")
         if frame.phase == "judge":
@@ -230,7 +232,8 @@ def test_policy_executes_original_rewrite_recall_rerank_without_gold_in_actor_in
         assert phases.count("rag_rerank") == len(rag_calls)
         assert 4 <= len(data.searches) <= 4 * len(rag_calls)
         assert all(params["top_k"] == 5 for params in data.searches)
-        assert len({params["query"] for params in data.searches}) == 4
+        expected_queries = {current["turns"][0], *query_units(current["turns"][0])[:3]}
+        assert {params["query"] for params in data.searches} == expected_queries
         assert output["deterministic"]["blockers"] == []
         for evidence in rag_calls:
             assert evidence["name"] == "search_knowledge_base"

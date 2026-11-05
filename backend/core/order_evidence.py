@@ -324,8 +324,10 @@ def render_order_evidence(evidence):
 
 
 _TOKEN = re.compile(r"(?<![A-Za-z0-9_])DEMO-[A-Za-z0-9_-]*", re.I)
+_QUOTED_IDENTIFIERS = re.compile(
+    rf"{_TOKEN.pattern}(?:\s*(?:和|与|及|、|,|/|and|or)\s*{_TOKEN.pattern})*", re.I)
 _RESET = re.compile(r"(?:换(?:一)?(?:个|笔)|另(?:外)?(?:一)?(?:个|笔)|新(?:的)?)(?:问题|订单)|\b(?:another|different|new)\s+order\b", re.I)
-_QUOTED = re.compile(r'“[^”\n]*”|「[^」\n]*」|‘[^’\n]*’|"[^"\n]*"|(?<!\w)\x27[^\x27\n]*\x27(?!\w)')
+_QUOTED = re.compile(r'“[^”\n]*”|「[^」\n]*」|‘[^’\n]*’|"[^"\n]*"|(?<![A-Za-z0-9_])\x27[^\x27\n]*\x27(?![A-Za-z0-9_])')
 _READ = r"(?:查询|查一下|查查|查看|查|核对|核实|检查|看看|跟踪|追踪|读取|look\s+up|check|track|query|verify)"
 _DECLINED = re.compile(
     rf"(?:不需要|不用|不要|不想|无需|无须|别|先别|暂不|不再|不查询|不查看|不查|不核对|不跟踪|不是|并非)"
@@ -352,11 +354,40 @@ def _active_order_text(message):
     """
     active = []
     blocked_reference = False
-    for clause in re.split(r"[，,。！？!?；;\n]", message):
+
+    def quotation(match):
+        nonlocal blocked_reference
+        inner = match.group()[1:-1].strip()
+        # A quoted identifier can still be the object of an explicit read:
+        # ``check “DEMO-1234”``. A sentence/JSON/instruction containing an ID
+        # is data, even if that sentence itself includes a read verb. Mask it
+        # *before* punctuation splitting so punctuation inside it cannot turn
+        # a quoted command into an independent current-user clause.
+        if _QUOTED_IDENTIFIERS.fullmatch(inner):
+            return match.group()
+        blocked_reference |= bool(_order_tokens(inner))
+        return " "
+
+    text = _QUOTED.sub(quotation, message)
+    # An incomplete quotation has no safe closing boundary. Do not recover
+    # lookup targets from its remainder or silently fall back to user history.
+    for opening, closing in (("“", "”"), ("「", "」"), ("‘", "’"), ('"', '"')):
+        start = text.find(opening)
+        if start >= 0 and closing not in text[start + 1:]:
+            if _order_tokens(text[start:]):
+                return "", True
+            text = text[:start]
+    for clause in re.split(r"[，,。！？!?；;\n]", text):
         if not clause.strip():
             continue
         ids = bool(_order_tokens(clause))
-        if _DECLINED.search(clause) or _DECLINED_EN.search(clause):
+        # Pure-ID quotation marks must not break the object of a negative
+        # request (``don't check “DEMO-1234”``). Normalize them only for the
+        # negation guard; a bare quoted ID still cannot become a lookup.
+        negative_scope = _QUOTED.sub(
+            lambda match: match.group()[1:-1].strip()
+            if _QUOTED_IDENTIFIERS.fullmatch(match.group()[1:-1].strip()) else " ", clause)
+        if _DECLINED.search(negative_scope) or _DECLINED_EN.search(negative_scope):
             blocked_reference = True
             continue
         if ids and (_META.search(clause) or _COURTESY.fullmatch(_TOKEN.sub("", clause).strip())):
@@ -457,7 +488,10 @@ _MUTATION = (
     rf"(?:关闭|关掉|停止|开启|打开){_MUTATION_OWNER}(?:自动续费|续费|订阅)|"
     rf"冻结{_MUTATION_OWNER}(?:{_NEXT_CHARGE}|账户|账号)|"
     rf"解绑{_MUTATION_OWNER}(?:设备|账户|账号|银行卡|手机号)|"
-    rf"(?:修改|更改){_MUTATION_OWNER}(?:收货地址|订单地址)|{_BA_MUTATION}"
+    rf"(?:修改|更改|改)(?:一下|下)?{_MUTATION_OWNER}(?:收货地址|订单地址|地址)|"
+    r"(?:把|将)\s*(?:人民币\s*)?[0-9]+(?:\.[0-9]{1,2})?\s*(?:元|块|CNY)\s*"
+    r"(?:给我|替我)?(?:转回|退回|转到|转入|转给|汇入|汇到)\s*(?:到|至)?\s*(?:我的|本人|指定的)?(?:卡|银行卡|账户|账号)|"
+    rf"{_BA_MUTATION}"
 )
 _MUTATION_DIRECTIVE = r"(?:(?:请|麻烦|现在|立即|直接|再|替我|帮我|给我|我要|我想|我需要|我希望)\s*)+"
 _MUTATION_DECLINE = re.compile(

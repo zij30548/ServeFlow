@@ -124,7 +124,8 @@ async def test_each_bound_stage_gets_its_own_menu_and_prior_native_result(role, 
     assert prior_call == block(first, args, "first_1")
     assert prior_result["type"] == "tool_result" and prior_result["tool_use_id"] == "first_1"
     assert prior_result["is_error"] is False
-    manager.search_with_rewrite.assert_awaited_once_with("knowledge_search", "退款规则", top_k=5)
+    manager.search_with_rewrite.assert_awaited_once_with(
+        "knowledge_search", message, top_k=5, context={"original_query": message})
     assert agent.get_tools() == registry
     if role is TechnicalAgent:
         # Tool selection succeeds without granting the diagnostic role record

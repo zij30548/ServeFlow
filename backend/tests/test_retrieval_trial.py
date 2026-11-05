@@ -131,7 +131,10 @@ def test_original_pipeline_performs_exactly_two_controlled_physical_calls_per_qu
             sent.append((frame, json.loads(request.content)))
             assert trial.budget(p).status()["attempts"] == len(sent)
             assert (trial.root / f"admission-{frame[0]}-{frame[1]}.json").exists()
-            return response('["受控改写"]' if frame[1] == "rewrite" else '[0,1,2,3,4]')
+            body = json.loads(request.content)
+            units = (json.loads(body["messages"][0]["content"].rsplit("\n", 1)[-1])["allowed_units"]
+                     if frame[1] == "rewrite" else [])
+            return response(json.dumps(units[:3], ensure_ascii=False) if frame[1] == "rewrite" else '[0,1,2,3,4]')
         return httpx.MockTransport(handle)
     report = asyncio.run(trial.execute(delegate_factory=factory, controlled_knowledge=fake_knowledge()))
     assert len(sent) == report["model_requests"] == 48
@@ -179,10 +182,11 @@ def test_original_model_parse_fallback_is_preserved_not_repaired(tmp_path):
     assert report["model_requests"] == 48
     assert sample["method_observation"]["rewrite_queries"] == [module.cases()[0]["input"]["message"]]
     assert sample["method_observation"]["rerank_applied"] is False
-    assert sample["record"]["ranked_titles"] == [doc['title'] for doc in module.task_data._policies()[:3]]
+    assert sample["record"]["status"] == "failed"
+    assert sample["record"]["ranked_titles"] == []  # Invalid support is not evidence/no-materials success.
 
 
-def test_no_rerank_needed_never_creates_a_fake_second_call_or_continues_plan(tmp_path):
+def test_empty_collection_never_creates_a_fake_second_call_or_continues_fixed_plan(tmp_path):
     trial, p = prepared(tmp_path)
     grant(trial)
     sent = []
@@ -192,11 +196,29 @@ def test_no_rerank_needed_never_creates_a_fake_second_call_or_continues_plan(tmp
             return response("[]")
         return httpx.MockTransport(handle)
     with pytest.raises(base.TrialError, match="retrieval_two_stage_plan_not_reached"):
-        asyncio.run(trial.execute(delegate_factory=factory, controlled_knowledge=fake_knowledge(count=2)))
+        asyncio.run(trial.execute(delegate_factory=factory, controlled_knowledge=fake_knowledge(count=0)))
     assert sent == [("r01", "rewrite")] and trial.budget(p).status()["attempts"] == 1
     sample = bench.read_json(trial.root / "sample-r01.json")
     assert sample["record"]["usage"]["physical_requests"] == 1
     assert trial.report()["splits"]["development"]["not_executed"] == 11
+
+
+def test_small_candidate_pool_still_uses_one_support_decision_not_a_fake_skip(tmp_path):
+    trial, p = prepared(tmp_path)
+    grant(trial)
+    sent = []
+    def factory(frame):
+        def handle(request):
+            sent.append(frame)
+            return response("[]" if frame[1] == "rewrite" else "[1,0]")
+        return httpx.MockTransport(handle)
+    report = asyncio.run(trial.execute(delegate_factory=factory, controlled_knowledge=fake_knowledge(count=2)))
+    assert report["model_requests"] == len(sent) == 48
+    assert [f"{case}:{stage}:1" for (case, stage) in sent] == list(OPERATIONS)
+    sample = bench.read_json(trial.root / "sample-r01.json")
+    assert sample["method_observation"]["rerank_applied"] is True
+    assert sample["method_observation"]["rerank_input_count"] == 2
+    assert sample["record"]["usage"]["physical_requests"] == 2
 
 
 def test_actual_data_identity_change_has_zero_model_requests(tmp_path):

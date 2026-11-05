@@ -267,7 +267,10 @@ def build_shared_rag_tools(tool_manager: Any) -> Dict[str, AgentToolSpec]:
     """构建所有 Agent 可共享的 RAG 工具。"""
 
     async def search_knowledge_base(req: Request, args: Dict[str, Any]) -> Dict[str, Any]:
-        query = str(args.get("query") or req.message or "").strip()
+        # Model-selected keywords are suggestions, never a replacement for the
+        # user's question or its negation/conditions. Bind recall, rewrite and
+        # source filtering to the server-held request instead.
+        query = req.message.strip() if type(req.message) is str else ""
         top_k = args.get("top_k", 5)
         if not query:
             return {"success": False, "error": "query 不能为空", "results": []}
@@ -278,6 +281,7 @@ def build_shared_rag_tools(tool_manager: Any) -> Dict[str, AgentToolSpec]:
             "knowledge_search",
             query,
             top_k=top_k,
+            context={"original_query": query},
         )
         if not getattr(result, "success", False):
             return {
@@ -301,7 +305,7 @@ def build_shared_rag_tools(tool_manager: Any) -> Dict[str, AgentToolSpec]:
             "search_knowledge_base",
             "检索知识库并返回最相关的文档片段；可用于通用、技术、账单和升级场景。",
             {
-                "query": {"type": "string", "minLength": 1, "maxLength": 2000, "description": "用户问题或检索关键词"},
+                "query": {"type": "string", "minLength": 1, "maxLength": 2000, "description": "检索建议；服务端以本次原始问题为准，不能改变否定、条件或身份"},
                 "top_k": {"type": "integer", "minimum": 1, "maximum": 20, "description": "返回结果条数"},
             },
             search_knowledge_base,

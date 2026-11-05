@@ -55,7 +55,7 @@ class Client:
 
 class Retrieval:
     def __init__(self,*,rows=None,success=True):self.rows=rows if rows is not None else [row()];self.success=success;self.calls=[]
-    async def search_with_rewrite(self,name,query,top_k=5):
+    async def search_with_rewrite(self,name,query,top_k=5,context=None):
         self.calls.append((name,query,top_k))
         return SimpleNamespace(success=self.success,data=deepcopy(self.rows),reranked=True,error=None if self.success else 'controlled failure')
 

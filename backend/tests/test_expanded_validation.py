@@ -1,12 +1,32 @@
 """Source-bound question preparation, with no live model or database clients."""
 from copy import deepcopy
+from functools import lru_cache
+import hashlib
 import json
-import shutil
+from pathlib import Path
 import socket
+import subprocess
 
 import pytest
 
 from evaluation import benchmark as bench, expanded_validation as expanded
+
+
+# The question/source declarations are immutable evidence for this execution
+# version. Current business repairs must make that old freeze fail closed,
+# while its validation/mutation tests still need a genuinely matching fixture.
+HISTORICAL_EXECUTION = "2b46ce69e3e6dd6705f9119b5ffb9926bc57b299"
+
+
+@lru_cache(maxsize=128)
+def historical_blob(name):
+    path = Path(name)
+    assert not path.is_absolute() and ".." not in path.parts
+    return subprocess.run(
+        ["git", "show", f"{HISTORICAL_EXECUTION}:backend/{name}"],
+        cwd=bench.BACKEND_ROOT.parent, capture_output=True, check=True,
+        timeout=15,
+    ).stdout
 
 
 @pytest.fixture(autouse=True)
@@ -20,15 +40,30 @@ def offline(monkeypatch):
 @pytest.fixture
 def copied_root(tmp_path):
     source = bench.BACKEND_ROOT
-    names = {"knowledge/serveflow-demo-v2.json", "demo_business/fixtures.json"}
+    names = set(bench.artifact_paths(source))
+    names.update({"evaluation/expanded_validation.py", "tests/test_expanded_validation.py"})
     names.update(str(p.relative_to(source)) for p in (source / "evaluation/benchmark").glob("*.json"))
+    declared = {}
     for suite in expanded.SUITES:
         data = bench.read_json(expanded._path(source, suite))
-        names.update(expanded._sources(data, source))
+        bindings = data.get("sources", data.get("source_bindings", [data["source"]] if "source" in data else []))
+        for binding in bindings:
+            name = binding["path"].removeprefix("backend/")
+            digest = binding["sha256"]
+            assert name not in declared or declared[name] == digest
+            declared[name] = digest
+            names.add(name)
     for name in names:
         target = tmp_path / name
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source / name, target)
+        blob = historical_blob(name)
+        if name in declared:
+            assert hashlib.sha256(blob).hexdigest() == declared[name]
+        target.write_bytes(blob)
+    # Use the unchanged production source gate after constructing the matching
+    # historical fixture; no declared hashes or allowlists are rewritten.
+    for suite in expanded.SUITES:
+        expanded._sources(bench.read_json(expanded._path(tmp_path, suite)), tmp_path)
     return tmp_path
 
 
@@ -39,13 +74,20 @@ def change(root, suite, edit):
     path.write_text(json.dumps(data, ensure_ascii=False, allow_nan=False))
 
 
-def test_actual_questions_are_balanced_source_checked_and_offline():
-    result = expanded.validate()
+def test_historical_questions_are_balanced_source_checked_and_offline(copied_root):
+    result = expanded.validate(copied_root)
     assert [(r["suite"], r["total"], r["splits"]) for r in result] == [
         ("intents", 60, {"development": 24, "validation": 36}),
         ("tasks", 24, {"development": 8, "validation": 16}),
         ("retrieval", 24, {"development": 8, "validation": 16}),
     ]
+
+
+def test_current_business_repairs_cannot_reuse_the_old_source_bound_questions():
+    # A new code revision is not permission to refresh an old source binding
+    # or resume its model allowance. Preserve the actual-root rejection.
+    with pytest.raises(bench.BenchmarkError, match="expanded_source_changed"):
+        expanded.validate()
 
 
 def test_duplicate_old_question_rejected(copied_root):
@@ -157,15 +199,23 @@ def test_unresolved_labels_cannot_be_frozen(copied_root):
         expanded.freeze(copied_root)
 
 
-def test_freeze_is_question_only_and_cannot_overwrite(tmp_path):
-    manifest = expanded.freeze()
+def test_freeze_is_question_only_and_cannot_overwrite(tmp_path, copied_root, monkeypatch):
+    actual_check_output = subprocess.check_output
+    def fixture_head(args, **kwargs):
+        if args == ["git", "rev-parse", "HEAD"] and kwargs.get("cwd") == copied_root:
+            return HISTORICAL_EXECUTION + "\n"
+        return actual_check_output(args, **kwargs)
+    # Only fixture metadata is supplied; all source bytes/hash checks above
+    # remain real, including deliberate source-corruption tests.
+    monkeypatch.setattr(expanded.subprocess, "check_output", fixture_head)
+    manifest = expanded.freeze(copied_root)
     assert manifest["authorized_model_requests"] == manifest["executed_model_requests"] == 0
     assert manifest["sdk_payloads_frozen"] is manifest["live_trial_ready"] is False
-    assert expanded.verify(manifest)["question_cases"] == 108
+    assert expanded.verify(manifest, copied_root)["question_cases"] == 108
     altered = deepcopy(manifest)
     altered["authorized_model_requests"] = 1
     with pytest.raises(bench.BenchmarkError, match="expanded_freeze_changed"):
-        expanded.verify(altered)
+        expanded.verify(altered, copied_root)
     target = tmp_path / "questions.json"
     bench.write_new(target, manifest)
     before = target.read_bytes()

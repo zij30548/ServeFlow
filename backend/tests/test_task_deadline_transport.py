@@ -478,7 +478,7 @@ def test_actual_rewrite_stage_keeps_ten_second_contract_with_explicit_test_time_
         await asyncio.sleep(.025)
         return httpx.Response(200, json={
             "id": "controlled_response_2", "type": "message", "role": "assistant",
-            "content": [{"type": "text", "text": '["拆单", "时效", "范围"]'}],
+            "content": [{"type": "text", "text": '["请核对拆单。", "请核对时效。", "请核对范围。"]'}],
             "model": "qwen3.7-flash-2026-07-15", "stop_reason": "end_turn", "stop_sequence": None,
             "usage": {"input_tokens": 7, "output_tokens": 3},
         })
@@ -490,10 +490,10 @@ def test_actual_rewrite_stage_keeps_ten_second_contract_with_explicit_test_time_
             manager._client, manager._model = BoundClient(sdk), "qwen3.7-flash-2026-07-15"
             try:
                 with eval_deadlines(policy()), context(Frame("c1", "t1", "rag_rewrite", "general")):
-                    return await manager.rewrite_query("演示配送要求", n=3)
+                    return await manager.rewrite_query("请核对拆单。请核对时效。请核对范围。", n=3)
             finally:
                 await sdk.close()
-        assert asyncio.run(run()) == ["演示配送要求", "拆单", "时效", "范围"]
+        assert asyncio.run(run()) == ["请核对拆单。请核对时效。请核对范围。", "请核对拆单。", "请核对时效。", "请核对范围。"]
         assert configured_deadlines == [10]
         assert len(calls) == budget.status()["attempts"] == 1
         assert calls[0]["max_tokens"] == 512 and calls[0]["temperature"] == .3

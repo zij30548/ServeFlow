@@ -224,10 +224,15 @@ def test_persisted_review_is_strictly_rechecked(prepared,monkeypatch):
     with pytest.raises(Exception,match="expanded_review_dimensions"):prepared.report()
 
 
-def test_actual_source_closure_and_question_freeze_are_unchanged():
-    proof=module.source_proof()
-    assert proof["business_modified"] is False and proof["current_files"]-proof["baseline_files"]==8
+def test_completed_source_freeze_rejects_later_business_repairs_without_rebinding_hashes():
+    # The completed 2b46ce6 trial remains pinned. New business fixes must not
+    # silently become that candidate or consume its already closed allowance.
+    # Positive closure and mutation checks still run against synthetic pinned
+    # trees; the real working tree is intentionally a different version now.
+    with pytest.raises(Exception, match="expanded_unapproved_source_set"):
+        module.source_proof()
     assert bench.sha256(bench.BACKEND_ROOT/module.HOOK)==module.HOOK_HASH
+    assert bench.sha256(module.QUESTION_PATH)==module.QUESTION_HASH
 
 
 def test_old_execution_freeze_is_not_relaxed_for_new_sources():

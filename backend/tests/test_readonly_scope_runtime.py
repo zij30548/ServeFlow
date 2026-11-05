@@ -155,7 +155,7 @@ async def test_policy_native_retrieval_keeps_actual_handler_and_no_extra_summary
     class Retrieval:
         def __init__(self):
             self.calls = []
-        async def search_with_rewrite(self, name, query, top_k=5):
+        async def search_with_rewrite(self, name, query, top_k=5, context=None):
             self.calls.append((name, query, top_k))
             return SimpleNamespace(success=True, data=[deepcopy(source)], reranked=False, error=None)
     manager = Retrieval()

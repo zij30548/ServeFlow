@@ -54,9 +54,11 @@ from core.order_evidence import (
     requests_business_mutation,
 )
 from core.order_answers import render_order_answers
+from core.safety_guidance import select_safety_guidance
 from core.diagnostic_evidence import (
     DiagnosticEvidence, extract_diagnostic_evidence,
     merge_diagnostic_evidence, render_diagnostic_evidence, select_diagnostic_request,
+    diagnostic_reference_available, has_diagnostic_lookup,
 )
 
 logger = logging.getLogger(__name__)
@@ -260,6 +262,26 @@ def _readonly_scope_result(req, result, *, safe_content=False):
     return result
 
 
+def _safety_guidance_result(req, result, *, safe_content=False):
+    """Unknown device-specific reset advice cannot become operating steps.
+
+    Preserve independently checked record/reference blocks, never concatenate
+    a warning after an unverified 'cloud data is unaffected' claim. This adds
+    no tool, permission, model continuation or device-specific instruction.
+    """
+    guidance = select_safety_guidance(req.message)
+    if not guidance.required:
+        return result
+    if not safe_content:
+        result.content = (("本次查询未完成，未确认任何业务结果。\n\n"
+                           if result.status == "failed" else "") + guidance.content)
+    elif guidance.content not in result.content:
+        result.content += "\n\n" + guidance.content
+    if result.status != "failed":
+        result.status = "partial"
+    return result
+
+
 def _project_business_result(req, *, order=None, policy=None, diagnostic=None,
                              require_order=False, require_policy=False,
                              require_diagnostic=False, incomplete=False,
@@ -300,20 +322,34 @@ def _project_business_result(req, *, order=None, policy=None, diagnostic=None,
         blocks.append("本次未取得可核验的政策资料，规则部分仍未知。")
     if require_diagnostic and diagnostic is None:
         blocks.append("技术排查部分本次未完成；未确认故障原因或修复结果。")
-    diagnostic_scope_unresolved = require_diagnostic and select_diagnostic_request(req.message).code_scope_unresolved
+    diagnostic_selection = select_diagnostic_request(req.message)
+    diagnostic_scope_unresolved = require_diagnostic and diagnostic_selection.code_scope_unresolved
     if diagnostic_scope_unresolved:
-        blocks.append("本次涉及多个错误码或本地尚未提供含义的错误码，尚未逐项核对其具体含义；现有结果仅为通用排查建议。请明确本次要先核对的一个错误码和对应现象。")
+        blocks.append("本次涉及多个错误码，尚未逐项核对其具体含义；现有结果仅为通用排查建议。请明确本次要先核对的一个错误码和对应现象。")
+    diagnostic_reference_missing = (require_diagnostic
+        and diagnostic_selection.error_code is not None
+        and not diagnostic_reference_available(diagnostic_selection.error_code))
+    if diagnostic_reference_missing:
+        if has_diagnostic_lookup(diagnostic, diagnostic_selection.error_code):
+            blocks.append("已按本次明确错误码查询本地参考，但本地未收录该码的具体含义；含义和实际原因仍未知，不能用通用建议冒充已解决。")
+        else:
+            blocks.append("尚未取得本次错误码的可核验参考；没有确认已完成该码查询，其具体含义和实际原因仍未知。")
     complete = not incomplete
     if require_order:
         complete = complete and order is not None and order.status in {"found", "not_found"}
     if require_policy:
         complete = complete and policy is not None and policy.status == "sources" and not policy.mixed
     if require_diagnostic:
-        complete = complete and diagnostic is not None and diagnostic.status == "suggestions" and not diagnostic_scope_unresolved
+        complete = (complete and diagnostic is not None and diagnostic.status == "suggestions"
+                    and not diagnostic_scope_unresolved and not diagnostic_reference_missing)
     # This runtime has no transaction-changing tool. Merely reading a record
     # cannot satisfy a request to execute a refund, cancellation or account edit.
     if mutation_requested:
         blocks.append(_READONLY_SCOPE_NOTICE)
+        complete = False
+    guidance = select_safety_guidance(req.message)
+    if guidance.required:
+        blocks.append(guidance.content)
         complete = False
     return AgentCallResult("\n\n".join(blocks), status="success" if complete else "partial",
                            order_evidence=order, policy_evidence=policy,
@@ -425,6 +461,9 @@ class BaseAgent:
         self.stats.total += 1
         try:
             call_result = await self._call_llm(req)
+            call_result = _safety_guidance_result(req, call_result, safe_content=(
+                call_result.free_order_content is None and any(value is not None for value in (
+                    call_result.order_evidence, call_result.policy_evidence, call_result.diagnostic_evidence))))
             call_result = _readonly_scope_result(req, call_result, safe_content=(
                 call_result.free_order_content is None and any(value is not None for value in (
                     call_result.order_evidence, call_result.policy_evidence, call_result.diagnostic_evidence))))
@@ -507,6 +546,12 @@ class BaseAgent:
         diagnostic_selection = select_diagnostic_request(req.message)
         diagnostic_required = self.agent_type is AgentType.TECHNICAL and (
             record_requested or diagnostic_selection.required)
+        guidance = select_safety_guidance(req.message)
+        if (guidance.required and not record_requested and not policy_required
+                and not diagnostic_selection.required):
+            # A generic model has no verified product procedure. Ask for the
+            # bounded prerequisites without spending a generation on guesses.
+            return AgentCallResult(guidance.content, status="partial")
         # Only a unique code in the user's own current message may bind an
         # error-specific lookup. Model entities are not observation evidence.
         diagnostic_code = diagnostic_selection.error_code
@@ -1095,8 +1140,9 @@ class ResponseComposer:
                 status = "partial"
             if responses and not any(r.success for r in responses):
                 status = "failed"
-            return _readonly_scope_result(req, AgentCallResult(
-                render_policy_evidence(evidence), status=status, policy_evidence=evidence), safe_content=True)
+            return _safety_guidance_result(req, _readonly_scope_result(req, AgentCallResult(
+                render_policy_evidence(evidence), status=status, policy_evidence=evidence),
+                safe_content=True), safe_content=True)
         return await self._compose_text_result(req, responses)
 
     async def _compose_text_result(self, req: Request, responses: List[AgentResponse]) -> AgentCallResult:
@@ -1104,6 +1150,8 @@ class ResponseComposer:
         status = "success" if len(successful) == len(responses) and all(r.status == "success" for r in successful) else "partial"
         if not successful:
             return AgentCallResult("抱歉，所有 Agent 均处理失败。", status="failed")
+        if select_safety_guidance(req.message).required:
+            return _safety_guidance_result(req, AgentCallResult("", status=status))
         if requests_business_mutation(req.message):
             handoff = len(successful) == 1 and (successful[0].agent_type is AgentType.ESCALATION
                                                or successful[0]._readonly_scope_checked)
@@ -1313,6 +1361,7 @@ class AgentOrchestrator:
             clarification = _readonly_scope_result(req, AgentCallResult(
                 "我还不能确定您要处理的是哪类问题。请补充一下是订单物流、退款账单、账户资料，还是技术故障？"),
                 safe_content=True)
+            clarification = _safety_guidance_result(req, clarification)
             result = OrchestratorResult(
                 request_id=req.request_id,
                 response=clarification.content,
@@ -1346,6 +1395,9 @@ class AgentOrchestrator:
                 order_evidence=projected.order_evidence, policy_evidence=projected.policy_evidence,
                 diagnostic_evidence=projected.diagnostic_evidence)
 
+        response = _safety_guidance_result(req, response, safe_content=(
+            response.agent_type is AgentType.ESCALATION or response.free_order_content is None
+            and any(value is not None for value in (response.order_evidence, response.policy_evidence, response.diagnostic_evidence))))
         response = _readonly_scope_result(req, response, safe_content=(
             response.agent_type is AgentType.ESCALATION or response.free_order_content is None
             and any(value is not None for value in (response.order_evidence, response.policy_evidence, response.diagnostic_evidence))))
@@ -1393,6 +1445,9 @@ class AgentOrchestrator:
 
         valid_responses = [r for r in responses if isinstance(r, AgentResponse)]
         composed = await self._composer.compose_result(req, valid_responses)
+        composed = _safety_guidance_result(req, composed, safe_content=(
+            composed.free_order_content is None and any(value is not None for value in (
+                composed.order_evidence, composed.policy_evidence, composed.diagnostic_evidence))))
         composed = _readonly_scope_result(req, composed, safe_content=(
             composed.free_order_content is None and any(value is not None for value in (
                 composed.order_evidence, composed.policy_evidence, composed.diagnostic_evidence))

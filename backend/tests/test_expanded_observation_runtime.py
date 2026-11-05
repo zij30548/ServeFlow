@@ -14,6 +14,7 @@ from core.model_deadline import (EvaluationDeadlinePolicy, ModelDeadlineExceeded
 from evaluation import benchmark as bench, expanded_observation_runtime as runtime
 from evaluation.intent_transport import canonical_payload_hash
 from evaluation.task_transport import CURRENT
+from tooling.retrieval_grounding import query_units
 
 
 @pytest.fixture(autouse=True)
@@ -48,9 +49,12 @@ class SDK:
             raw = self.intent_text if self.intent_text is not None else json.dumps(
                 {"intent": self.intent, "confidence": 0.99, "reasoning": "controlled observation"})
         elif frame.phase == "rag_rewrite":
-            raw = self.rewrite if self.rewrite is not None else '["改写A", "改写B", "改写C"]'
+            data = json.loads(kwargs["messages"][0]["content"].rsplit("\n", 1)[-1])
+            raw = self.rewrite if self.rewrite is not None else json.dumps(data["allowed_units"][:3], ensure_ascii=False)
         elif frame.phase == "rag_rerank":
-            raw = self.rerank if self.rerank is not None else '[5,4,3,2,1,0]'
+            import re
+            indices = re.findall(r"(?m)^([0-9]+)\. ", kwargs["messages"][0]["content"])
+            raw = self.rerank if self.rerank is not None else json.dumps([int(v) for v in indices[::-1]])
         else:
             raise AssertionError("Agent/Judge/background model calls are forbidden")
         return SimpleNamespace(content=[{"type": "text", "text": raw}],
@@ -66,6 +70,7 @@ class Data:
         self.proof = {"kind": "controlled-fixture"}
         self.calls, self.closed, self.fault = [], False, None
         self.empty, self.corrupt = empty, corrupt
+        self.original_query = None
         self.rows = []
         for doc in bench.read_json(bench.BACKEND_ROOT / "knowledge/serveflow-demo-v2.json"):
             self.rows.append({"title": doc["title"], "content": doc["content"], "score": .75,
@@ -78,9 +83,11 @@ class Data:
 
     async def knowledge_handler(self, params, context):
         self.calls.append(deepcopy(params))
+        if self.original_query is None:
+            self.original_query = params["query"]
         if self.empty:
             return []
-        rows = self.rows[1:] if params["query"].startswith("改写") else self.rows
+        rows = self.rows[1:] if params["query"] != self.original_query else self.rows
         value = deepcopy(rows[:params["top_k"]])
         if self.corrupt and value:
             value[0]["content"] += " made up"
@@ -145,7 +152,7 @@ def test_bad_intent_json_is_preserved_as_failed_not_repaired_or_resent():
     assert len(sdk.calls) == 1 and CURRENT.get() is None
 
 
-def test_retrieval_uses_original_vector_baseline_and_original_rewrite_rerank():
+def test_retrieval_uses_original_vector_baseline_and_new_extractive_full_source_rerank():
     c = case("retrieval")
     output, sdk, data = run_retrieval(c)
     assert [frame.phase for frame, _ in sdk.calls] == ["rag_rewrite", "rag_rerank"]
@@ -156,7 +163,7 @@ def test_retrieval_uses_original_vector_baseline_and_original_rewrite_rerank():
     assert data.calls[1] == {"query": c["input"]["message"], "top_k": 5}
     assert output["baseline"]["record"]["ranked_titles"] == [r["title"] for r in data.rows[:3]]
     assert output["enhanced"]["record"]["ranked_titles"] == [r["title"] for r in data.rows[::-1][:3]]
-    assert output["method_observation"]["rewrite_queries"] == [c["input"]["message"], "改写A", "改写B", "改写C"]
+    assert output["method_observation"]["rewrite_queries"] == [c["input"]["message"], *query_units(c["input"]["message"])]
     assert output["method_observation"]["rerank_input_count"] == 6
     assert output["method_observation"]["rerank_applied"] is True
     assert len(output["phase_observations"]) == output["physical_requests_observed"] == 2
@@ -185,18 +192,30 @@ def test_out_of_scope_nonempty_material_remains_a_false_hit():
 
 def test_empty_recall_does_not_send_extra_rerank_to_fill_a_plan():
     output, sdk, _ = run_retrieval(data=Data(empty=True))
-    assert output["status"] == "failed"
+    assert output["status"] == "success"  # Healthy empty collection is not a transport failure.
     assert len(sdk.calls) == 1 and sdk.calls[0][0].phase == "rag_rewrite"
     assert output["method_observation"]["rerank_applied"] is False
     assert output["enhanced"]["record"]["ranked_titles"] == []
 
 
-def test_production_rerank_fallback_is_observed_not_repaired_or_retried():
+def test_production_rerank_failure_is_unverified_not_repaired_or_retried():
     output, sdk, _ = run_retrieval(sdk=SDK(rerank="not an index array"))
     assert len(sdk.calls) == 2
     assert output["method_observation"]["rerank_applied"] is False
-    assert output["enhanced"]["record"]["ranked_titles"] == output["method_observation"]["rewrite_recall_top3"]
+    assert output["status"] == "failed"
+    assert output["enhanced"]["record"]["ranked_titles"] == []
     assert output["phase_observations"][1]["response"]["text"] == "not an index array"
+
+
+def test_support_decision_may_return_empty_without_a_third_model_request():
+    c = next(c for c in bench.read_json(bench.DATASET_ROOT / "expanded-retrieval-v1.json")["cases"]
+             if c["expected"]["kind"] == "out_of_scope")
+    output, sdk, _ = run_retrieval(c, sdk=SDK(rerank="[]"))
+    assert output["status"] == "success" and len(sdk.calls) == 2
+    assert output["method_observation"]["rerank_applied"] is True
+    assert output["enhanced"]["sources"] == []
+    assert output["ranking_observations"]["enhanced"]["correct_rejection"] is True
+    assert output["quality_pass_claim"] is False  # A controlled decision is not a new live score.
 
 
 def test_corrupt_source_is_rejected_before_new_model_send():

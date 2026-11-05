@@ -10,6 +10,7 @@ import pytest
 
 from evaluation import prospective_retrieval_runtime as runtime
 from evaluation import benchmark as bench, intent_trial as base, task_data
+from tooling.retrieval_grounding import query_units
 
 
 @pytest.fixture(autouse=True)
@@ -33,7 +34,7 @@ def rows():
             for doc in task_data._policies()]
 
 
-def fixture(*, rewrite='["配送核对", "账号核对", "退款核对"]', rerank='[5,1,0,2,3,4]',
+def fixture(*, rewrite=None, rerank='[5,1,0,2,3,4]',
             empty=False, delay_original=False, damage=None, failure=None):
     source = rows()
     searches, sends, factory_calls, closed = [], [], [], []
@@ -43,9 +44,10 @@ def fixture(*, rewrite='["配送核对", "账号核对", "退款核对"]', reran
         searches.append(deepcopy(params))
         if empty:
             return []
-        if delay_original and params["top_k"] == 5 and params["query"] not in {"配送核对", "账号核对", "退款核对"}:
+        first_unit = query_units(cases()[0]["input"]["message"])[0]
+        if delay_original and params["top_k"] == 5 and params["query"] != first_unit:
             await asyncio.sleep(.01)
-        answer = source[5:] if params["query"] == "配送核对" else source[:params["top_k"]]
+        answer = source[5:] if params["query"] == first_unit else source[:params["top_k"]]
         answer = deepcopy(answer)
         if damage == "content":
             answer[0]["content"] = "private-invalid-source-must-not-be-accepted"
@@ -61,7 +63,11 @@ def fixture(*, rewrite='["配送核对", "账号核对", "退款核对"]', reran
             if failure == stage:
                 unhealthy.append("controlled_transport_failure")
                 raise RuntimeError("untrusted-private-error-must-not-become-result")
-            text = rewrite if stage == "rewrite" else rerank
+            if stage == "rewrite":
+                data = json.loads(kwargs["messages"][0]["content"].rsplit("\n", 1)[-1])
+                text = rewrite if rewrite is not None else json.dumps(data["allowed_units"][:3], ensure_ascii=False)
+            else:
+                text = rerank
             return SimpleNamespace(content=[SimpleNamespace(type="text", text=text)], stop_reason="end_turn")
 
         return SimpleNamespace(base_url="https://dashscope.aliyuncs.com/apps/anthropic",
@@ -106,7 +112,7 @@ def test_production_methods_preserve_frozen_order_and_only_two_counted_model_sta
     assert sends[0][2]["extra_body"] == sends[1][2]["extra_body"] == {"thinking": {"type": "disabled"}}
 
 
-def test_actual_full_sources_and_200_character_rerank_window_are_both_preserved():
+def test_actual_full_sources_and_tail_conditions_reach_rerank_without_200_character_window():
     result, _, sends, _, _ = execute()
     method = result["method_observation"]
     assert len(method["merged_sources"]) == 6 and method["rerank_input_count"] == 6
@@ -116,15 +122,15 @@ def test_actual_full_sources_and_200_character_rerank_window_are_both_preserved(
                for row in method["merged_sources"])
     prompt = sends[1][2]["messages"][0]["content"]
     for index, source in enumerate(rows()):
-        assert f"{index}. {json.dumps(source, ensure_ascii=False)[:200]}" in prompt
-    assert "本演示不设全国统一送达天数" not in prompt
+        assert f"{index}. {json.dumps(source, ensure_ascii=False)}" in prompt
+    assert "本演示不设全国统一送达天数" in prompt
     assert "本演示不设全国统一送达天数" in method["merged_sources"][5]["content"]
 
 
 def test_query_and_merge_order_do_not_follow_parallel_completion_order():
     result, _, _, _, _ = execute(delay_original=True)
     method = result["method_observation"]
-    assert method["rewrite_queries"] == [cases()[0]["input"]["message"], "配送核对", "账号核对", "退款核对"]
+    assert method["rewrite_queries"] == [cases()[0]["input"]["message"], *query_units(cases()[0]["input"]["message"])]
     assert [row["query"] for row in method["recalls"]] == method["rewrite_queries"]
     assert [row["query_index"] for row in method["recalls"]] == [0, 1, 2, 3]
     assert [row["title"] for row in method["merged_sources"]] == [doc["title"] for doc in rows()]
@@ -132,8 +138,9 @@ def test_query_and_merge_order_do_not_follow_parallel_completion_order():
 
 
 def test_duplicate_subqueries_use_existing_production_dedup_without_extra_calls():
-    result, searches, sends, _, _ = execute(rewrite='["配送核对","配送核对","配送核对"]')
-    assert result["method_observation"]["rewrite_queries"] == [cases()[0]["input"]["message"], "配送核对"]
+    unit = query_units(cases()[0]["input"]["message"])[0]
+    result, searches, sends, _, _ = execute(rewrite=json.dumps([unit,unit,unit], ensure_ascii=False))
+    assert result["method_observation"]["rewrite_queries"] == [cases()[0]["input"]["message"], unit]
     assert len(searches) == 3 and len(sends) == 2
 
 
@@ -144,13 +151,15 @@ def test_original_rewrite_fallback_is_observed_not_silently_repaired():
     assert result["arms"]["B"]["record"]["status"] == "success"
 
 
-def test_original_rerank_fallback_and_index_completion_remain_explicit():
+def test_new_support_rerank_does_not_complete_missing_or_duplicate_indices():
     fallback, _, sends, _, _ = execute(rerank="no ranking")
     assert len(sends) == 2 and not fallback["method_observation"]["rerank_applied"]
-    assert fallback["arms"]["B"]["record"]["ranked_titles"] == [doc["title"] for doc in rows()[:3]]
+    assert fallback["arms"]["B"]["record"]["ranked_titles"] == []
+    assert fallback["arms"]["B"]["record"]["status"] == "failed"
     completed, _, _, _, _ = execute(rerank="[5,5]")
-    assert completed["method_observation"]["rerank_applied"]
-    assert completed["arms"]["B"]["record"]["ranked_titles"] == ["配送说明", "退款政策", "订单查询"]
+    assert not completed["method_observation"]["rerank_applied"]
+    assert completed["arms"]["B"]["record"]["ranked_titles"] == []
+    assert completed["arms"]["B"]["record"]["status"] == "failed"
 
 
 def test_empty_collection_does_not_force_a_rerank_request_or_claim_answer_success():
@@ -158,8 +167,17 @@ def test_empty_collection_does_not_force_a_rerank_request_or_claim_answer_succes
     assert len(sends) == 1 and factories == [("q01", "rewrite")]
     assert result["arms"]["A"]["record"]["status"] == "success"
     assert result["arms"]["A"]["sources"] == []
-    assert result["arms"]["B"]["record"]["status"] == "failed"
+    assert result["arms"]["B"]["record"]["status"] == "success"
     assert result["method_observation"]["rerank_input_count"] is None
+
+
+def test_support_rerank_can_report_no_matching_material_without_more_model_steps():
+    result, _, sends, factories, _ = execute(rerank="[]")
+    assert len(sends) == 2 and factories == [("q01", "rewrite"), ("q01", "rerank")]
+    assert result["arms"]["A"]["sources"]  # Raw vector neighbours still retained separately.
+    assert result["arms"]["B"]["sources"] == []
+    assert result["arms"]["B"]["record"]["status"] == "success"
+    assert result["method_observation"]["rerank_applied"] is True
 
 
 @pytest.mark.parametrize("stage", ["rewrite", "rerank"])

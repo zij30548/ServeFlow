@@ -142,7 +142,9 @@ class KnowledgeBase:
         """
         语义检索：根据 query 返回最相关的文档片段。
 
-        ChromaDB 内部自动将 query 转为向量，与存储的文档向量做余弦相似度匹配。
+        ChromaDB内部自动将query转为向量；距离含义取决于collection配置，
+        不能把1-distance当校准概率。这里仅返回近邻，原问题的资料准入由
+        MCPToolManager统一处理，向量近邻本身不证明问题有资料可答。
         """
         if type(top_k) is not int or not 1 <= top_k <= 20:
             raise ValueError("top_k 必须是 1–20 的整数")

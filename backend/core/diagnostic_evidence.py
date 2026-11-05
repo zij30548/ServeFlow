@@ -34,13 +34,18 @@ _ENTITLEMENT = "核对购买账号、当前使用账号与权益归属是否一�
 
 # Current-message guards only. Neither model entities nor assistant/history
 # text may turn a number, a quoted command or a declined topic into a lookup.
-_QUOTED = re.compile(r'“[^”\n]*”|「[^」\n]*」|"[^"\n]*"|(?<!\w)\x27[^\x27\n]*\x27(?!\w)')
-_CODE_LABEL = re.compile(r"(?:HTTP\s*)?[45][0-9]{2}(?:\s+(?:Unauthorized|Forbidden|Not\s+Found|Internal\s+Server\s+Error))?", re.I)
-_CODE = re.compile(r"(?<![A-Za-z0-9_-])(?:HTTP)?(?P<code>[45][0-9]{2})(?![A-Za-z0-9_-]|\.[0-9])", re.I)
+_QUOTED = re.compile(r'“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」|"[^"\n]*"|`[^`\n]*`|(?<!\w)\x27[^\x27\n]*\x27(?!\w)')
+# A finite syntax, not a known-code allowlist: an unrecognised explicit code
+# must still be looked up and rendered as unrecognised, rather than silently
+# replaced by a generic plan. Context checks below keep amounts/IDs/models out.
+_CODE_TOKEN = r"(?:[1-5][0-9]{2}|(?!HTTP[0-9])[A-Z]{1,8}(?:[_-]?[A-Z0-9]){0,20}[0-9])"
+_CODE_LABEL = re.compile(rf"(?:HTTP\s*)?{_CODE_TOKEN}(?:\s+(?:Unauthorized|Forbidden|Not\s+Found|Internal\s+Server\s+Error))?", re.I)
+_CODE = re.compile(rf"(?<![A-Za-z0-9_-])(?:HTTP\s*)?(?P<code>{_CODE_TOKEN})(?![A-Za-z0-9_.-])", re.I)
 _CODE_PREFIX = re.compile(
     r"(?:HTTP(?:\s*(?:status|error|code|状态码))*|错误(?:代码|码)?|状态码|报错?|返回|响应|提示|出现|排查|解释|查询|核对|"
     r"\b(?:returns?|responds?\s+with|error(?:\s+code)?|status(?:\s+code)?))\s*(?:为|是)?\s*[:：=]?\s*$", re.I)
 _CODE_SUFFIX = re.compile(r"^\s*(?:错误|报错|故障|权限|认证|状态码|Forbidden\b|Unauthorized\b|Not\s+Found\b|Internal\s+Server\s+Error\b)", re.I)
+_CODE_QUERY_SUFFIX = re.compile(r"^\s*(?:(?:要|应|应该|该|需要|能|可以|先|再)\s*){0,3}(?:说明|解释|核对|排查|诊断|检查|识别|怎么|如何|什么)|^\s*(?:what|how|why)\b", re.I)
 _NON_CODE_SUFFIX = re.compile(r"^\s*(?:元|分|块|美元|人民币|页|号(?:订单|房|门)|型号|CNY\b|USD\b|dollars?\b|pages?\b)", re.I)
 _NON_CODE_PREFIX = re.compile(r"(?:金额|价格|单价|型号|机型|编号|第|页码|\b(?:model|price|page))\s*$", re.I)
 _TRANSLATE = re.compile(r"(?:翻译|怎么读|如何读|读音|这个词|这几个字|举例|引用|\b(?:translate|translation|pronounce|quoted?|example)\b)", re.I)
@@ -53,9 +58,14 @@ _RESOLVED = re.compile(r"(?:已经|已|早就).{0,6}(?:恢复|解决|正常)|\b(
 _REPORTED = re.compile(r"(?:文档|客服|示例|有人|对方).{0,8}(?:说|写|提到)|\b(?:document|agent|someone)\s+(?:said|wrote|mentioned)\b", re.I)
 _MENTION = re.compile(r"(?:文档|示例|教程|注释).{0,8}(?:包含|写着|显示|列出)|\b(?:document|example)\s+(?:contains?|lists?)\b", re.I)
 _OBSERVATION = re.compile(r"(?:报错?|返回|响应|提示|出现|\breturns?|\bresponds?\s+with)\s*(?:为|是)?\s*[:：=]?\s*(?:HTTP\s*)?$", re.I)
-_ASK = re.compile(r"(?:解释|说明|核对|排查|诊断|检查|识别|怎么办|怎么查|如何|哪些|什么意思|什么含义|表示什么)|\b(?:explain|check|troubleshoot|diagnose|why|what|how)\b", re.I)
+_ASK = re.compile(r"(?:解释|说明|核对|排查|诊断|检查|识别|定位|是否|是不是|先查|再看|怎么办|怎么查|如何|哪些|什么意思|什么含义|表示什么)|\b(?:explain|check|troubleshoot|diagnose|why|what|how)\b", re.I)
 _SUBJECT = re.compile(r"(?:接口|应用|客户端|服务器|网络|登录|技术|故障|HTTP)|\b(?:API|App|server|network|login|endpoint)\b", re.I)
-_FAULT = re.compile(r"(?:报错|故障|异常|失败|崩溃|无法|不能|排查|诊断|排障)|\b(?:error|fail(?:ed|ure|s)?|crash|troubleshoot|diagnose)\b", re.I)
+_SUBJECT_PREFIX = re.compile(r"(?:接口|应用|客户端|服务器|HTTP|\bAPI|\bApp|\bserver|\bendpoint)\s*$", re.I)
+_FAULT = re.compile(r"(?:报错|错误|故障|异常|失败|崩溃|无法|不能|排查|诊断|排障)|\b(?:error|fail(?:ed|ure|s)?|crash|troubleshoot|diagnose)\b", re.I)
+_DECLINED_CODE = re.compile(
+    rf"(?:不是|并非|没有|并未|不需要|不用|不要|先别|不查|无需|"
+    rf"(?:(?<!\w)|(?<=你)|(?<=您)|(?<=请)|(?<=现在)|(?<=暂时))别)\s*"
+    rf"(?:(?:解释|检查|查询|核对|排查|诊断|返回|报错|错误码|HTTP)\s*){{0,4}}{_CODE_TOKEN}(?![A-Za-z0-9_.-])", re.I)
 
 
 @dataclass(frozen=True)
@@ -68,7 +78,7 @@ class DiagnosticRequest:
 def select_diagnostic_request(message) -> DiagnosticRequest:
     """Finite explicit technical requests, separate from order-read intent.
 
-    Only a uniquely contextualized supported code selects the named lookup.
+    Only a uniquely contextualized explicit code selects the named lookup.
     Several codes or a generic fault use the existing bounded diagnostic plan;
     no code is selected by order, model entities, history or a numeric substring.
     This does not authenticate a user's reported error or diagnose its cause.
@@ -81,6 +91,10 @@ def select_diagnostic_request(message) -> DiagnosticRequest:
     text = _QUOTED.sub(quoted, message)
     clauses = []
     for clause in re.split(r"[，,。！？!?；;\n]|但是|不过|而是|只要", text):
+        # Declining one code must not erase a separately asserted current code
+        # in the same clause ("错误E915不是HTTP500"). Mask only that declined
+        # span; broad topic-level declines still use the existing guard.
+        clause = _DECLINED_CODE.sub(" ", clause)
         if (_TRANSLATE.search(clause) or _DECLINED.search(clause)
                 or ((_RESOLVED.search(clause) or _REPORTED.search(clause) or _MENTION.search(clause)) and not _ASK.search(clause))):
             continue
@@ -91,24 +105,35 @@ def select_diagnostic_request(message) -> DiagnosticRequest:
         current, group, previous_end = set(), [], None
         for match in _CODE.finditer(clause):
             prefix, suffix = clause[:match.start("code")], clause[match.end():]
-            if _NON_CODE_PREFIX.search(prefix) or _NON_CODE_SUFFIX.search(suffix):
+            if (re.fullmatch(r"DEMO-[0-9]{4}", match.group("code"), re.I)
+                    or _NON_CODE_PREFIX.search(prefix) or _NON_CODE_SUFFIX.search(suffix)):
                 continue
-            contextual = bool((_CODE_PREFIX.search(prefix) or _CODE_SUFFIX.search(suffix))
+            contextual = bool((_CODE_PREFIX.search(prefix) or _CODE_SUFFIX.search(suffix)
+                               or _SUBJECT_PREFIX.search(prefix) or _CODE_QUERY_SUFFIX.search(suffix))
                               and (requested or _FAULT.search(clause) or _OBSERVATION.search(prefix)))
             joined = previous_end is not None and re.fullmatch(r"\s*(?:和|或|及|与|、|/|and|or)\s*", clause[previous_end:match.start()], re.I)
             if not joined:
                 if any(bound for _, bound in group):
                     current.update(code for code, _ in group)
                 group = []
-            group.append((match.group("code"), contextual))
+            group.append((match.group("code").upper(), contextual))
             previous_end = match.end()
         if any(bound for _, bound in group):
             current.update(code for code, _ in group)
         codes.update(current)
         required = required or bool(current) or bool(_SUBJECT.search(clause) and _FAULT.search(clause))
     unique = next(iter(codes)) if len(codes) == 1 else None
-    return DiagnosticRequest(required, unique if unique in _ERROR_CODES else None,
-                             bool(codes) and (len(codes) != 1 or unique not in _ERROR_CODES))
+    return DiagnosticRequest(required, unique, bool(codes) and len(codes) != 1)
+
+
+def diagnostic_reference_available(code) -> bool:
+    """Whether this finite local catalogue supplies a meaning for the code.
+
+    A false result does not make the request ambiguous: callers still execute
+    the one bound lookup, retain its unknown result, and avoid success claims
+    about the missing specific explanation.
+    """
+    return type(code) is str and code in _ERROR_CODES
 
 
 @dataclass(frozen=True)
@@ -167,6 +192,17 @@ def _valid_evidence(evidence):
             and type(evidence.units) is tuple and len(evidence.units) <= MAX_UNITS
             and all(_valid_unit(unit) for unit in evidence.units)
             and (evidence.status == "suggestions") == bool(evidence.units))
+
+
+def has_diagnostic_lookup(evidence, code) -> bool:
+    """Only validated, matching tool evidence proves a lookup completed.
+
+    A requested code, a named tool_choice or an actor's prose is insufficient.
+    This includes unknown codes, whose lookup can succeed without a meaning.
+    """
+    return (_valid_evidence(evidence) and evidence.status == "suggestions"
+            and type(code) is str and any(unit.tool_name == "lookup_error_code"
+                and unit.error_code == code for unit in evidence.units))
 
 
 def extract_diagnostic_evidence(tool_name, result) -> DiagnosticEvidence:

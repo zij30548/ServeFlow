@@ -325,7 +325,7 @@ async def test_mutation_boundary_does_not_change_when_projection_is_disabled(arm
 
 
 class Retrieval:
-    async def search_with_rewrite(self, name, query, top_k=3):
+    async def search_with_rewrite(self, name, query, top_k=3, context=None):
         return SimpleNamespace(success=True, reranked=False, error=None, data=[{
             "document_id": "a" * 64, "title": "受控政策", "content": "仅作独立的政策依据，不是订单状态。",
             "version": "b" * 64, "chunk": 0, "score": .9,

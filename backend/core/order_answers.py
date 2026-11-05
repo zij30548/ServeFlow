@@ -27,7 +27,7 @@ _DECLINED = re.compile(
     r"(?:不需要|不想|不用|不要|无需|无须|先别|暂不|不问|不查|不核对|不解释|不说明|不讨论|不是问|" + _BARE_BIE + r")\s*"
     r"(?:(?:再|先|现在|帮我|给我|查|查询|查看|查阅|读取|看|核对|核实|检查|解释|说明|讨论|说|知道|了解)\s*){0,5}"
     r"(?:这笔订单的|该订单的|这个订单的|当前订单的|这单的|订单的)?"
-    r"(?:付款|支付|扣款|出库|发货|接口|权限|何时|哪天|什么时候|"
+    r"(?:付款|支付|扣款|出库|发货|接口|权限|退款|签收|收货|丢件|物流|续费|到期|权益|材料|原因|何时|哪天|什么时候|"
     r"(?:这(?:个|些|两(?:个|项))?|该|此|上述)(?:说法|推断|结论|判断))|"
     r"\b(?:do\s+not|don't|no\s+need\s+to)\s+(?:explain|check|discuss|tell)\b", re.I)
 _REPORTED = re.compile(
@@ -77,8 +77,8 @@ def _segments(text):
                 yield value, index == len(parts) - 1 and any(mark in match[2] for mark in "?？")
 
 
-def _question_scopes(message):
-    """Bounded language guards, not a general intent/entailment classifier."""
+def _active_scopes(message):
+    """Separate direct questions from inert examples and declined topics."""
     outside = _QUOTED.sub(" ", message)
     active, claims = [], []
     for clause, question in _segments(outside):
@@ -98,6 +98,12 @@ def _question_scopes(message):
     reference = any(_REFERENCE_ASK.search(clause) for clause, _ in active)
     if reference:
         claims.extend(match[0][1:-1] for match in _QUOTED.finditer(message))
+    return active, claims, reference
+
+
+def _question_scopes(message):
+    """Bounded language guards, not a general intent/entailment classifier."""
+    active, claims, reference = _active_scopes(message)
     date = any(_DISPATCH_DATE.search(clause) and (_ASK.search(clause) or question)
                for clause, question in active)
     fulfilment = permission = False
@@ -130,6 +136,45 @@ def _question_scopes(message):
     return bool(date), fulfilment, permission
 
 
+def _record_relationship_scopes(message):
+    """Finite evidence-boundary topics, not a new free-form answer writer.
+
+    Match the user's question, never model entities or assistant prose. The
+    renderer additionally gates each explanation on the validated record's
+    actual shape/status. Unsupported phrasings remain outside this helper;
+    these flags cannot authorize another lookup or a business mutation.
+    """
+    active, claims, reference = _active_scopes(message)
+    questions = [clause for clause, punctuated in active
+                 if punctuated or _ASK.search(clause)
+                 or re.search(r"整理|应该保留|需要保留|为什么|为何|\bwhy\b", clause, re.I)]
+    if reference:
+        questions.extend(claims)
+    topics = set()
+    for clause in questions:
+        if re.search(r"(?:签收|配送|物流).{0,6}争议|本人.{0,5}(?:收到|收货)|丢件|丢失|承运方.{0,8}责任|\b(?:delivery.disput\w*|personally.receiv\w*|lost.parcel)\b", clause, re.I):
+            topics.add("delivery_dispute")
+        if (re.search(r"退款|\brefund\w*\b", clause, re.I)
+                and re.search(r"没有|无(?:记录|退款)|空|未提供|从未|从来|自动|申请|\b(?:empty|missing|never|automatic)\b", clause, re.I)):
+            topics.add("refund_absence")
+        if (re.search(r"权益|开通|激活|\b(?:entitlement|activ\w*)\b", clause, re.I)
+                and re.search(r"为什么|为何|原因|根因|故障|\b(?:why|cause|reason)\b", clause, re.I)):
+            topics.add("activation_reason")
+        if (re.search(r"有效期|到期|期限|\b(?:expir\w*|permanent|forever)\b", clause, re.I)
+                and re.search(r"空|没有|未提供|未知|永久|\b(?:null|missing|permanent|forever)\b", clause, re.I)):
+            topics.add("expiry_unknown")
+        if (re.search(r"续费|扣款|\b(?:renew\w*|charg\w*)\b", clause, re.I)
+                and re.search(r"未来|以后|后续|到期|保证|证明|一定|\b(?:future|guarantee|prove|expir\w*)\b", clause, re.I)):
+            topics.add("future_renewal")
+        if (re.search(r"材料|凭证|证据|包装|\b(?:materials|evidence|packaging)\b", clause, re.I)
+                and re.search(r"整理|保留|留存|准备|提供|哪些|什么|\b(?:keep|retain|prepare|which|what)\b", clause, re.I)):
+            topics.add("dispute_materials")
+        if (re.search(r"删除|退款|\b(?:delet\w*|refund\w*)\b", clause, re.I)
+                and _RELATION.search(clause)):
+            topics.add("diagnostic_inference")
+    return topics
+
+
 def render_order_answers(evidence, *, message, history=None, diagnostic=None) -> str:
     """Answer finite explicit subquestions for one validated visible snapshot.
 
@@ -151,10 +196,9 @@ def render_order_answers(evidence, *, message, history=None, diagnostic=None) ->
             or evidence.requested_order_ids != (selection.order_id,)):
         return ""
     date, fulfilment, permission = _question_scopes(message)
-    if not any((date, fulfilment, permission)):
-        return ""
+    topics = _record_relationship_scopes(message)
     order = record.to_dict()["order"]
-    lines = [f"针对本次问题的只读说明（订单 {record.order_id}；来源 {SOURCE}；数据截至 {record.as_of}）："]
+    lines = []
     if date:
         lines.append("出库/发货日期：当前快照未提供独立的实际出库或发货时间，因此无法确定这笔订单哪天出库或发货；记录更新时间和预计送达日期均不能代替实际出库/发货日期。")
     if fulfilment:
@@ -163,4 +207,25 @@ def render_order_answers(evidence, *, message, history=None, diagnostic=None) ->
         lines.append("当前为数字订单，没有实物包裹运输记录；实物出库/发货不适用，应另核对数字权益记录，不能将付款状态当作开通结果。")
     if permission:
         lines.append("付款记录不能单独证明接口权限已经开通；付款、履约与接口权限属于不同的证据范围。这里没有查询或核验实际接口权限，不能据此确认权限状态或本次故障根因。")
-    return "\n".join(lines)
+    disputed = any(row["status"] == "delivery_disputed" for row in order["shipments"])
+    if disputed and "delivery_dispute" in topics:
+        lines.append("包裹的签收/配送争议记录不等于本人已收到，也不能单独证明承运方丢件或责任；真实签收经过、是否丢件及责任结论仍未知，不能将delivery_disputed改写成签收成功。")
+    if not order["refunds"] and "refund_absence" in topics:
+        lines.append("当前快照没有退款行，只表示本次记录未提供退款证据；不能证明已自动退款或实际未退款，也不能证明从未申请。实际申请、审核及到账情况仍需业务系统或官方渠道核验。")
+    if ("activation_reason" in topics
+            and any(row["status"] == "activation_failed" for row in order["entitlements"])):
+        lines.append("权益记录为开通失败（activation_failed），但没有提供本例失败原因；付款记录不能证明已开通，具体根因和真实当前可用性仍未知，不能以猜测的同步或系统故障作结论，也不应据此重复付款。")
+    if ("expiry_unknown" in topics
+            and any(row["expires_at"] is None for row in order["entitlements"])):
+        lines.append("权益到期日为空表示有效期未知，不能理解为永久有效；它也没有说明为何缺失，不能自行补造到期日或原因。")
+    if "future_renewal" in topics and order["entitlements"]:
+        lines.append("记录更新时间、权益到期日与当前自动续费开关含义不同；到期记录或当前开关不能保证未来续费、扣款或可用状态，未来实际情况尚未核验。")
+    if disputed and "dispute_materials" in topics:
+        lines.append("材料准备建议：按需保留外包装、商品清单、包裹/运单及签收信息、脱敏照片和沟通凭证；不要在聊天提交完整地址、电话、证件、密码或验证码。")
+        lines.append("本次只读查询没有联系承运方、发起调查或创建真实工单；签收实情、责任及退款/赔偿结论仍需官方渠道核验，不能保证退款或赔偿。")
+    diagnostic_request = select_diagnostic_request(message)
+    if "diagnostic_inference" in topics and diagnostic_request.error_code == "404":
+        lines.append("接口404、包裹状态与退款状态属于不同证据范围；404不能单独证明数据库订单已删除或退款成功，真实接口根因及商家当前状态仍未知。这份合成记录不是实际商家后台核验。")
+    if not lines:
+        return ""
+    return "\n".join([f"针对本次问题的只读说明（订单 {record.order_id}；来源 {SOURCE}；数据截至 {record.as_of}）：", *lines])

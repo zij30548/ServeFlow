@@ -199,7 +199,7 @@ async def run_retrieval(case, sdk, data, *, ensure_healthy, frame_case_id):
         method["rewrite_queries"] = list(value)
         return value
 
-    async def rerank(query, items, top_k):
+    async def rerank(query, items, top_k, **kwargs):
         ensure_healthy()
         if source_fault:
             _fail("source_rejected")
@@ -209,7 +209,7 @@ async def run_retrieval(case, sdk, data, *, ensure_healthy, frame_case_id):
         method["rewrite_recall_top3"] = [row["title"] for row in method["merged_sources"][:3]]
         method["rerank_input_count"] = len(items)
         manager._client = _ObservedClient(sdk, "rag_rerank", observations, ensure_healthy, audit_faults)
-        value, applied = await original_rerank(query, items, top_k)
+        value, applied = await original_rerank(query, items, top_k, **kwargs)
         ensure_healthy()
         method["rerank_applied"] = applied
         return value, applied

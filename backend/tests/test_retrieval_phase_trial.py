@@ -119,7 +119,10 @@ def test_all_48_operations_share_one_counter_and_preserve_full_actual_payloads(t
             assert actual["wire_text"].encode() == request.content
             assert actual["payload"] == sent[-1][1]
             assert request.extensions["timeout"] == dict.fromkeys(("connect", "read", "write", "pool"), float(module.PHASE_SECONDS[frame[1]]))
-            return response('["受控改写"]' if frame[1] == "rewrite" else '[2,1,0,4,3]')
+            body = json.loads(request.content)
+            units = (json.loads(body["messages"][0]["content"].rsplit("\n", 1)[-1])["allowed_units"]
+                     if frame[1] == "rewrite" else [])
+            return response(json.dumps(units[:3], ensure_ascii=False) if frame[1] == "rewrite" else '[2,1,0,4,3]')
         return httpx.MockTransport(handle)
     r = asyncio.run(trial.execute(delegate_factory=factory, controlled_knowledge=knowledge(close=lambda: closed.append(True))))
     assert len(sent) == r["model_requests"] == 48 and closed == [True]

@@ -45,10 +45,10 @@ def no_services(monkeypatch):
     ("分别解释HTTP401和403。", None),
     ("HTTP 401/403怎么排查？", None),
     ("HTTP403和502有何不同，如何检查？", None),
-    ("HTTP502，请提供排查方向。", None),
+    ("HTTP502，请提供排查方向。", "502"),
     ("不是HTTP403，而是HTTP500，请排查。", "500"),
 ])
-def test_explicit_diagnostic_queries_bind_only_one_contextual_supported_code(message, code):
+def test_explicit_diagnostic_queries_bind_only_one_contextual_code(message, code):
     selected = select_diagnostic_request(message)
     assert selected.required is True and selected.error_code == code
 
@@ -158,19 +158,23 @@ async def test_bad_bound_selection_never_dispatches_or_retries(reply):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("message,status", [
-    ("接口HTTP401或403，如何排查？", "partial"),
-    ("接口返回502，请说明具体含义。", "partial"),
-    ("应用崩溃，请给出排查建议。", "success"),
+@pytest.mark.parametrize("message,status,code", [
+    ("接口HTTP401或403，如何排查？", "partial", None),
+    ("接口返回502，请说明具体含义。", "partial", "502"),
+    ("应用崩溃，请给出排查建议。", "success", None),
 ])
-async def test_existing_plan_separates_generic_advice_from_unanswered_code_meanings(message, status):
-    client = Client(native("build_diagnostic_plan", {"environment": "App", "reproduced": False}))
+async def test_existing_plan_separates_generic_advice_from_unanswered_code_meanings(message, status, code):
+    tool = "lookup_error_code" if code else "build_diagnostic_plan"
+    args = {"error_code": code} if code else {"environment": "App", "reproduced": False}
+    client = Client(native(tool, args))
     result = await TechnicalAgent(client, "controlled-model").handle(request(message))
-    assert client.calls[0]["tool_choice"]["name"] == "build_diagnostic_plan"
-    assert result.status == status and result.tools_used == ["build_diagnostic_plan"]
-    assert result.diagnostic_evidence.units[0].error_code is None
-    assert ("尚未逐项核对" in result.content) == (status == "partial")
-    assert ("仅为通用排查建议" in result.content) == (status == "partial")
+    assert client.calls[0]["tool_choice"]["name"] == tool
+    assert result.status == status and result.tools_used == [tool]
+    assert result.diagnostic_evidence.units[0].error_code == code
+    assert ("尚未逐项核对" in result.content) == (status == "partial" and code is None)
+    assert ("仅为通用排查建议" in result.content) == (status == "partial" and code is None)
+    if code:
+        assert "暂未识别的错误码" in result.content
 
 
 @pytest.mark.asyncio

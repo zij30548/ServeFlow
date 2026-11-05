@@ -536,7 +536,7 @@ class RetrievalTrial:
                     transport.healthy()
                     method["rewrite_queries"] = value
                     return value
-                async def rerank(query, items, top_k):
+                async def rerank(query, items, top_k, **kwargs):
                     transport.healthy()
                     method["rerank_input_count"] = len(items)
                     if len(items) > 20:
@@ -544,7 +544,7 @@ class RetrievalTrial:
                     method["merged_sources"] = [source_rows([item])[0] for item in items]
                     method["rewrite_recall_top3"] = [row["title"] for row in method["merged_sources"][:3]]
                     with stage(case["id"], "rerank"):
-                        value, applied = await original_rerank(query, items, top_k)
+                        value, applied = await original_rerank(query, items, top_k, **kwargs)
                     transport.healthy()
                     method["rerank_applied"] = applied
                     return value, applied

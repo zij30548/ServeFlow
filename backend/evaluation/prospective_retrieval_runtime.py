@@ -173,7 +173,7 @@ async def execute_retrieval_case(case, *, client_factory, knowledge, ensure_heal
             await observe("rewrite_completed", arm="B", queries=value)
             return value
 
-        async def rerank(question, items, top_k):
+        async def rerank(question, items, top_k, **kwargs):
             healthy()
             method["rerank_input_count"] = len(items)
             method["merged_sources"] = _sources(items, 20)
@@ -182,7 +182,7 @@ async def execute_retrieval_case(case, *, client_factory, knowledge, ensure_heal
                           same_candidate_pool_top3=method["rewrite_recall_top3"])
             manager._client = client("rerank")
             started = time.perf_counter()
-            value, applied = await production_rerank(question, items, top_k)
+            value, applied = await production_rerank(question, items, top_k, **kwargs)
             healthy()
             method["stage_wall_ms"]["rerank"] = (time.perf_counter() - started) * 1000
             method["rerank_applied"] = applied
