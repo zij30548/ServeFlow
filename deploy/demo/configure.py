@@ -48,9 +48,14 @@ def password_hash(username, password):
             input=(password + "\n").encode(), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             timeout=20, check=True)
         import re
-        if not re.fullmatch(re.escape(username.encode()) + rb":\$2[aby]\$10\$[./A-Za-z0-9]{53}\r?\n", result.stdout):
+        # Apache -n commonly emits an extra blank line after its one record.
+        # Validate the entire output, then canonicalize only this framing;
+        # arbitrary stripping would also accept extra records or other text.
+        match = re.fullmatch(rb"(?P<record>" + re.escape(username.encode())
+            + rb":\$2[aby]\$10\$[./A-Za-z0-9]{53})(?:\r?\n){1,2}", result.stdout)
+        if match is None:
             raise ValueError
-        return result.stdout.replace(b"\r\n", b"\n")
+        return match["record"] + b"\n"
     except (OSError, ValueError, subprocess.SubprocessError):
         raise ConfigurationError("demo_password_hash_failed") from None
 

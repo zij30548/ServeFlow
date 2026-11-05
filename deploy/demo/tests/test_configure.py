@@ -88,6 +88,56 @@ def test_hash_utility_receives_password_only_on_stdin(hash_tool):
     assert options['stdout']==subprocess.PIPE and options['stderr']==subprocess.PIPE
 
 
+@pytest.mark.parametrize('ending',[b'\n',b'\n\n',b'\r\n',b'\r\n\r\n'])
+def test_hash_stdout_line_endings_normalize_to_one_record(monkeypatch,ending):
+    """Apache's -n output may add a blank line after the complete record."""
+    monkeypatch.setattr(configure.shutil,'which',lambda _:'/usr/bin/htpasswd')
+    record=b'customer-a:'+HASH
+    monkeypatch.setattr(configure.subprocess,'run',lambda *a,**k:SimpleNamespace(stdout=record+ending))
+    assert configure.password_hash('customer-a',PASSWORD)==record+b'\n'
+
+
+@pytest.mark.parametrize('stdout',[
+    b'other-user:'+HASH+b'\n\n',
+    b'customer-a:$2y$09$'+b'A'*53+b'\n\n',
+    b'customer-a:$2y$11$'+b'A'*53+b'\n\n',
+    b'customer-a:$2x$10$'+b'A'*53+b'\n\n',
+    b'customer-a:'+HASH+b'\nsecond-user:'+HASH+b'\n',
+    b'customer-a:'+HASH+b'\n\nsecond-user:'+HASH+b'\n',
+    b'\ncustomer-a:'+HASH+b'\n',
+    b'customer-a:\n\n'+HASH+b'\n',
+    b'customer-a:'+HASH+b'\n\n\n',
+    b'customer-a:'+HASH+b'\r\n\r\n\r\n',
+    b'customer-a:'+HASH+b'\nprivate-untrusted-output',
+    b'customer-a:'+HASH,
+    b'',
+])
+def test_hash_stdout_rejects_extra_or_malformed_content(monkeypatch,stdout):
+    monkeypatch.setattr(configure.shutil,'which',lambda _:'/usr/bin/htpasswd')
+    monkeypatch.setattr(configure.subprocess,'run',lambda *a,**k:SimpleNamespace(stdout=stdout))
+    with pytest.raises(configure.ConfigurationError) as caught:
+        configure.password_hash('customer-a',PASSWORD)
+    assert str(caught.value)=='demo_password_hash_failed'
+
+
+def test_installed_htpasswd_round_trip_uses_synthetic_password_and_private_file(tmp_path):
+    """Real local utility only, not a model, Nginx or Linux runtime claim."""
+    binary=configure.shutil.which('htpasswd')
+    if binary is None:
+        pytest.skip('optional local htpasswd utility is not installed')
+    username='native-check'
+    password='synthetic-native-password-123'
+    record=configure.password_hash(username,password)
+    assert record.count(b'\n')==1 and record.endswith(b'\n')
+    private=tmp_path.resolve()/'htpasswd'
+    configure.write_new(private,record)
+    assert private.stat().st_mode & 0o777==0o600
+    result=subprocess.run([str(Path(binary).resolve()),'-vi',str(private),username],
+        input=(password+'\n').encode(),stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+        timeout=20,check=False)
+    assert result.returncode==0,'local htpasswd rejected the synthetic password'
+
+
 @pytest.mark.parametrize('username',['a:b','a\nb','bad user','a/../b','a'*65,''])
 def test_invalid_username_stops_before_process(username,monkeypatch):
     monkeypatch.setattr(configure.subprocess,'run',lambda *a,**k:pytest.fail('must not spawn'))
