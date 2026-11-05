@@ -1,5 +1,5 @@
 pid /run/serveflow/nginx.pid;
-error_log /dev/stderr crit;
+error_log stderr crit;
 worker_processes 1;
 events { worker_connections 256; }
 http {
@@ -10,6 +10,11 @@ http {
     server_tokens off;
     client_body_temp_path /tmp/client_body;
     proxy_temp_path /tmp/proxy;
+    # Compiled modules initialize these paths even without a FastCGI/uWSGI/SCGI
+    # location. Their image defaults live on the read-only root filesystem.
+    fastcgi_temp_path /tmp/fastcgi;
+    uwsgi_temp_path /tmp/uwsgi;
+    scgi_temp_path /tmp/scgi;
     # One explicit public origin. Never forward an arbitrary client upstream.
     map $http_host $demo_host_allowed { default 0; "__PUBLIC_AUTHORITY__" 1; }
     map "$request_method:$uri" $demo_route_allowed {

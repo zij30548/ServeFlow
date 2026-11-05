@@ -149,7 +149,9 @@ proxy_ignore_client_abort off;
 '''
     _private_write(RUN / "proxy.inc", proxy.encode(), 101, 101)
     _drop(101, 101)
-    os.execv("/usr/sbin/nginx", ["nginx", "-c", str(RUN / "nginx.conf"), "-g", "daemon off;"])
+    # -e applies before config parsing, so privilege-dropped startup never
+    # attempts to open the image's root-owned default error log.
+    os.execv("/usr/sbin/nginx", ["nginx", "-e", "stderr", "-c", str(RUN / "nginx.conf"), "-g", "daemon off;"])
 
 
 def _verify_reader(environment):

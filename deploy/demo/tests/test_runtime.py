@@ -223,6 +223,7 @@ def test_web_secrets_are_separate_and_drop_precedes_nginx_exec(tmp_path, monkeyp
     assert "X-ServeFlow-Demo-User $remote_user" in proxy
     assert "proxy_ignore_client_abort off" in proxy and "proxy_request_buffering off" in proxy
     assert events[-2] == ("drop", 101, 101) and events[-1][0:2] == ("exec", "/usr/sbin/nginx")
+    assert events[-1][2] == ["nginx", "-e", "stderr", "-c", str(runtime.RUN / "nginx.conf"), "-g", "daemon off;"]
 
 
 @pytest.mark.parametrize("rows", [b"", b"customer:not-a-bcrypt-hash\n",
