@@ -18,7 +18,7 @@
 
 模型负责理解、路由和选择工具；政策资料、订单记录及技术建议分别保留来源边界。覆盖到的事实查询由程序展示校验后的工具结果，普通接待仍可自然回复。未知、错误和不确定结果应如实保留，不能将模型回复当作真实交易凭证。
 
-当前评测口径见[量化结论校准与新题冻结](#量化结论校准与新题离线冻结2026-11-04)，历史记录见[对照暂停](#修复版新题真实对照与暂停记录2026-11-04)及[原六题失败](#六场景定向真实复验结果2026-11-04)，最新业务补修见[按问题解释证据](#订单日期缺口与证据关系的离线补修2026-11-04)，已见六题结果见[修复版六题回归](#订单说明修复版六题真实复验结果2026-11-05)，最近成绩见[完整A/D任务对照](#当前版本完整ad任务对照结果2026-11-05)，当前停止点见[扩充题集离线准备](#扩充题集与离线问题冻结2026-11-05)。下方各轮记录保留原版本、失败及分母，不能拼接成总体准确率。
+当前评测口径见[量化结论校准与新题冻结](#量化结论校准与新题离线冻结2026-11-04)，历史记录见[对照暂停](#修复版新题真实对照与暂停记录2026-11-04)及[原六题失败](#六场景定向真实复验结果2026-11-04)，最新业务补修见[按问题解释证据](#订单日期缺口与证据关系的离线补修2026-11-04)，已见六题结果见[修复版六题回归](#订单说明修复版六题真实复验结果2026-11-05)，最近成绩见[完整A/D任务对照](#当前版本完整ad任务对照结果2026-11-05)，新题见[问题冻结](#扩充题集与离线问题冻结2026-11-05)，当前停止点见[扩充评测执行接线](#扩充评测执行接线与零调用冻结2026-11-05)。下方各轮记录保留原版本、失败及分母，不能拼接成总体准确率。
 
 ## 目录
 
@@ -1259,6 +1259,42 @@ ORT_DISABLE_TELEMETRY=1 .venv/bin/python -B -m evaluation.current_task_ablation 
 问题冻结保存于私有`backend/data/benchmarks/expanded-validation-v1/questions.json`，保护核验保存在`expanded-validation-preflight-v1/`。冻结绑定题目、依据、现有方法源码及本次校验工具，不绑定任何密钥。原3075份证据与五缓存hash保持，原应用数据库、服务、Redis和持久Chroma未操作，旧成绩全部保留。
 
 **停止于题目／标签／分组／依据的离线冻结，不是实际SDK请求或真实执行协议冻结。** `live_trial_ready=false`，授权／已调用均0，旧12题专用运行器不能直接用于这些新题。下一步须先适配新题执行检查、固定候选／实际payload／操作顺序及独立持久额度，再取得本批明确授权；先开发定位，再单次验证，不为提高分数删除难题或将旧成功补入新分母。任务／工具两臂、检索两方案及意图共享观察分别统计，真实调用数不等于题数。当前D-p02漏答与RAG未收录误命中等限制没有在本轮修复，先前33.3%→91.7%等结果不改，也没有新增提升结论。
+
+### 扩充评测执行接线与零调用冻结（2026-11-05）
+
+新增[统一执行器](backend/evaluation/expanded_trial.py)、[共享持久预算](backend/evaluation/expanded_budget.py)、[意图／检索适配](backend/evaluation/expanded_observation_runtime.py)和[任务适配](backend/evaluation/expanded_task_runtime.py)。这是上述108新题的执行接线，**真实模型、外部业务及数据库调用仍0，尚无新指标成绩**。新旧题与标签不改，旧33.3%→91.7%等成绩不改，所有旧额度不复用。应用业务代码、提示、Schema、角色、Skills、检索算法、配置、依赖及前端未修改；仅给已有监督器增加精确的新worker／ROOT白名单，模型阶段截止保持原样。
+
+| 分组 | 意图共享观察 | 任务A/D位置 | 增强检索位置 | 执行位置合计 |
+| --- | ---: | ---: | ---: | ---: |
+| 开发 | 24 | 16 | 8 | 48 |
+| 验证 | 36 | 32 | 16 | 84 |
+| 总计 | 60 | 48 | 24 | 132 |
+
+固定先开发后验证，不在批次中修改候选或删除失败。意图每题只取得一次LLM观察，共享比较仅LLM与当前本地融合；任务每题A/D独立发送、按奇偶交替，所有输入history及可信客户身份原样绑定；检索同一索引比较原query向量Top3与原有完整改写召回重排，低候选／空召回时按原方法跳过重排，不补发。已提供历史仅是脚本输入，不宣称真实多轮记忆。意图按原生产归一化决策评分，未知标签可映射OTHER，`parser_failed=false`不能当原始JSON／枚举严格合格。
+
+**拟硬上限480次物理请求，不是已授权额度或预计消费。** 108问题对应132位置，任务内部还可能有多个角色／工具反馈模型步骤，不能把题数当调用数；1212只是全部阶段上限相加的数学包络，不是额外额度。I位置最多intent1次，R最多改写1／重排1次，A/D沿原23次包络；三类及两个分组共享同一个新账本，全局在途最多3。发送前原子预记，失败、已发送取消及不确定结果不返额；同位置、阶段及序号不能重发，状态／计数／版本／资料／鉴权／限流／网络异常停止且不自动恢复。普通语义／结构失败保留后继续固定计划；到480或更低明确授权就停，不要求用满。
+
+问题冻结继续绑定原私有协议`c7db489c3e778012134493d9b2f0a84d1bdeeb42c6d8dd241a9bb0a7fd8e7f66`。新执行协议在私有`backend/data/benchmarks/expanded-evaluation-v1/`，关联`expanded-evaluation-preflight-v1/`的旧证据保护清单；首次SDK捕获为108份意图及24份改写，A/D同题首发字节相同、实际独立观察。题号、gold、分组、预期和可信身份不拼入模型。后续Agent／重排请求依赖前序真实输出，只在发送前封存并锁定canonical/wire双hash，不声称离线预知全部动态字节；SDK调用参数hash与实际序列化请求hash分开。
+
+源证明将当前209份既有后端源码／测试与`9617dca8735c343b646e4c8418ae4d8d6982b99b`逐字节对照，仅允许8个新增执行文件和监督器的精确hook，共217份。旧运行器仍因新增源码拒绝续发，不放宽旧hash检查。新准入先校验协议与新授权，再读取密钥、打开专用只读合成数据与SDK；不是向普通HTTP请求开放任意模型、URL或额度。独立索引／数据按原纯离线proof与实际SELECT权限绑定，不初始化、重置或使用原应用数据库。
+
+复用现有分阶段时钟：intent8／agent15／rewrite10／rerank30秒、SDK30秒；本地完整审计另有累计30秒，只有固定worker可用3600秒外层监督。每次真正发送前及任务边界仍完整复核source／旧证据／账链／payload；本地只读回调复核当前source、环境、协议／授权／数据hash及停止状态，不在每次本地检索内重放全部旧档。新观察适配器把SDK前后纯审计放入既有admission开销域，实际网络await始终在外；审计超限／取消或已观察到的上下文异常均是持续故障，即使A→B→A恢复也不能由原解析fallback吞掉后再发下一阶段。没有暂停网络截止或延长模型等待。监督超时／取消即使子进程返回0也视为失败；有attempt、active、pending、data-proof或部分完成就拒绝自动续跑。
+
+集成测试使用真实SDK＋MockTransport、真实临时持久计数、受控内存来源，执行全部132位置；任务包装失败不会自动变成语义通过，另有真实原生工具／handler与共享传输的成对接线测试。源依据、取消、history、身份、未知工具参数、case绑定及旧契约分别验证。报告严格复验持久人工review的完整七维布尔结构，完整位置未封存／评阅前不出任务增益；开发和验证独立分母、工具与任务分开、共享观察与pending资源只计一次，并明确controlled-transport/live-model，不能把受控就绪当真实质量。
+
+最终检查为**新执行路径100项＋未改动相邻回归517项，合计617项通过**，两组不重叠；中间612／615等结果包含这些用例，不另累加。新路径命令为`cd backend && env -u SERVEFLOW_EVAL_READONLY_TEST_MYSQL_URL -u SERVEFLOW_DEMO_TEST_MYSQL_URL .venv/bin/python -B -m pytest -q -p no:cacheprovider tests/test_expanded_budget.py tests/test_expanded_observation_runtime.py tests/test_expanded_task_runtime.py tests/test_expanded_trial.py`。相邻回归同环境执行`tests/test_expanded_validation.py tests/test_task_budget.py tests/test_current_task_ablation_budget.py tests/test_prospective_budget.py tests/test_task_supervisor.py tests/test_phase_deadline_transport.py tests/test_model_deadline.py tests/test_prospective_task_runtime.py tests/test_quality_scoring.py tests/test_benchmark.py tests/test_benchmark_metrics.py tests/test_prospective_validation.py`。测试拒绝真实网络、使用临时计数／内存来源，不是新增模型质量成绩。
+
+已知风险原样保留：`et22`当前目标解析会被引号内另一订单号干扰而返回歧义，可能漏查用户明确要求的本单；不把冻结预期改为允许澄清。D-p02历史覆盖缺口、RAG无资料误命中及改写漂移也未修改。后续真实输出无论升降均按固定标准记录；本轮没有新成功率。
+
+只在`backend/`进行离线准备／检查，已有执行目录不可覆盖：
+
+```sh
+ORT_DISABLE_TELEMETRY=1 .venv/bin/python -B -m evaluation.expanded_trial prepare
+ORT_DISABLE_TELEMETRY=1 .venv/bin/python -B -m evaluation.expanded_trial verify
+ORT_DISABLE_TELEMETRY=1 .venv/bin/python -B -m evaluation.expanded_trial report
+```
+
+**停止于执行接线、受控检查和零调用协议冻结，等待本批明确的发送授权。** 旧3078份私有证据与五缓存保持，未操作原数据库、服务、Redis、持久Chroma或云服务器。无业务／前端变化，不重复前端构建或浏览器验收；正式发送后的分类／检索统计与任务人工逐项评阅另记，不把本轮受控测试编成真实质量成绩。
 
 ## 当前限制
 

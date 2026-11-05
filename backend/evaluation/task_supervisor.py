@@ -177,7 +177,7 @@ def supervise(command, *, root: Path, deadline_s=900):
                                "evaluation.quality_trial", "evaluation.quality_phase_trial",
                                "evaluation.tool_scope_recheck", "evaluation.retrieval_phase_trial",
                                "evaluation.diagnostic_repair_trial", "evaluation.order_answer_recheck",
-                               "evaluation.current_task_ablation")]
+                               "evaluation.current_task_ablation", "evaluation.expanded_trial")]
     if (os.name != "posix" or not hasattr(os, "killpg") or not hasattr(os, "O_NOFOLLOW")
             or not hasattr(os, "O_DIRECTORY")):
         raise SupervisorError("supervisor_posix_required")
@@ -190,10 +190,14 @@ def supervise(command, *, root: Path, deadline_s=900):
     # model/network stage deadlines and every old worker's 900s stay unchanged.
     quality_workers = [[sys.executable, "-B", "-u", "-m", module, "_worker"]
                        for module in ("evaluation.quality_trial", "evaluation.quality_phase_trial",
-                                      "evaluation.retrieval_phase_trial", "evaluation.current_task_ablation")]
+                                      "evaluation.retrieval_phase_trial", "evaluation.current_task_ablation",
+                                      "evaluation.expanded_trial")]
     if (command[4] == "evaluation.current_task_ablation"
             and Path(root) != Path(__file__).resolve().parent.parent/"data/benchmarks/current-task-ablation-v1"):
         raise SupervisorError("current_task_ablation_worker_root_invalid")
+    if (command[4] == "evaluation.expanded_trial"
+            and Path(root) != Path(__file__).resolve().parent.parent/"data/benchmarks/expanded-evaluation-v1"):
+        raise SupervisorError("expanded_worker_root_invalid")
     maximum = 3600 if command in quality_workers else 900
     if type(deadline_s) not in (int, float) or not math.isfinite(deadline_s) or not 0 < deadline_s <= maximum:
         raise SupervisorError("supervisor_deadline_invalid")
