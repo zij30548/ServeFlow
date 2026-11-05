@@ -232,6 +232,12 @@ class Request:
     conversation_state: Optional[Dict[str, Any]] = None
     demo_customer_id: Optional[str] = field(default=None, repr=False)
     demo_order_reader: Optional[Callable[[str, str], Awaitable[Dict[str, Any]]]] = field(default=None, repr=False)
+    order_history: Optional[List[Dict[str, Any]]] = field(default=None, repr=False)
+
+    @property
+    def business_history(self) -> Optional[List[Dict[str, Any]]]:
+        """Original committed user references, separate from model context."""
+        return self.order_history if self.order_history is not None else self.history
 
 
 _READONLY_SCOPE_NOTICE = (
@@ -304,7 +310,7 @@ def _project_business_result(req, *, order=None, policy=None, diagnostic=None,
         if (answer_order_questions and type(order) is OrderEvidence
                 and order.customer_id == req.demo_customer_id):
             answers = render_order_answers(order, message=req.message,
-                                           history=req.history, diagnostic=diagnostic)
+                                           history=req.business_history, diagnostic=diagnostic)
             if answers:
                 blocks.append(answers)
         blocks.append(render_order_evidence(order))
@@ -540,8 +546,8 @@ class BaseAgent:
         seen_tool_use_ids = set()
         policy_required = requires_policy_evidence(req.message, req.history)
         mixed_policy = has_record_question(req.message)
-        record_requested = needs_order_evidence(req.message, req.history)
-        selection = resolve_order_id(req.message, req.history) if record_requested else None
+        record_requested = needs_order_evidence(req.message, req.business_history)
+        selection = resolve_order_id(req.message, req.business_history) if record_requested else None
         order_required = record_requested and self.agent_type in {AgentType.GENERAL, AgentType.BILLING}
         diagnostic_selection = select_diagnostic_request(req.message)
         diagnostic_required = self.agent_type is AgentType.TECHNICAL and (
@@ -1098,7 +1104,7 @@ class ResponseComposer:
         return projected
 
     async def compose_result(self, req: Request, responses: List[AgentResponse]) -> AgentCallResult:
-        grounded_record = needs_order_evidence(req.message, req.history)
+        grounded_record = needs_order_evidence(req.message, req.business_history)
         diagnostic_requested = select_diagnostic_request(req.message).required
         if (grounded_record or diagnostic_requested or any(r.order_evidence is not None or r.diagnostic_evidence is not None for r in responses)) and (
                 requests_business_mutation(req.message) or not any(r.agent_type is AgentType.ESCALATION for r in responses)):
@@ -1571,7 +1577,7 @@ class AgentOrchestrator:
         # Concrete record requests need a role whose actual tool scope permits
         # the read. An intent label or monitor degradation must not silently
         # turn a technical answer into a verified order answer.
-        if needs_order_evidence(req.message, req.history) and primary_agent is AgentType.TECHNICAL:
+        if needs_order_evidence(req.message, req.business_history) and primary_agent is AgentType.TECHNICAL:
             reader_role = AgentType.BILLING if AgentType.BILLING in available_scores else AgentType.GENERAL
             if reader_role not in supporting_agents:
                 supporting_agents.append(reader_role)

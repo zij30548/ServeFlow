@@ -3,6 +3,8 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
+import anyio
+
 logger = logging.getLogger(__name__)
 
 
@@ -64,12 +66,28 @@ async def redis_lease(client, key, wait_s=30, lease_s=120):
             raise LeaseLostError("会话锁已失效，本次请求已中止") from None
         raise
     finally:
-        renewal.cancel()
-        await asyncio.gather(renewal, return_exceptions=True)
-        try:
-            await lock.release()
-        except Exception as ex:
-            logger.warning("释放会话锁失败: %s", type(ex).__name__)
+        # HTTP middleware uses level cancellation: an unshielded await in
+        # finally can be cancelled again before releasing Redis's lease. Own
+        # cleanup separately and wait for it, also across repeated Task.cancel.
+        async def cleanup():
+            renewal.cancel()
+            await asyncio.gather(renewal, return_exceptions=True)
+            try:
+                await asyncio.wait_for(lock.release(), timeout=2)
+            except Exception as ex:
+                logger.warning("释放会话锁失败: %s", type(ex).__name__)
+
+        cancelled = False
+        with anyio.CancelScope(shield=True):
+            pending = asyncio.create_task(cleanup())
+            while not pending.done():
+                try:
+                    await asyncio.shield(pending)
+                except asyncio.CancelledError:
+                    cancelled = True
+            pending.result()
+        if cancelled:
+            raise asyncio.CancelledError
 
 
 class ProfileUpdater:

@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 
 from core.diagnostic_evidence import select_diagnostic_request
-from core.order_evidence import _checked_evidence, needs_order_evidence, resolve_order_id
+from core.order_evidence import _amount, _checked_evidence, _text, needs_order_evidence, resolve_order_id
 from demo_business.store import SOURCE
 
 
@@ -25,11 +25,12 @@ _HOW_TO = re.compile(
 _BARE_BIE = r"(?:(?<!\w)|(?<=请)|(?<=你)|(?<=您)|(?<=现在)|(?<=暂时))别"
 _DECLINED = re.compile(
     r"(?:不需要|不想|不用|不要|无需|无须|先别|暂不|不问|不查|不核对|不解释|不说明|不讨论|不是问|" + _BARE_BIE + r")\s*"
-    r"(?:(?:再|先|现在|帮我|给我|查|查询|查看|查阅|读取|看|核对|核实|检查|解释|说明|讨论|说|知道|了解)\s*){0,5}"
+    r"(?:(?:再|先|现在|帮我|给我|查|查询|查看|查阅|读取|看|核对|核实|检查|解释|说明|讨论|说|知道|了解|计算|算|合计|比较)\s*){0,5}"
     r"(?:这笔订单的|该订单的|这个订单的|当前订单的|这单的|订单的)?"
     r"(?:付款|支付|扣款|出库|发货|接口|权限|退款|签收|收货|丢件|物流|续费|到期|权益|材料|原因|何时|哪天|什么时候|"
+    r"金额|价格|商品|明细|合计|总计|运费|邮费|税费|优惠|折扣|差额|分摊|"
     r"(?:这(?:个|些|两(?:个|项))?|该|此|上述)(?:说法|推断|结论|判断))|"
-    r"\b(?:do\s+not|don't|no\s+need\s+to)\s+(?:explain|check|discuss|tell)\b", re.I)
+    r"\b(?:do\s+not|don't|no\s+need\s+to)\s+(?:explain|check|discuss|tell|calculate|sum|compare)\b", re.I)
 _REPORTED = re.compile(
     r"(?:有人|客服|文档|同事|对方|示例|教程|他|她).{0,8}(?:说|写|提到)|"
     r"\b(?:someone|agent|document|guide|example)\s+(?:says?|said|writes?|wrote|mentions?)\b", re.I)
@@ -66,6 +67,83 @@ _DISPATCH_DATE = re.compile(
     r"(?:哪天|何时|什么时候|几点).{0,20}(?:出库|发货)|"
     r"(?:出库|发货)(?:的|是|在|为|会|能|大概|预计|实际|计划|到底|应该|可以|\s){0,5}(?:哪天|何时|什么时候|几点)|"
     r"\b(?:dispatch|shipping|ship)[ _-]?(?:date|time)\b|\bwhen\b.{0,28}\b(?:ship\w*|dispatch\w*)\b", re.I)
+_ITEMS = re.compile(r"商品|明细|货品|单价|标价|\b(?:items?|products?|unit\s+prices?|line\s+items?)\b", re.I)
+_ITEM_SUM = re.compile(r"合计|总计|合起来|加起来|加总|一共|总共|小计|总价|\b(?:sum|subtotal|total|add\s+up)\b", re.I)
+_AMOUNT_COMPARE = re.compile(r"比较|对比|等于|一致|相同|相符|一样|对得上|吻合|差额|差多少|\b(?:compare|equal|match|difference|same)\b", re.I)
+_PAYMENT_AMOUNT = re.compile(r"实付|付款|支付|扣款|\b(?:paid|payments?|charges?)\b", re.I)
+_ORDER_AMOUNT = re.compile(r"订单.{0,3}(?:金额|总额|总价)|\border\s+(?:amount|total)\b", re.I)
+_PRICE_REQUEST = re.compile(r"计算|算一下|算出|算算|合计|比较|对比|多少(?:元|钱)|\b(?:calculate|sum|compare|add|how\s+much)\b", re.I)
+_UNKNOWN_AMOUNT_BOUNDARY = re.compile(r"(?:未知|缺失|未提供).{0,10}(?:不要|不能|不可|别).{0,6}(?:补|填|按|算)", re.I)
+_ITEM_FILTER = re.compile(
+    r"(?:只|仅)(?:把|将)?(?:算|计算|合计|加总|核算|看|核对)(?!\s*(?:的)?\s*(?:所有|全部|整单|商品(?:明细|合计|总)))|"
+    r"其中|部分商品|(?:第|前|后)[一二三四五六七八九十0-9]+(?:件|项)|(?:单个|某个|某件)商品", re.I)
+_ALL_ITEMS = re.compile(r"所有商品|全部商品|整单商品|全部明细|所有明细|\ball\s+(?:items|products|line\s+items)\b", re.I)
+
+
+def _amount_answers(order, message):
+    """Compute only a requested full-item total from checked integer fields.
+
+    This source has no fee, discount or per-item transaction allocation fields.
+    A record-consistency check never creates those facts or a net payment.
+    Filtered item questions are left outside this finite full-order helper.
+    """
+    active, claims, reference = _active_scopes(message)
+    questions = [clause for clause, punctuated in active
+                 if punctuated or _ASK.search(clause) or _PRICE_REQUEST.search(clause)
+                 or _UNKNOWN_AMOUNT_BOUNDARY.search(clause)]
+    if reference:
+        questions.extend(claims)
+    text = "；".join(questions)
+    product_context = (any(_ITEMS.search(clause) for clause, _ in active)
+                       or (reference and any(_ITEMS.search(clause) for clause in claims)))
+    item_sum = any(_ITEM_SUM.search(clause)
+                   and (_ITEMS.search(clause)
+                        or re.search(r"合起来|加起来|加总|^(?:这(?:些|几项|几件))?合计", clause))
+                   for clause in questions)
+    total = product_context and (item_sum or any(
+        _AMOUNT_COMPARE.search(clause) and _ITEMS.search(clause)
+        and (_PAYMENT_AMOUNT.search(clause) or _ORDER_AMOUNT.search(clause))
+        and not re.search(r"单价|每件|每项|每个商品|付款状态|支付状态|\b(?:unit\s+price|per.item|payment\s+status)\b", clause, re.I)
+        for clause in questions))
+    # Never silently interpret a request for one named/filtered item as the
+    # full-order total. Names remain source data, not an instruction parser.
+    named = [row for row in order["items"]
+             if row["name"] in text or row["item_id"] in text]
+    if (_ITEM_FILTER.search(_CURRENT_ID.sub("", text))
+            or (named and len(named) != len(order["items"]) and not _ALL_ITEMS.search(text))
+            or (re.search(r"数量|件数|几件|多少件|\bquantity\b", text, re.I)
+                and not re.search(r"金额|价格|单价|总价|实付|付款|支付|元|\b(?:price|amount|paid|payment|cost)\b", text, re.I))):
+        total = False
+    lines = []
+    if total:
+        subtotal = sum(row["quantity"] * row["unit_amount_minor"] for row in order["items"])
+        lines.append(f"商品金额核算（币种 {order['currency']}，人民币；按记录单价×数量）：")
+        for row in order["items"]:
+            lines.append(f"- {_text(row['name'])}：{_amount(row['unit_amount_minor'])} × {row['quantity']} = {_amount(row['unit_amount_minor'] * row['quantity'])}。")
+        lines.append(f"商品明细合计：{_amount(subtotal)}。")
+        if _ORDER_AMOUNT.search(text) or _PAYMENT_AMOUNT.search(text):
+            lines.append(f"与订单金额记录比较：{_amount(order['total_amount_minor'])}，与商品明细合计数值一致。")
+        if _PAYMENT_AMOUNT.search(text):
+            if order["payments"]:
+                payment_total = sum(row["amount_minor"] for row in order["payments"])
+                state = order["payment_status"]
+                lines.append(f"与付款记录比较：{len(order['payments'])}条付款记录的原始金额合计 {_amount(payment_total)}（{state}），与商品明细合计数值一致。")
+                if state == "refunded":
+                    lines.append("付款记录状态为refunded；上述原始金额不能视为退款后的当前净实付，真实退款到账仍未核验。")
+            else:
+                lines.append("当前记录为未付款且未提供付款记录，无法取得可比较的实付金额；不能将空付款记录按0元实付处理。")
+        lines.append("这是本次合成演示记录内的金额核算，不能证明真实支付渠道入账或履约完成；商品记录小计也不能直接作为独立成交价、优惠分摊或可退金额。")
+    missing = []
+    for label, pattern in (("运费/邮费", r"运费|邮费|\b(?:shipping\s+(?:fee|cost)|freight|postage)\b"),
+                           ("优惠/折扣", r"优惠|折扣|优惠券|\b(?:discount|coupon)\w*\b"),
+                           ("税费", r"税费|税额|\btax\w*\b")):
+        if re.search(pattern, text, re.I):
+            missing.append(label)
+    if missing:
+        lines.append(f"当前快照未提供独立的{'、'.join(missing)}金额字段，具体金额未知，不能按0元补齐；商品合计与付款记录相等也不能证明这些费用不存在或已如何分摊。")
+    if re.search(r"分摊|每(?:件|项|个商品).{0,10}(?:实付|实际支付|实际付款|成交)|\b(?:allocat\w*|per.item\s+(?:paid|transaction))\b", text, re.I):
+        lines.append("当前记录没有每件商品的成交价、优惠分摊或净实付字段；不能把记录单价或商品小计直接称为每件实际成交/实付金额，具体分摊仍未知。")
+    return lines
 
 
 def _segments(text):
@@ -155,16 +233,16 @@ def _record_relationship_scopes(message):
         if re.search(r"(?:签收|配送|物流).{0,6}争议|本人.{0,5}(?:收到|收货)|丢件|丢失|承运方.{0,8}责任|\b(?:delivery.disput\w*|personally.receiv\w*|lost.parcel)\b", clause, re.I):
             topics.add("delivery_dispute")
         if (re.search(r"退款|\brefund\w*\b", clause, re.I)
-                and re.search(r"没有|无(?:记录|退款)|空|未提供|从未|从来|自动|申请|\b(?:empty|missing|never|automatic)\b", clause, re.I)):
+                and re.search(r"没有|没(?:有|看到|列出|记录)|无(?:记录|退款)|空|未(?:提供|列出|记载)|查不到|零条|缺失|从未|从来|自动|申请|\b(?:empty|missing|never|automatic)\b", clause, re.I)):
             topics.add("refund_absence")
         if (re.search(r"权益|开通|激活|\b(?:entitlement|activ\w*)\b", clause, re.I)
-                and re.search(r"为什么|为何|原因|根因|故障|\b(?:why|cause|reason)\b", clause, re.I)):
+                and re.search(r"为什么|为何|原因|根因|故障|怎么回事|导致|缘故|\b(?:why|cause|reason)\b", clause, re.I)):
             topics.add("activation_reason")
-        if (re.search(r"有效期|到期|期限|\b(?:expir\w*|permanent|forever)\b", clause, re.I)
-                and re.search(r"空|没有|未提供|未知|永久|\b(?:null|missing|permanent|forever)\b", clause, re.I)):
+        if (re.search(r"有效期|到期|期限|永不过期|不会过期|\b(?:expir\w*|permanent|forever)\b", clause, re.I)
+                and re.search(r"空|没有|没写|未(?:提供|记载|列出)|缺失|不显示|未知|永久|终身|一直|永不|不会过期|\b(?:null|missing|permanent|forever)\b", clause, re.I)):
             topics.add("expiry_unknown")
         if (re.search(r"续费|扣款|\b(?:renew\w*|charg\w*)\b", clause, re.I)
-                and re.search(r"未来|以后|后续|到期|保证|证明|一定|\b(?:future|guarantee|prove|expir\w*)\b", clause, re.I)):
+                and re.search(r"未来|以后|后续|今后|往后|后面|到时候|再扣|还会|一直|到期|保证|证明|一定|\b(?:future|guarantee|prove|expir\w*)\b", clause, re.I)):
             topics.add("future_renewal")
         if (re.search(r"材料|凭证|证据|包装|\b(?:materials|evidence|packaging)\b", clause, re.I)
                 and re.search(r"整理|保留|留存|准备|提供|哪些|什么|\b(?:keep|retain|prepare|which|what)\b", clause, re.I)):
@@ -198,7 +276,7 @@ def render_order_answers(evidence, *, message, history=None, diagnostic=None) ->
     date, fulfilment, permission = _question_scopes(message)
     topics = _record_relationship_scopes(message)
     order = record.to_dict()["order"]
-    lines = []
+    lines = _amount_answers(order, message)
     if date:
         lines.append("出库/发货日期：当前快照未提供独立的实际出库或发货时间，因此无法确定这笔订单哪天出库或发货；记录更新时间和预计送达日期均不能代替实际出库/发货日期。")
     if fulfilment:

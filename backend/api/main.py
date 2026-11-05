@@ -460,6 +460,10 @@ async def chat(req: ChatRequest, http_request: HTTPRequest):
                 {"role": m.role.value, "content": m.content}
                 for m in mem_ctx.recent_messages[-5:]
             ] if mem_ctx.recent_messages else None
+            from core.order_evidence import source_bound_order_history
+            references = getattr(mem_ctx, "reference_history", None)
+            order_history = (source_bound_order_history(references(), history)
+                             if callable(references) else history)
 
             intent_result = await _orchestrator.recognize_intent(req.message, history=history)
             full_context = mem_ctx.to_prompt_text()
@@ -470,6 +474,7 @@ async def chat(req: ChatRequest, http_request: HTTPRequest):
                 conv_id=conv_id,
                 context=full_context,
                 history=history,
+                order_history=order_history,
                 entities=intent_result.entities,
                 intent=intent_result.intent,
                 intent_group=intent_result.intent_group,

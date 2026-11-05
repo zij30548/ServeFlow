@@ -34,6 +34,7 @@ from core.safe_diagnostics import record_llm_failure
 from core.concurrency import KeyedLocks, redis_lease
 
 logger = logging.getLogger(__name__)
+SOURCE_HISTORY_LIMIT = 20
 
 
 class MsgRole(Enum):
@@ -58,6 +59,30 @@ class MemoryContext:
     user_profile:     Dict[str, Any]  # 用户画像：偏好、常用实体
     summary:          str             # 当前会话摘要（压缩后）
     state: Dict[str, Any] = field(default_factory=dict)
+    source_history: List[Dict[str, Any]] = field(default_factory=list)
+
+    def reference_history(self) -> List[Dict[str, Any]]:
+        """Return validated committed user events, never generated memories.
+
+        A malformed event invalidates the entire sequence: dropping a corrupt
+        reset/correction could otherwise revive an older business target.
+        These events identify user input, not a verified order or identity.
+        """
+        fields = {"version", "source", "role", "content", "client_request_id", "request_id", "status"}
+        if type(self.source_history) is not list or len(self.source_history) > SOURCE_HISTORY_LIMIT:
+            return []
+        rows = []
+        for item in self.source_history:
+            if (type(item) is not dict or set(item) != fields
+                    or type(item["version"]) is not int or item["version"] != 1
+                    or item["source"] != "user_message" or item["role"] != "user"
+                    or item["status"] not in ("success", "partial")
+                    or type(item["content"]) is not str or not 1 <= len(item["content"]) <= 12000
+                    or any(type(item[name]) is not str or not 1 <= len(item[name]) <= 128
+                           for name in ("client_request_id", "request_id"))):
+                return []
+            rows.append(dict(item))
+        return rows
 
     @staticmethod
     def _clean(text: str) -> str:
@@ -162,9 +187,16 @@ class MemoryManager:
                 "ts": datetime.now().isoformat(), "metadata": {"request_id": request_id}})
         key = self._wm_key(user_id, conv_id)
         async with self._redis.pipeline(transaction=True) as pipe:
-            if response.get("status") != "failed":
+            if response.get("status") in {"success", "partial"}:
                 pipe.lpush(key, raw("user", message), raw("assistant", response["response"]))
                 pipe.expire(key, 86400)
+                source_key = self._source_history_key(user_id, conv_id)
+                source = {"version": 1, "source": "user_message", "role": "user",
+                    "content": self._safe_text(message), "client_request_id": request_id,
+                    "request_id": response.get("request_id", ""), "status": response["status"]}
+                pipe.lpush(source_key, json.dumps(source))
+                pipe.ltrim(source_key, 0, SOURCE_HISTORY_LIMIT - 1)
+                pipe.expire(source_key, 86400)
                 if state is not None:
                     pipe.setex(self._state_key(user_id, conv_id), 86400, json.dumps(state))
             pipe.setex(self.receipt_key(user_id, conv_id, request_id), 86400,
@@ -263,6 +295,9 @@ class MemoryManager:
                 **nonthinking_options(self._client, self._model),
             ), timeout=15)
             raw = extract_text_content(resp.content)
+            if not raw.strip() or getattr(resp, "stop_reason", None) == "max_tokens":
+                logger.warning("画像为空或被截断，保留现有用户画像")
+                return
             s, e = raw.find("{"), raw.rfind("}") + 1
             profile_data = json.loads(raw[s:e])
 
@@ -312,6 +347,11 @@ class MemoryManager:
         # 4. 会话摘要（如果已压缩过）
         summary = await self._redis.get(self._summary_key(user_id, conv_id)) or ""
         state_raw = await self._redis.get(self._state_key(user_id, conv_id))
+        source_raw = await self._redis.lrange(self._source_history_key(user_id, conv_id), 0, SOURCE_HISTORY_LIMIT)
+        try:
+            source_history = [json.loads(raw) for raw in reversed(source_raw)]
+        except (TypeError, ValueError):
+            source_history = []
 
         return MemoryContext(
             recent_messages=recent,
@@ -319,6 +359,7 @@ class MemoryManager:
             user_profile=profile,
             summary=summary,
             state=json.loads(state_raw) if state_raw else {},
+            source_history=source_history,
         )
 
     # ── 压缩（防止 context 爆炸）─────────────────────────────────────────────
@@ -329,7 +370,7 @@ class MemoryManager:
           1. 用 LLM 对旧消息生成摘要
           2. 摘要存 Redis（覆盖旧摘要）
           3. 旧消息存入情景记忆（ChromaDB）供跨会话检索
-          4. 工作记忆只保留最近 5 条
+          4. 工作记忆保留最近至少 5 条，保留边界上的完整一轮
         """
         key = self._wm_key(user_id, conv_id)
         skey = self._summary_key(user_id, conv_id)
@@ -342,7 +383,8 @@ class MemoryManager:
             return
         old_summary = old_summary or ""
         messages = self._messages_from_raw(snapshot)
-        to_compress = messages[:-5]
+        retain = self._retained_message_count(messages)
+        to_compress = messages[:-retain]
         text = self._safe_text("\n".join(f"{m.role.value}: {m.content}" for m in to_compress))
         prompt = self._safe_text(f"用 2-3 句话总结以下对话的关键信息：\n{text}")
         started = time.monotonic()
@@ -370,7 +412,7 @@ class MemoryManager:
                     current_summary = await pipe.get(skey) or ""
                     if len(current) < len(snapshot) or current[-len(snapshot):] != snapshot or current_summary != old_summary:
                         return  # 其他压缩任务已更新快照，不再覆盖它。
-                    keep_count = len(current) - len(snapshot) + 5
+                    keep_count = len(current) - len(snapshot) + retain
                     pipe.multi()
                     pipe.setex(skey, 86400, new_summary)
                     pipe.ltrim(key, 0, keep_count - 1)
@@ -382,6 +424,18 @@ class MemoryManager:
                 except WatchError:
                     continue
         logger.info("会话持续并发写入，本次压缩延期")
+
+    @staticmethod
+    def _retained_message_count(messages: List[Message], minimum: int = 5) -> int:
+        """Do not leave an assistant reply without its committed user message."""
+        keep = min(minimum, len(messages))
+        start = len(messages) - keep
+        if start > 0 and messages[start].role is MsgRole.ASSISTANT:
+            user, assistant = messages[start - 1:start + 1]
+            if (user.role is MsgRole.USER
+                    and user.metadata.get("request_id") == assistant.metadata.get("request_id")):
+                keep += 1
+        return keep
 
     @staticmethod
     def _messages_from_raw(raws: List[str]) -> List[Message]:
@@ -474,6 +528,10 @@ class MemoryManager:
     @classmethod
     def _state_key(cls, user_id: str, conv_id: str) -> str:
         return f"state_v1:{cls._conversation_id(user_id, conv_id)}"
+
+    @classmethod
+    def _source_history_key(cls, user_id: str, conv_id: str) -> str:
+        return f"source_history_v1:{cls._conversation_id(user_id, conv_id)}"
 
     async def _migrate_legacy_keys(self, user_id: str, conv_id: str) -> None:
         # 带冒号的旧键无法确定原始归属，保留原数据但禁止自动读取/迁移。
@@ -578,7 +636,7 @@ class MemoryManager:
                 **nonthinking_options(self._client, self._model),
             )
             merged = self._safe_text(extract_text_content(resp.content)).strip()
-            if merged:
+            if merged and getattr(resp, "stop_reason", None) != "max_tokens":
                 return merged[: self.SUMMARY_MAX_CHARS]
         except Exception as ex:
             record_llm_failure(logger, "memory.merge", ex, (time.monotonic() - started) * 1000)

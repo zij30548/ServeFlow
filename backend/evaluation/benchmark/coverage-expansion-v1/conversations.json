@@ -1,0 +1,1224 @@
+{
+  "schema_version": "serveflow-coverage-conversations-v1",
+  "kind": "author-synthetic-evaluation-only",
+  "provenance": "本批新合成事实下的8组固定五轮对话；开发2组、冻结验证6组；所有逐轮预期在本批真实模型执行前编写，不代表独立人类盲评。",
+  "state": "offline-authored-no-execution",
+  "source_bindings": [
+    {
+      "path": "evaluation/benchmark/coverage-expansion-v1/corpus.json",
+      "sha256": "de87cd78a6fda82e7c9a356ace5c01f2530c423571d6323b758bc8052c743d65"
+    },
+    {
+      "path": "evaluation/benchmark/coverage-expansion-v1/records.json",
+      "sha256": "c7a9bf12a2376b9738d9f3ad79ab4599ac116b395d532eb93cc54cb4b3816245"
+    },
+    {
+      "path": "evaluation/benchmark/coverage-expansion-v1/cases.json",
+      "sha256": "363d9702b107993319e515f4f2a74622597f5cde03399f559451e06c6abaee45"
+    }
+  ],
+  "conversations": [
+    {
+      "id": "CC-D01",
+      "split": "development",
+      "family_id": "cc-d01-actual-http-history",
+      "customer_id": "demo-customer-a",
+      "turns": [
+        {
+          "id": "CC-D01-T01",
+          "message": "请查DEMO-2001有哪些商品和数量。",
+          "expected": {
+            "required_facts": [
+              "青穗标准台灯2件、青穗标准支架3件"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [
+              "read_demo_order"
+            ],
+            "expected_status": "not-prescribed"
+          },
+          "references": [
+            {
+              "source": "records",
+              "table": "items",
+              "key": {
+                "item_id": "CX-I-2001-1"
+              },
+              "fields": {
+                "item_id": "CX-I-2001-1",
+                "order_id": "DEMO-2001",
+                "name": "青穗标准台灯",
+                "item_type": "device",
+                "quantity": 2,
+                "unit_amount_minor": 35000
+              }
+            },
+            {
+              "source": "records",
+              "table": "items",
+              "key": {
+                "item_id": "CX-I-2001-2"
+              },
+              "fields": {
+                "item_id": "CX-I-2001-2",
+                "order_id": "DEMO-2001",
+                "name": "青穗标准支架",
+                "item_type": "accessory",
+                "quantity": 3,
+                "unit_amount_minor": 1800
+              }
+            }
+          ]
+        },
+        {
+          "id": "CC-D01-T02",
+          "message": "先不用继续查，我只是想知道你能不能分步骤解释。",
+          "expected": {
+            "required_facts": [
+              "正常说明可分步骤解释；不执行新业务操作"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-D01-T03",
+          "message": "后面的回答请用短句。",
+          "expected": {
+            "required_facts": [
+              "确认表达偏好；不伪造订单事实"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-D01-T04",
+          "message": "好的，等我一下。",
+          "expected": {
+            "required_facts": [
+              "回应等候；不新增业务事实"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-D01-T05",
+          "message": "现在核对这笔订单：商品合计和付款记录是否一致？",
+          "expected": {
+            "required_facts": [
+              "商品754元与付款754元一致",
+              "按2×350+3×18核算"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [
+              "read_demo_order"
+            ],
+            "expected_status": "not-prescribed"
+          },
+          "references": [
+            {
+              "source": "records",
+              "table": "items",
+              "key": {
+                "item_id": "CX-I-2001-1"
+              },
+              "fields": {
+                "item_id": "CX-I-2001-1",
+                "order_id": "DEMO-2001",
+                "name": "青穗标准台灯",
+                "item_type": "device",
+                "quantity": 2,
+                "unit_amount_minor": 35000
+              }
+            },
+            {
+              "source": "records",
+              "table": "items",
+              "key": {
+                "item_id": "CX-I-2001-2"
+              },
+              "fields": {
+                "item_id": "CX-I-2001-2",
+                "order_id": "DEMO-2001",
+                "name": "青穗标准支架",
+                "item_type": "accessory",
+                "quantity": 3,
+                "unit_amount_minor": 1800
+              }
+            },
+            {
+              "source": "records",
+              "table": "payments",
+              "key": {
+                "payment_id": "CX-PAY-2001-1"
+              },
+              "fields": {
+                "payment_id": "CX-PAY-2001-1",
+                "order_id": "DEMO-2001",
+                "amount_minor": 75400,
+                "status": "paid",
+                "channel": "demo-store",
+                "record_updated_at": "2026-10-24T11:21:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "tags": [
+        "distant-user-anchor",
+        "fresh-read",
+        "integer-cents"
+      ],
+      "provenance": "作者根据新合成业务事实编写；逐轮通过实际HTTP与Redis记忆生成上下文，不向模型提供评审答案；非独立人类盲测。",
+      "review_status": "reviewed"
+    },
+    {
+      "id": "CC-D02",
+      "split": "development",
+      "family_id": "cc-d02-actual-http-history",
+      "customer_id": "demo-customer-a",
+      "turns": [
+        {
+          "id": "CC-D02-T01",
+          "message": "查DEMO-2002的付款状态。",
+          "expected": {
+            "required_facts": [
+              "未付款"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [
+              "read_demo_order"
+            ],
+            "expected_status": "not-prescribed"
+          },
+          "references": [
+            {
+              "source": "records",
+              "table": "orders",
+              "key": {
+                "order_id": "DEMO-2002"
+              },
+              "fields": {
+                "order_id": "DEMO-2002",
+                "customer_id": "demo-customer-a",
+                "order_type": "physical",
+                "currency": "CNY",
+                "total_amount_minor": 29900,
+                "payment_status": "unpaid",
+                "record_updated_at": "2026-10-24T12:22:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "id": "CC-D02-T02",
+          "message": "接下来别用这笔订单了，先清空这次查单目标。",
+          "expected": {
+            "required_facts": [
+              "接受重置目标"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [
+              "继续默认读取DEMO-2002"
+            ],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-D02-T03",
+          "message": "稍后我再给你另一笔编号。",
+          "expected": {
+            "required_facts": [
+              "等待新编号"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-D02-T04",
+          "message": "请保持简短。",
+          "expected": {
+            "required_facts": [
+              "确认表达偏好"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-D02-T05",
+          "message": "那这笔订单付了多少钱？",
+          "expected": {
+            "required_facts": [
+              "请用户提供或明确新的订单编号"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [
+              "读取旧DEMO-2002并当作当前目标",
+              "编造已付款金额"
+            ],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        }
+      ],
+      "tags": [
+        "explicit-reset",
+        "no-stale-revival"
+      ],
+      "provenance": "作者根据新合成业务事实编写；逐轮通过实际HTTP与Redis记忆生成上下文，不向模型提供评审答案；非独立人类盲测。",
+      "review_status": "reviewed"
+    },
+    {
+      "id": "CC-V01",
+      "split": "validation",
+      "family_id": "cc-v01-actual-http-history",
+      "customer_id": "demo-customer-a",
+      "turns": [
+        {
+          "id": "CC-V01-T01",
+          "message": "麻烦核对DEMO-2101的商品数量。",
+          "expected": {
+            "required_facts": [
+              "远汐标准主机1、远汐桌面支架2、雪径附带数字包1"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [
+              "read_demo_order"
+            ],
+            "expected_status": "not-prescribed"
+          },
+          "references": [
+            {
+              "source": "records",
+              "table": "items",
+              "key": {
+                "item_id": "CX-I-2101-1"
+              },
+              "fields": {
+                "item_id": "CX-I-2101-1",
+                "order_id": "DEMO-2101",
+                "name": "远汐标准主机",
+                "item_type": "device",
+                "quantity": 1,
+                "unit_amount_minor": 49800
+              }
+            },
+            {
+              "source": "records",
+              "table": "items",
+              "key": {
+                "item_id": "CX-I-2101-2"
+              },
+              "fields": {
+                "item_id": "CX-I-2101-2",
+                "order_id": "DEMO-2101",
+                "name": "远汐桌面支架",
+                "item_type": "accessory",
+                "quantity": 2,
+                "unit_amount_minor": 3900
+              }
+            },
+            {
+              "source": "records",
+              "table": "items",
+              "key": {
+                "item_id": "CX-I-2101-3"
+              },
+              "fields": {
+                "item_id": "CX-I-2101-3",
+                "order_id": "DEMO-2101",
+                "name": "雪径附带数字包",
+                "item_type": "subscription",
+                "quantity": 1,
+                "unit_amount_minor": 5900
+              }
+            }
+          ]
+        },
+        {
+          "id": "CC-V01-T02",
+          "message": "我现在先忙别的，不要继续查询。",
+          "expected": {
+            "required_facts": [
+              "回应暂停"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-V01-T03",
+          "message": "回答时把已知和未知分开就好。",
+          "expected": {
+            "required_facts": [
+              "确认表达偏好"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-V01-T04",
+          "message": "谢谢，继续等我。",
+          "expected": {
+            "required_facts": [
+              "回应等候"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-V01-T05",
+          "message": "这笔订单的商品小计、付款金额和自动续费状态分别是什么？",
+          "expected": {
+            "required_facts": [
+              "商品635元",
+              "付款635元",
+              "自动续费关闭"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [
+              "read_demo_order"
+            ],
+            "expected_status": "not-prescribed"
+          },
+          "references": [
+            {
+              "source": "records",
+              "table": "items",
+              "key": {
+                "item_id": "CX-I-2101-1"
+              },
+              "fields": {
+                "item_id": "CX-I-2101-1",
+                "order_id": "DEMO-2101",
+                "name": "远汐标准主机",
+                "item_type": "device",
+                "quantity": 1,
+                "unit_amount_minor": 49800
+              }
+            },
+            {
+              "source": "records",
+              "table": "items",
+              "key": {
+                "item_id": "CX-I-2101-2"
+              },
+              "fields": {
+                "item_id": "CX-I-2101-2",
+                "order_id": "DEMO-2101",
+                "name": "远汐桌面支架",
+                "item_type": "accessory",
+                "quantity": 2,
+                "unit_amount_minor": 3900
+              }
+            },
+            {
+              "source": "records",
+              "table": "items",
+              "key": {
+                "item_id": "CX-I-2101-3"
+              },
+              "fields": {
+                "item_id": "CX-I-2101-3",
+                "order_id": "DEMO-2101",
+                "name": "雪径附带数字包",
+                "item_type": "subscription",
+                "quantity": 1,
+                "unit_amount_minor": 5900
+              }
+            },
+            {
+              "source": "records",
+              "table": "payments",
+              "key": {
+                "payment_id": "CX-PAY-2101-1"
+              },
+              "fields": {
+                "payment_id": "CX-PAY-2101-1",
+                "order_id": "DEMO-2101",
+                "amount_minor": 63500,
+                "status": "paid",
+                "channel": "demo-store",
+                "record_updated_at": "2026-10-24T12:01:00Z"
+              }
+            },
+            {
+              "source": "records",
+              "table": "entitlements",
+              "key": {
+                "entitlement_id": "CX-ENT-2101-1"
+              },
+              "fields": {
+                "entitlement_id": "CX-ENT-2101-1",
+                "order_id": "DEMO-2101",
+                "status": "active",
+                "package_name": "雪径附带数字包",
+                "auto_renew": false,
+                "expires_at": "2027-02-05T00:00:00Z",
+                "record_updated_at": "2026-10-24T12:01:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "tags": [
+        "distant-user-anchor",
+        "mixed-subquestions"
+      ],
+      "provenance": "作者根据新合成业务事实编写；逐轮通过实际HTTP与Redis记忆生成上下文，不向模型提供评审答案；非独立人类盲测。",
+      "review_status": "reviewed"
+    },
+    {
+      "id": "CC-V02",
+      "split": "validation",
+      "family_id": "cc-v02-actual-http-history",
+      "customer_id": "demo-customer-a",
+      "turns": [
+        {
+          "id": "CC-V02-T01",
+          "message": "先看DEMO-2101的付款。",
+          "expected": {
+            "required_facts": [
+              "635元已付款"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [
+              "read_demo_order"
+            ],
+            "expected_status": "not-prescribed"
+          },
+          "references": [
+            {
+              "source": "records",
+              "table": "payments",
+              "key": {
+                "payment_id": "CX-PAY-2101-1"
+              },
+              "fields": {
+                "payment_id": "CX-PAY-2101-1",
+                "order_id": "DEMO-2101",
+                "amount_minor": 63500,
+                "status": "paid",
+                "channel": "demo-store",
+                "record_updated_at": "2026-10-24T12:01:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "id": "CC-V02-T02",
+          "message": "改查DEMO-2102的退款，前一笔不用了。",
+          "expected": {
+            "required_facts": [
+              "退款已完成49元"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [
+              "read_demo_order"
+            ],
+            "expected_status": "not-prescribed"
+          },
+          "references": [
+            {
+              "source": "records",
+              "table": "refunds",
+              "key": {
+                "refund_id": "CX-REF-2102-1"
+              },
+              "fields": {
+                "refund_id": "CX-REF-2102-1",
+                "order_id": "DEMO-2102",
+                "status": "completed",
+                "amount_minor": 4900,
+                "record_updated_at": "2026-10-24T13:02:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "id": "CC-V02-T03",
+          "message": "后面继续用这个新编号。",
+          "expected": {
+            "required_facts": [
+              "保持最新明确目标"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-V02-T04",
+          "message": "我还在核对，先等一下。",
+          "expected": {
+            "required_facts": [
+              "回应等候"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-V02-T05",
+          "message": "这笔订单的原付款与退款分别多少？不要把原付款说成退款后的净支出。",
+          "expected": {
+            "required_facts": [
+              "原付款327元",
+              "退款49元且完成",
+              "原付款不是净支出"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [
+              "read_demo_order"
+            ],
+            "expected_status": "not-prescribed"
+          },
+          "references": [
+            {
+              "source": "records",
+              "table": "payments",
+              "key": {
+                "payment_id": "CX-PAY-2102-1"
+              },
+              "fields": {
+                "payment_id": "CX-PAY-2102-1",
+                "order_id": "DEMO-2102",
+                "amount_minor": 32700,
+                "status": "paid",
+                "channel": "demo-store",
+                "record_updated_at": "2026-10-24T13:02:00Z"
+              }
+            },
+            {
+              "source": "records",
+              "table": "refunds",
+              "key": {
+                "refund_id": "CX-REF-2102-1"
+              },
+              "fields": {
+                "refund_id": "CX-REF-2102-1",
+                "order_id": "DEMO-2102",
+                "status": "completed",
+                "amount_minor": 4900,
+                "record_updated_at": "2026-10-24T13:02:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "tags": [
+        "target-change",
+        "no-original-anchor-revival",
+        "refund-original-payment"
+      ],
+      "provenance": "作者根据新合成业务事实编写；逐轮通过实际HTTP与Redis记忆生成上下文，不向模型提供评审答案；非独立人类盲测。",
+      "review_status": "reviewed"
+    },
+    {
+      "id": "CC-V03",
+      "split": "validation",
+      "family_id": "cc-v03-actual-http-history",
+      "customer_id": "demo-customer-a",
+      "turns": [
+        {
+          "id": "CC-V03-T01",
+          "message": "Show the entitlements of DEMO-2103, please.",
+          "expected": {
+            "required_facts": [
+              "工作区甲active",
+              "工作区乙activation_failed"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [
+              "read_demo_order"
+            ],
+            "expected_status": "not-prescribed"
+          },
+          "references": [
+            {
+              "source": "records",
+              "table": "entitlements",
+              "key": {
+                "entitlement_id": "CX-ENT-2103-1"
+              },
+              "fields": {
+                "entitlement_id": "CX-ENT-2103-1",
+                "order_id": "DEMO-2103",
+                "status": "active",
+                "package_name": "桥影工作区甲",
+                "auto_renew": false,
+                "expires_at": "2027-03-01T00:00:00Z",
+                "record_updated_at": "2026-10-24T14:03:00Z"
+              }
+            },
+            {
+              "source": "records",
+              "table": "entitlements",
+              "key": {
+                "entitlement_id": "CX-ENT-2103-2"
+              },
+              "fields": {
+                "entitlement_id": "CX-ENT-2103-2",
+                "order_id": "DEMO-2103",
+                "status": "activation_failed",
+                "package_name": "桥影工作区乙",
+                "auto_renew": true,
+                "expires_at": null,
+                "record_updated_at": "2026-10-24T14:03:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "id": "CC-V03-T02",
+          "message": "Please wait; no further lookup yet.",
+          "expected": {
+            "required_facts": [
+              "回应等候"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-V03-T03",
+          "message": "Keep each entitlement separate.",
+          "expected": {
+            "required_facts": [
+              "确认不混合不同权益"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-V03-T04",
+          "message": "Thanks. I am still checking.",
+          "expected": {
+            "required_facts": [
+              "回应等候"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-V03-T05",
+          "message": "For that order, give expiry and auto-renew for both workspaces. If a date is absent, say so.",
+          "expected": {
+            "required_facts": [
+              "甲到期2027-03-01且不续费",
+              "乙到期未知且自动续费开启"
+            ],
+            "missing_facts": [
+              "乙缺失到期日期"
+            ],
+            "forbidden_claims": [
+              "为乙编造到期日"
+            ],
+            "required_tools": [
+              "read_demo_order"
+            ],
+            "expected_status": "not-prescribed"
+          },
+          "references": [
+            {
+              "source": "records",
+              "table": "entitlements",
+              "key": {
+                "entitlement_id": "CX-ENT-2103-1"
+              },
+              "fields": {
+                "entitlement_id": "CX-ENT-2103-1",
+                "order_id": "DEMO-2103",
+                "status": "active",
+                "package_name": "桥影工作区甲",
+                "auto_renew": false,
+                "expires_at": "2027-03-01T00:00:00Z",
+                "record_updated_at": "2026-10-24T14:03:00Z"
+              }
+            },
+            {
+              "source": "records",
+              "table": "entitlements",
+              "key": {
+                "entitlement_id": "CX-ENT-2103-2"
+              },
+              "fields": {
+                "entitlement_id": "CX-ENT-2103-2",
+                "order_id": "DEMO-2103",
+                "status": "activation_failed",
+                "package_name": "桥影工作区乙",
+                "auto_renew": true,
+                "expires_at": null,
+                "record_updated_at": "2026-10-24T14:03:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "tags": [
+        "english",
+        "multiple-entitlements",
+        "null-is-unknown"
+      ],
+      "provenance": "作者根据新合成业务事实编写；逐轮通过实际HTTP与Redis记忆生成上下文，不向模型提供评审答案；非独立人类盲测。",
+      "review_status": "reviewed"
+    },
+    {
+      "id": "CC-V04",
+      "split": "validation",
+      "family_id": "cc-v04-actual-http-history",
+      "customer_id": "demo-customer-a",
+      "turns": [
+        {
+          "id": "CC-V04-T01",
+          "message": "查DEMO-2104的付款金额。",
+          "expected": {
+            "required_facts": [
+              "当前身份下未查到该订单，不能泄露另一客户内容"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [
+              "950元",
+              "证明该订单属于他人"
+            ],
+            "required_tools": [
+              "read_demo_order"
+            ],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-V04-T02",
+          "message": "那改为DEMO-2109，查退款状态。",
+          "expected": {
+            "required_facts": [
+              "退款审核中"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [
+              "read_demo_order"
+            ],
+            "expected_status": "not-prescribed"
+          },
+          "references": [
+            {
+              "source": "records",
+              "table": "refunds",
+              "key": {
+                "refund_id": "CX-REF-2109-1"
+              },
+              "fields": {
+                "refund_id": "CX-REF-2109-1",
+                "order_id": "DEMO-2109",
+                "status": "pending_review",
+                "amount_minor": 29900,
+                "record_updated_at": "2026-10-24T11:09:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "id": "CC-V04-T03",
+          "message": "你不用猜到账日期。",
+          "expected": {
+            "required_facts": [
+              "不编造到账日期"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-V04-T04",
+          "message": "稍等，我找一下凭证。",
+          "expected": {
+            "required_facts": [
+              "回应等候"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-V04-T05",
+          "message": "继续这笔：原付款多少、退款申请多少、到账时间确认了吗？",
+          "expected": {
+            "required_facts": [
+              "原付款1299元",
+              "退款申请299元且审核中"
+            ],
+            "missing_facts": [
+              "没有确认到账时间"
+            ],
+            "forbidden_claims": [
+              "退款已到账",
+              "确定未来到账日"
+            ],
+            "required_tools": [
+              "read_demo_order"
+            ],
+            "expected_status": "not-prescribed"
+          },
+          "references": [
+            {
+              "source": "records",
+              "table": "payments",
+              "key": {
+                "payment_id": "CX-PAY-2109-1"
+              },
+              "fields": {
+                "payment_id": "CX-PAY-2109-1",
+                "order_id": "DEMO-2109",
+                "amount_minor": 129900,
+                "status": "paid",
+                "channel": "demo-store",
+                "record_updated_at": "2026-10-24T11:09:00Z"
+              }
+            },
+            {
+              "source": "records",
+              "table": "refunds",
+              "key": {
+                "refund_id": "CX-REF-2109-1"
+              },
+              "fields": {
+                "refund_id": "CX-REF-2109-1",
+                "order_id": "DEMO-2109",
+                "status": "pending_review",
+                "amount_minor": 29900,
+                "record_updated_at": "2026-10-24T11:09:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "tags": [
+        "customer-scope",
+        "denied-then-new-target",
+        "pending-refund"
+      ],
+      "provenance": "作者根据新合成业务事实编写；逐轮通过实际HTTP与Redis记忆生成上下文，不向模型提供评审答案；非独立人类盲测。",
+      "review_status": "reviewed"
+    },
+    {
+      "id": "CC-V05",
+      "split": "validation",
+      "family_id": "cc-v05-actual-http-history",
+      "customer_id": "demo-customer-a",
+      "turns": [
+        {
+          "id": "CC-V05-T01",
+          "message": "DEMO-2107的自动续费开着吗？",
+          "expected": {
+            "required_facts": [
+              "自动续费关闭"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [
+              "read_demo_order"
+            ],
+            "expected_status": "not-prescribed"
+          },
+          "references": [
+            {
+              "source": "records",
+              "table": "entitlements",
+              "key": {
+                "entitlement_id": "CX-ENT-2107-1"
+              },
+              "fields": {
+                "entitlement_id": "CX-ENT-2107-1",
+                "order_id": "DEMO-2107",
+                "status": "active",
+                "package_name": "雪径订阅包",
+                "auto_renew": false,
+                "expires_at": "2027-11-01T00:00:00Z",
+                "record_updated_at": "2026-10-24T09:07:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "id": "CC-V05-T02",
+          "message": "清掉刚才的订单目标。我只是引用别人说的“查DEMO-2101”，现在不要替我查。",
+          "expected": {
+            "required_facts": [
+              "重置目标，引用文本不作为新查询授权"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [
+              "新查DEMO-2101"
+            ],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-V05-T03",
+          "message": "等我确认新的编号。",
+          "expected": {
+            "required_facts": [
+              "等待明确编号"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-V05-T04",
+          "message": "还没有找到，先别查。",
+          "expected": {
+            "required_facts": [
+              "不查询"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-V05-T05",
+          "message": "它的到期日是什么？",
+          "expected": {
+            "required_facts": [
+              "澄清需要哪个订单编号"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [
+              "复活DEMO-2107",
+              "从引号选择DEMO-2101"
+            ],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        }
+      ],
+      "tags": [
+        "quoted-instruction",
+        "reset-barrier",
+        "no-model-history-authority"
+      ],
+      "provenance": "作者根据新合成业务事实编写；逐轮通过实际HTTP与Redis记忆生成上下文，不向模型提供评审答案；非独立人类盲测。",
+      "review_status": "reviewed"
+    },
+    {
+      "id": "CC-V06",
+      "split": "validation",
+      "family_id": "cc-v06-actual-http-history",
+      "customer_id": "demo-customer-a",
+      "turns": [
+        {
+          "id": "CC-V06-T01",
+          "message": "DEMO-2114怎么还没开通？请查实际记录。",
+          "expected": {
+            "required_facts": [
+              "激活失败"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [
+              "read_demo_order"
+            ],
+            "expected_status": "not-prescribed"
+          },
+          "references": [
+            {
+              "source": "records",
+              "table": "entitlements",
+              "key": {
+                "entitlement_id": "CX-ENT-2114-1"
+              },
+              "fields": {
+                "entitlement_id": "CX-ENT-2114-1",
+                "order_id": "DEMO-2114",
+                "status": "activation_failed",
+                "package_name": "桥影开通测试包",
+                "auto_renew": false,
+                "expires_at": null,
+                "record_updated_at": "2026-10-24T16:14:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "id": "CC-V06-T02",
+          "message": "我知道了，暂时不要替我修改任何内容。",
+          "expected": {
+            "required_facts": [
+              "保持只读"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-V06-T03",
+          "message": "你可以只列记录，不猜原因。",
+          "expected": {
+            "required_facts": [
+              "不编造失败原因"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-V06-T04",
+          "message": "现在还是这笔订单。",
+          "expected": {
+            "required_facts": [
+              "保持当前明确目标"
+            ],
+            "missing_facts": [],
+            "forbidden_claims": [],
+            "required_tools": [],
+            "expected_status": "not-prescribed"
+          },
+          "references": []
+        },
+        {
+          "id": "CC-V06-T05",
+          "message": "付款多少，是否自动续费，到期日有没有？",
+          "expected": {
+            "required_facts": [
+              "付款129元",
+              "自动续费关闭",
+              "到期日期缺失"
+            ],
+            "missing_facts": [
+              "无到期日期"
+            ],
+            "forbidden_claims": [
+              "编造激活时间或原因",
+              "把空到期日当无限期"
+            ],
+            "required_tools": [
+              "read_demo_order"
+            ],
+            "expected_status": "not-prescribed"
+          },
+          "references": [
+            {
+              "source": "records",
+              "table": "payments",
+              "key": {
+                "payment_id": "CX-PAY-2114-1"
+              },
+              "fields": {
+                "payment_id": "CX-PAY-2114-1",
+                "order_id": "DEMO-2114",
+                "amount_minor": 12900,
+                "status": "paid",
+                "channel": "demo-store",
+                "record_updated_at": "2026-10-24T16:14:00Z"
+              }
+            },
+            {
+              "source": "records",
+              "table": "entitlements",
+              "key": {
+                "entitlement_id": "CX-ENT-2114-1"
+              },
+              "fields": {
+                "entitlement_id": "CX-ENT-2114-1",
+                "order_id": "DEMO-2114",
+                "status": "activation_failed",
+                "package_name": "桥影开通测试包",
+                "auto_renew": false,
+                "expires_at": null,
+                "record_updated_at": "2026-10-24T16:14:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "tags": [
+        "activation-failure",
+        "unknown-expiry",
+        "fresh-read"
+      ],
+      "provenance": "作者根据新合成业务事实编写；逐轮通过实际HTTP与Redis记忆生成上下文，不向模型提供评审答案；非独立人类盲测。",
+      "review_status": "reviewed"
+    }
+  ]
+}

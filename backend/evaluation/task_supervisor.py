@@ -178,7 +178,8 @@ def supervise(command, *, root: Path, deadline_s=900):
                                "evaluation.tool_scope_recheck", "evaluation.retrieval_phase_trial",
                                "evaluation.diagnostic_repair_trial", "evaluation.order_answer_recheck",
                                "evaluation.current_task_ablation", "evaluation.expanded_trial",
-                               "evaluation.repair_execution_trial", "evaluation.repair_execution_continuation")]
+                               "evaluation.repair_execution_trial", "evaluation.repair_execution_continuation",
+                               "evaluation.coverage_execution")]
     if (os.name != "posix" or not hasattr(os, "killpg") or not hasattr(os, "O_NOFOLLOW")
             or not hasattr(os, "O_DIRECTORY")):
         raise SupervisorError("supervisor_posix_required")
@@ -192,13 +193,16 @@ def supervise(command, *, root: Path, deadline_s=900):
     quality_workers = [[sys.executable, "-B", "-u", "-m", module, "_worker"]
                        for module in ("evaluation.quality_trial", "evaluation.quality_phase_trial",
                                       "evaluation.retrieval_phase_trial", "evaluation.current_task_ablation",
-                                      "evaluation.expanded_trial")]
+                                      "evaluation.expanded_trial", "evaluation.coverage_execution")]
     if (command[4] == "evaluation.current_task_ablation"
             and Path(root) != Path(__file__).resolve().parent.parent/"data/benchmarks/current-task-ablation-v1"):
         raise SupervisorError("current_task_ablation_worker_root_invalid")
     if (command[4] == "evaluation.expanded_trial"
             and Path(root) != Path(__file__).resolve().parent.parent/"data/benchmarks/expanded-evaluation-v1"):
         raise SupervisorError("expanded_worker_root_invalid")
+    if (command[4] == "evaluation.coverage_execution"
+            and Path(root) != Path(__file__).resolve().parent.parent/"data/benchmarks/coverage-execution-v1"):
+        raise SupervisorError("coverage_execution_worker_root_invalid")
     if (command[4] == "evaluation.repair_execution_trial"
             and Path(root) != Path(__file__).resolve().parent.parent/"data/benchmarks/repair-execution-v1"):
         raise SupervisorError("repair_execution_worker_root_invalid")

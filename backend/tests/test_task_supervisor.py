@@ -121,6 +121,30 @@ def test_explicit_quality_workers_admit_four_arm_outer_deadline(fake, module):
     assert_ledger(root)
 
 
+def test_coverage_worker_only_accepts_its_fixed_root_and_3600_boundary(fake, monkeypatch, tmp_path):
+    _, _, _, _, _, starts, _ = fake
+    backend = tmp_path / "backend"
+    root = backend / "data/benchmarks/coverage-execution-v1"
+    root.mkdir(mode=0o700, parents=True)
+    monkeypatch.setattr(supervisor, "__file__", str(backend / "evaluation/task_supervisor.py"))
+    command = [sys.executable, "-B", "-u", "-m", "evaluation.coverage_execution", "_worker"]
+    with pytest.raises(supervisor.SupervisorError, match="deadline_invalid"):
+        supervisor.supervise(command, root=root, deadline_s=3601)
+    assert not starts
+    assert supervisor.supervise(command, root=root, deadline_s=3600) == {
+        "exit_code": 0, "timed_out": False, "cancelled": False}
+    assert len(starts) == 1
+
+
+def test_coverage_worker_cannot_use_a_new_or_historical_batch_root(fake):
+    root, _, _, _, _, starts, _ = fake
+    command = [sys.executable, "-B", "-u", "-m", "evaluation.coverage_execution", "_worker"]
+    with pytest.raises(supervisor.SupervisorError, match="coverage_execution_worker_root_invalid"):
+        supervisor.supervise(command, root=root, deadline_s=900)
+    assert not starts
+    assert_ledger(root)
+
+
 @pytest.mark.parametrize("module", ["evaluation.task_trial", "evaluation.task_deadline_recheck", "evaluation.quality_trial", "evaluation.quality_phase_trial"])
 def test_new_plan_does_not_raise_old_worker_or_arbitrary_deadlines(fake, module):
     root, _, _, _, _, starts, _ = fake

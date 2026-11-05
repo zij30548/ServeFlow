@@ -327,6 +327,28 @@ _TOKEN = re.compile(r"(?<![A-Za-z0-9_])DEMO-[A-Za-z0-9_-]*", re.I)
 _QUOTED_IDENTIFIERS = re.compile(
     rf"{_TOKEN.pattern}(?:\s*(?:和|与|及|、|,|/|and|or)\s*{_TOKEN.pattern})*", re.I)
 _RESET = re.compile(r"(?:换(?:一)?(?:个|笔)|另(?:外)?(?:一)?(?:个|笔)|新(?:的)?)(?:问题|订单)|\b(?:another|different|new)\s+order\b", re.I)
+_CLEAR_TARGET = re.compile(
+    r"(?:清空|清除|清掉|重置|忘掉|忘记).{0,12}(?:订单|查单)(?:目标|上下文|引用)?"
+    r"|(?:别用|不要用).{0,8}(?:这|那|刚才|之前).{0,4}(?:订单|编号)"
+    r"|\b(?:clear|reset|forget)\s+(?:the\s+|this\s+|previous\s+)?order\s+(?:target|context)\b",
+    re.I,
+)
+
+
+def _resets_order_target(message):
+    if _RESET.search(message):
+        return True
+    # A temporary pause does not discard the selected order. Only an explicit
+    # target/context reset is a barrier; quoted text is not an instruction.
+    text = re.sub(r'"[^"\n]*"|“[^”\n]*”|「[^」\n]*」', "", message)
+    for clause in re.split(r"[，。；;!?！？\n]", text):
+        if re.search(r"(?:不要|别|无需|不用)(?:再)?(?:清空|清除|清掉|重置|忘掉|忘记)", clause):
+            continue
+        if re.search(r"\b(?:do\s+not|don't|never)\s+(?:clear|reset|forget)\b", clause, re.I):
+            continue
+        if _CLEAR_TARGET.search(clause):
+            return True
+    return False
 _QUOTED = re.compile(r'“[^”\n]*”|「[^」\n]*」|‘[^’\n]*’|"[^"\n]*"|(?<![A-Za-z0-9_])\x27[^\x27\n]*\x27(?![A-Za-z0-9_])')
 _READ = r"(?:查询|查一下|查查|查看|查|核对|核实|检查|看看|跟踪|追踪|读取|look\s+up|check|track|query|verify)"
 _DECLINED = re.compile(
@@ -432,7 +454,7 @@ def resolve_order_id(message, history=None, entities=None):
         return selected
     if blocked_reference:
         return OrderSelection("missing")
-    if _RESET.search(message):
+    if _resets_order_target(message):
         return OrderSelection("missing")
     if history is not None and type(history) not in (list, tuple):
         return OrderSelection("invalid", source="history")
@@ -446,9 +468,49 @@ def resolve_order_id(message, history=None, entities=None):
         selected = _selection_from_text(active_prior, "history")
         if selected is not None:
             return selected
-        if blocked_prior or _RESET.search(prior):
+        if blocked_prior or _resets_order_target(prior):
             return OrderSelection("missing")
     return OrderSelection("missing")
+
+
+def source_bound_order_history(source_history, recent_history=None):
+    """Bound one original user anchor to recent dialogue, without new facts.
+
+    The caller supplies committed, identity-scoped user events from memory.
+    The nearest target or blocking event wins, including a reset, ambiguity,
+    invalid identifier, declined query or quoted instruction. Generated
+    summaries, entities and assistant order mentions cannot supply an anchor.
+    The ordinary resolver keeps its six-message boundary.
+    """
+    fields = {"version", "source", "role", "content", "client_request_id", "request_id", "status"}
+    if type(source_history) is not list or len(source_history) > 20:
+        return []
+    recent = [] if recent_history is None else recent_history
+    if type(recent) is not list or len(recent) > 5:
+        return []
+    for row in recent:
+        if (type(row) is not dict or row.get("role") not in ("user", "assistant")
+                or type(row.get("content")) is not str or not row["content"]
+                or (row["role"] == "user" and len(row["content"]) > 2000)):
+            return []
+    for row in source_history:
+        if (type(row) is not dict or set(row) != fields
+                or type(row["version"]) is not int or row["version"] != 1
+                or row["source"] != "user_message" or row["role"] != "user"
+                or row["status"] not in ("success", "partial")
+                or type(row["content"]) is not str or not 1 <= len(row["content"]) <= 2000
+                or any(type(row[key]) is not str or not 1 <= len(row[key]) <= 128
+                       for key in ("request_id", "client_request_id"))):
+            return []
+    copied_recent = [dict(row) for row in recent]
+    for row in reversed(source_history):
+        active, blocked = _active_order_text(row["content"])
+        if (_selection_from_text(active, "history") is not None
+                or blocked or _resets_order_target(row["content"])):
+            if any(item["role"] == "user" and item["content"] == row["content"] for item in recent):
+                return copied_recent
+            return [dict(row), *copied_recent]
+    return copied_recent
 
 
 def needs_order_evidence(message, history=None):
@@ -469,7 +531,7 @@ def needs_order_evidence(message, history=None):
     if selected.status != "resolved":
         return False
     subject = r"(?:会员|权益|订阅|包裹|物流|付款|退款|订单|配件|设备|自动续费|\b(?:membership|entitlement|subscription|package|shipment|payment|refund|order|renewal)\b)"
-    detail = r"(?:有效|到期|截止|续费|开通|激活|状态|进度|单号|金额|到账|发货|送达|关闭|开启|\b(?:expir\w*|valid|renew\w*|activ\w*|status|amount|tracking|deliver\w*)\b)"
+    detail = r"(?:有效|到期|截止|续费|开通|激活|状态|进度|单号|金额|价格|单价|合计|小计|总计|比较|对比|到账|发货|送达|关闭|开启|\b(?:expir\w*|valid|renew\w*|activ\w*|status|amount|price|subtotal|total|compar\w*|tracking|deliver\w*)\b)"
     query = rf"(?:{_READ}|什么时候|到什么时候|何时|哪天|多少|是否|是不是|有没有|[？?]|呢|吗|\b(?:when|what|where|how|is|does|has)\b)"
     return bool(re.search(subject, active, re.I) and re.search(detail, active, re.I)
                 and (re.search(query, active, re.I) or re.search(r"[？?]", message)))

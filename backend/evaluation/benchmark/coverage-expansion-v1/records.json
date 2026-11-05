@@ -1,0 +1,1523 @@
+{
+  "schema_version": "serveflow-coverage-records-v1",
+  "kind": "author-synthetic-evaluation-only",
+  "provenance": "New author-written synthetic evaluation facts and questions; source-reviewed by code assistants, not real enterprise data, independent human blind review, training data, or observed model results. Development and validation use disjoint source documents and order IDs; similar mechanisms may recur. The fixture snapshot deliberately remains 2026-10-25 to satisfy the existing pure production fixture validator; these are newly authored static synthetic records, not live reads or a claim about current customers.",
+  "order_splits": [
+    {
+      "order_id": "DEMO-2001",
+      "split": "development",
+      "family_id": "cx-development-order-2001"
+    },
+    {
+      "order_id": "DEMO-2002",
+      "split": "development",
+      "family_id": "cx-development-order-2002"
+    },
+    {
+      "order_id": "DEMO-2003",
+      "split": "development",
+      "family_id": "cx-development-order-2003"
+    },
+    {
+      "order_id": "DEMO-2004",
+      "split": "development",
+      "family_id": "cx-development-order-2004"
+    },
+    {
+      "order_id": "DEMO-2005",
+      "split": "development",
+      "family_id": "cx-development-order-2005"
+    },
+    {
+      "order_id": "DEMO-2006",
+      "split": "development",
+      "family_id": "cx-development-order-2006"
+    },
+    {
+      "order_id": "DEMO-2007",
+      "split": "development",
+      "family_id": "cx-development-order-2007"
+    },
+    {
+      "order_id": "DEMO-2008",
+      "split": "development",
+      "family_id": "cx-development-order-2008"
+    },
+    {
+      "order_id": "DEMO-2009",
+      "split": "development",
+      "family_id": "cx-development-order-2009"
+    },
+    {
+      "order_id": "DEMO-2010",
+      "split": "development",
+      "family_id": "cx-development-order-2010"
+    },
+    {
+      "order_id": "DEMO-2011",
+      "split": "development",
+      "family_id": "cx-development-order-2011"
+    },
+    {
+      "order_id": "DEMO-2012",
+      "split": "development",
+      "family_id": "cx-development-order-2012"
+    },
+    {
+      "order_id": "DEMO-2101",
+      "split": "validation",
+      "family_id": "cx-validation-order-2101"
+    },
+    {
+      "order_id": "DEMO-2102",
+      "split": "validation",
+      "family_id": "cx-validation-order-2102"
+    },
+    {
+      "order_id": "DEMO-2103",
+      "split": "validation",
+      "family_id": "cx-validation-order-2103"
+    },
+    {
+      "order_id": "DEMO-2104",
+      "split": "validation",
+      "family_id": "cx-validation-order-2104"
+    },
+    {
+      "order_id": "DEMO-2105",
+      "split": "validation",
+      "family_id": "cx-validation-order-2105"
+    },
+    {
+      "order_id": "DEMO-2106",
+      "split": "validation",
+      "family_id": "cx-validation-order-2106"
+    },
+    {
+      "order_id": "DEMO-2107",
+      "split": "validation",
+      "family_id": "cx-validation-order-2107"
+    },
+    {
+      "order_id": "DEMO-2108",
+      "split": "validation",
+      "family_id": "cx-validation-order-2108"
+    },
+    {
+      "order_id": "DEMO-2109",
+      "split": "validation",
+      "family_id": "cx-validation-order-2109"
+    },
+    {
+      "order_id": "DEMO-2110",
+      "split": "validation",
+      "family_id": "cx-validation-order-2110"
+    },
+    {
+      "order_id": "DEMO-2111",
+      "split": "validation",
+      "family_id": "cx-validation-order-2111"
+    },
+    {
+      "order_id": "DEMO-2112",
+      "split": "validation",
+      "family_id": "cx-validation-order-2112"
+    },
+    {
+      "order_id": "DEMO-2113",
+      "split": "validation",
+      "family_id": "cx-validation-order-2113"
+    },
+    {
+      "order_id": "DEMO-2114",
+      "split": "validation",
+      "family_id": "cx-validation-order-2114"
+    },
+    {
+      "order_id": "DEMO-2115",
+      "split": "validation",
+      "family_id": "cx-validation-order-2115"
+    },
+    {
+      "order_id": "DEMO-2116",
+      "split": "validation",
+      "family_id": "cx-validation-order-2116"
+    },
+    {
+      "order_id": "DEMO-2117",
+      "split": "validation",
+      "family_id": "cx-validation-order-2117"
+    },
+    {
+      "order_id": "DEMO-2118",
+      "split": "validation",
+      "family_id": "cx-validation-order-2118"
+    },
+    {
+      "order_id": "DEMO-2119",
+      "split": "validation",
+      "family_id": "cx-validation-order-2119"
+    },
+    {
+      "order_id": "DEMO-2120",
+      "split": "validation",
+      "family_id": "cx-validation-order-2120"
+    }
+  ],
+  "fixture": {
+    "schema_version": "serveflow-demo-business-v1",
+    "kind": "synthetic-local-demo",
+    "as_of": "2026-10-25T00:00:00Z",
+    "customers": [
+      {
+        "customer_id": "demo-customer-a",
+        "display_name": "覆盖扩展合成客户A"
+      },
+      {
+        "customer_id": "demo-customer-b",
+        "display_name": "覆盖扩展合成客户B"
+      }
+    ],
+    "orders": [
+      {
+        "order_id": "DEMO-2001",
+        "customer_id": "demo-customer-a",
+        "order_type": "bundle",
+        "currency": "CNY",
+        "total_amount_minor": 75400,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T11:21:00Z"
+      },
+      {
+        "order_id": "DEMO-2002",
+        "customer_id": "demo-customer-a",
+        "order_type": "physical",
+        "currency": "CNY",
+        "total_amount_minor": 29900,
+        "payment_status": "unpaid",
+        "record_updated_at": "2026-10-24T12:22:00Z"
+      },
+      {
+        "order_id": "DEMO-2003",
+        "customer_id": "demo-customer-a",
+        "order_type": "digital",
+        "currency": "CNY",
+        "total_amount_minor": 16000,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T13:23:00Z"
+      },
+      {
+        "order_id": "DEMO-2004",
+        "customer_id": "demo-customer-a",
+        "order_type": "physical",
+        "currency": "CNY",
+        "total_amount_minor": 105000,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T14:24:00Z"
+      },
+      {
+        "order_id": "DEMO-2005",
+        "customer_id": "demo-customer-a",
+        "order_type": "digital",
+        "currency": "CNY",
+        "total_amount_minor": 4500,
+        "payment_status": "refunded",
+        "record_updated_at": "2026-10-24T15:25:00Z"
+      },
+      {
+        "order_id": "DEMO-2006",
+        "customer_id": "demo-customer-a",
+        "order_type": "physical",
+        "currency": "CNY",
+        "total_amount_minor": 19900,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T16:26:00Z"
+      },
+      {
+        "order_id": "DEMO-2007",
+        "customer_id": "demo-customer-a",
+        "order_type": "bundle",
+        "currency": "CNY",
+        "total_amount_minor": 74400,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T08:27:00Z"
+      },
+      {
+        "order_id": "DEMO-2008",
+        "customer_id": "demo-customer-a",
+        "order_type": "physical",
+        "currency": "CNY",
+        "total_amount_minor": 8800,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T09:28:00Z"
+      },
+      {
+        "order_id": "DEMO-2009",
+        "customer_id": "demo-customer-a",
+        "order_type": "digital",
+        "currency": "CNY",
+        "total_amount_minor": 23800,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T10:29:00Z"
+      },
+      {
+        "order_id": "DEMO-2010",
+        "customer_id": "demo-customer-b",
+        "order_type": "physical",
+        "currency": "CNY",
+        "total_amount_minor": 43800,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T11:30:00Z"
+      },
+      {
+        "order_id": "DEMO-2011",
+        "customer_id": "demo-customer-a",
+        "order_type": "bundle",
+        "currency": "CNY",
+        "total_amount_minor": 22500,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T12:31:00Z"
+      },
+      {
+        "order_id": "DEMO-2012",
+        "customer_id": "demo-customer-b",
+        "order_type": "digital",
+        "currency": "CNY",
+        "total_amount_minor": 7900,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T13:32:00Z"
+      },
+      {
+        "order_id": "DEMO-2101",
+        "customer_id": "demo-customer-a",
+        "order_type": "bundle",
+        "currency": "CNY",
+        "total_amount_minor": 63500,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T12:01:00Z"
+      },
+      {
+        "order_id": "DEMO-2102",
+        "customer_id": "demo-customer-a",
+        "order_type": "bundle",
+        "currency": "CNY",
+        "total_amount_minor": 32700,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T13:02:00Z"
+      },
+      {
+        "order_id": "DEMO-2103",
+        "customer_id": "demo-customer-a",
+        "order_type": "digital",
+        "currency": "CNY",
+        "total_amount_minor": 19800,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T14:03:00Z"
+      },
+      {
+        "order_id": "DEMO-2104",
+        "customer_id": "demo-customer-b",
+        "order_type": "bundle",
+        "currency": "CNY",
+        "total_amount_minor": 95000,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T15:04:00Z"
+      },
+      {
+        "order_id": "DEMO-2105",
+        "customer_id": "demo-customer-a",
+        "order_type": "digital",
+        "currency": "CNY",
+        "total_amount_minor": 12900,
+        "payment_status": "refunded",
+        "record_updated_at": "2026-10-24T16:05:00Z"
+      },
+      {
+        "order_id": "DEMO-2106",
+        "customer_id": "demo-customer-a",
+        "order_type": "physical",
+        "currency": "CNY",
+        "total_amount_minor": 7900,
+        "payment_status": "unpaid",
+        "record_updated_at": "2026-10-24T08:06:00Z"
+      },
+      {
+        "order_id": "DEMO-2107",
+        "customer_id": "demo-customer-a",
+        "order_type": "bundle",
+        "currency": "CNY",
+        "total_amount_minor": 156800,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T09:07:00Z"
+      },
+      {
+        "order_id": "DEMO-2108",
+        "customer_id": "demo-customer-a",
+        "order_type": "physical",
+        "currency": "CNY",
+        "total_amount_minor": 47700,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T10:08:00Z"
+      },
+      {
+        "order_id": "DEMO-2109",
+        "customer_id": "demo-customer-a",
+        "order_type": "physical",
+        "currency": "CNY",
+        "total_amount_minor": 129900,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T11:09:00Z"
+      },
+      {
+        "order_id": "DEMO-2110",
+        "customer_id": "demo-customer-a",
+        "order_type": "digital",
+        "currency": "CNY",
+        "total_amount_minor": 2900,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T12:10:00Z"
+      },
+      {
+        "order_id": "DEMO-2111",
+        "customer_id": "demo-customer-a",
+        "order_type": "digital",
+        "currency": "CNY",
+        "total_amount_minor": 99000,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T13:11:00Z"
+      },
+      {
+        "order_id": "DEMO-2112",
+        "customer_id": "demo-customer-b",
+        "order_type": "physical",
+        "currency": "CNY",
+        "total_amount_minor": 55800,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T14:12:00Z"
+      },
+      {
+        "order_id": "DEMO-2113",
+        "customer_id": "demo-customer-a",
+        "order_type": "physical",
+        "currency": "CNY",
+        "total_amount_minor": 78900,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T15:13:00Z"
+      },
+      {
+        "order_id": "DEMO-2114",
+        "customer_id": "demo-customer-a",
+        "order_type": "digital",
+        "currency": "CNY",
+        "total_amount_minor": 12900,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T16:14:00Z"
+      },
+      {
+        "order_id": "DEMO-2115",
+        "customer_id": "demo-customer-a",
+        "order_type": "physical",
+        "currency": "CNY",
+        "total_amount_minor": 65000,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T08:15:00Z"
+      },
+      {
+        "order_id": "DEMO-2116",
+        "customer_id": "demo-customer-a",
+        "order_type": "bundle",
+        "currency": "CNY",
+        "total_amount_minor": 140600,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T09:16:00Z"
+      },
+      {
+        "order_id": "DEMO-2117",
+        "customer_id": "demo-customer-b",
+        "order_type": "digital",
+        "currency": "CNY",
+        "total_amount_minor": 26800,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T10:17:00Z"
+      },
+      {
+        "order_id": "DEMO-2118",
+        "customer_id": "demo-customer-a",
+        "order_type": "physical",
+        "currency": "CNY",
+        "total_amount_minor": 28900,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T11:18:00Z"
+      },
+      {
+        "order_id": "DEMO-2119",
+        "customer_id": "demo-customer-a",
+        "order_type": "physical",
+        "currency": "CNY",
+        "total_amount_minor": 38400,
+        "payment_status": "refunded",
+        "record_updated_at": "2026-10-24T12:19:00Z"
+      },
+      {
+        "order_id": "DEMO-2120",
+        "customer_id": "demo-customer-a",
+        "order_type": "bundle",
+        "currency": "CNY",
+        "total_amount_minor": 86700,
+        "payment_status": "paid",
+        "record_updated_at": "2026-10-24T13:20:00Z"
+      }
+    ],
+    "items": [
+      {
+        "item_id": "CX-I-2001-1",
+        "order_id": "DEMO-2001",
+        "name": "青穗标准台灯",
+        "item_type": "device",
+        "quantity": 2,
+        "unit_amount_minor": 35000
+      },
+      {
+        "item_id": "CX-I-2001-2",
+        "order_id": "DEMO-2001",
+        "name": "青穗标准支架",
+        "item_type": "accessory",
+        "quantity": 3,
+        "unit_amount_minor": 1800
+      },
+      {
+        "item_id": "CX-I-2002-1",
+        "order_id": "DEMO-2002",
+        "name": "晨屿小型灯具",
+        "item_type": "device",
+        "quantity": 2,
+        "unit_amount_minor": 14950
+      },
+      {
+        "item_id": "CX-I-2003-1",
+        "order_id": "DEMO-2003",
+        "name": "星栈个人季节内容包",
+        "item_type": "subscription",
+        "quantity": 1,
+        "unit_amount_minor": 16000
+      },
+      {
+        "item_id": "CX-I-2004-1",
+        "order_id": "DEMO-2004",
+        "name": "澄谷G7套装",
+        "item_type": "device",
+        "quantity": 1,
+        "unit_amount_minor": 105000
+      },
+      {
+        "item_id": "CX-I-2005-1",
+        "order_id": "DEMO-2005",
+        "name": "云桥专题内容包",
+        "item_type": "digital_content",
+        "quantity": 1,
+        "unit_amount_minor": 4500
+      },
+      {
+        "item_id": "CX-I-2006-1",
+        "order_id": "DEMO-2006",
+        "name": "青穗随身灯",
+        "item_type": "device",
+        "quantity": 1,
+        "unit_amount_minor": 19900
+      },
+      {
+        "item_id": "CX-I-2007-1",
+        "order_id": "DEMO-2007",
+        "name": "晨屿M2主机",
+        "item_type": "device",
+        "quantity": 1,
+        "unit_amount_minor": 66000
+      },
+      {
+        "item_id": "CX-I-2007-2",
+        "order_id": "DEMO-2007",
+        "name": "云桥年内短期包",
+        "item_type": "subscription",
+        "quantity": 1,
+        "unit_amount_minor": 8400
+      },
+      {
+        "item_id": "CX-I-2008-1",
+        "order_id": "DEMO-2008",
+        "name": "澄谷温度探头",
+        "item_type": "device",
+        "quantity": 1,
+        "unit_amount_minor": 8800
+      },
+      {
+        "item_id": "CX-I-2009-1",
+        "order_id": "DEMO-2009",
+        "name": "星栈双账号季度许可",
+        "item_type": "subscription",
+        "quantity": 2,
+        "unit_amount_minor": 11900
+      },
+      {
+        "item_id": "CX-I-2010-1",
+        "order_id": "DEMO-2010",
+        "name": "晨屿客户B壁灯",
+        "item_type": "device",
+        "quantity": 1,
+        "unit_amount_minor": 43800
+      },
+      {
+        "item_id": "CX-I-2011-1",
+        "order_id": "DEMO-2011",
+        "name": "青穗桌面灯",
+        "item_type": "device",
+        "quantity": 1,
+        "unit_amount_minor": 17500
+      },
+      {
+        "item_id": "CX-I-2011-2",
+        "order_id": "DEMO-2011",
+        "name": "青穗替换灯罩",
+        "item_type": "accessory",
+        "quantity": 2,
+        "unit_amount_minor": 2500
+      },
+      {
+        "item_id": "CX-I-2012-1",
+        "order_id": "DEMO-2012",
+        "name": "云桥客户B共享包",
+        "item_type": "subscription",
+        "quantity": 1,
+        "unit_amount_minor": 7900
+      },
+      {
+        "item_id": "CX-I-2101-1",
+        "order_id": "DEMO-2101",
+        "name": "远汐标准主机",
+        "item_type": "device",
+        "quantity": 1,
+        "unit_amount_minor": 49800
+      },
+      {
+        "item_id": "CX-I-2101-2",
+        "order_id": "DEMO-2101",
+        "name": "远汐桌面支架",
+        "item_type": "accessory",
+        "quantity": 2,
+        "unit_amount_minor": 3900
+      },
+      {
+        "item_id": "CX-I-2101-3",
+        "order_id": "DEMO-2101",
+        "name": "雪径附带数字包",
+        "item_type": "subscription",
+        "quantity": 1,
+        "unit_amount_minor": 5900
+      },
+      {
+        "item_id": "CX-I-2102-1",
+        "order_id": "DEMO-2102",
+        "name": "海岬台式设备",
+        "item_type": "device",
+        "quantity": 1,
+        "unit_amount_minor": 22900
+      },
+      {
+        "item_id": "CX-I-2102-2",
+        "order_id": "DEMO-2102",
+        "name": "海岬附件",
+        "item_type": "accessory",
+        "quantity": 2,
+        "unit_amount_minor": 4900
+      },
+      {
+        "item_id": "CX-I-2103-1",
+        "order_id": "DEMO-2103",
+        "name": "桥影双工作区许可",
+        "item_type": "subscription",
+        "quantity": 2,
+        "unit_amount_minor": 9900
+      },
+      {
+        "item_id": "CX-I-2104-1",
+        "order_id": "DEMO-2104",
+        "name": "海岬客户B主机",
+        "item_type": "device",
+        "quantity": 1,
+        "unit_amount_minor": 93000
+      },
+      {
+        "item_id": "CX-I-2104-2",
+        "order_id": "DEMO-2104",
+        "name": "海岬客户B连接件",
+        "item_type": "accessory",
+        "quantity": 1,
+        "unit_amount_minor": 2000
+      },
+      {
+        "item_id": "CX-I-2105-1",
+        "order_id": "DEMO-2105",
+        "name": "霜林单次数字内容",
+        "item_type": "digital_content",
+        "quantity": 1,
+        "unit_amount_minor": 12900
+      },
+      {
+        "item_id": "CX-I-2106-1",
+        "order_id": "DEMO-2106",
+        "name": "雾港标准连接座",
+        "item_type": "accessory",
+        "quantity": 1,
+        "unit_amount_minor": 7900
+      },
+      {
+        "item_id": "CX-I-2107-1",
+        "order_id": "DEMO-2107",
+        "name": "远汐定制主机",
+        "item_type": "device",
+        "quantity": 1,
+        "unit_amount_minor": 152000
+      },
+      {
+        "item_id": "CX-I-2107-2",
+        "order_id": "DEMO-2107",
+        "name": "雪径订阅包",
+        "item_type": "subscription",
+        "quantity": 1,
+        "unit_amount_minor": 4800
+      },
+      {
+        "item_id": "CX-I-2108-1",
+        "order_id": "DEMO-2108",
+        "name": "碧舟独立节点",
+        "item_type": "device",
+        "quantity": 3,
+        "unit_amount_minor": 15900
+      },
+      {
+        "item_id": "CX-I-2109-1",
+        "order_id": "DEMO-2109",
+        "name": "海岬H4扩展主机",
+        "item_type": "device",
+        "quantity": 1,
+        "unit_amount_minor": 129900
+      },
+      {
+        "item_id": "CX-I-2110-1",
+        "order_id": "DEMO-2110",
+        "name": "雪径短期个人包",
+        "item_type": "subscription",
+        "quantity": 1,
+        "unit_amount_minor": 2900
+      },
+      {
+        "item_id": "CX-I-2111-1",
+        "order_id": "DEMO-2111",
+        "name": "霜林协作权益包",
+        "item_type": "subscription",
+        "quantity": 1,
+        "unit_amount_minor": 99000
+      },
+      {
+        "item_id": "CX-I-2112-1",
+        "order_id": "DEMO-2112",
+        "name": "雾港客户B专属设备",
+        "item_type": "device",
+        "quantity": 1,
+        "unit_amount_minor": 55800
+      },
+      {
+        "item_id": "CX-I-2113-1",
+        "order_id": "DEMO-2113",
+        "name": "海岬待出库附件",
+        "item_type": "accessory",
+        "quantity": 1,
+        "unit_amount_minor": 78900
+      },
+      {
+        "item_id": "CX-I-2114-1",
+        "order_id": "DEMO-2114",
+        "name": "桥影开通测试包",
+        "item_type": "subscription",
+        "quantity": 1,
+        "unit_amount_minor": 12900
+      },
+      {
+        "item_id": "CX-I-2115-1",
+        "order_id": "DEMO-2115",
+        "name": "碧舟固定式设备",
+        "item_type": "device",
+        "quantity": 1,
+        "unit_amount_minor": 65000
+      },
+      {
+        "item_id": "CX-I-2116-1",
+        "order_id": "DEMO-2116",
+        "name": "远汐组合主机",
+        "item_type": "device",
+        "quantity": 1,
+        "unit_amount_minor": 125000
+      },
+      {
+        "item_id": "CX-I-2116-2",
+        "order_id": "DEMO-2116",
+        "name": "远汐附件组",
+        "item_type": "accessory",
+        "quantity": 4,
+        "unit_amount_minor": 1500
+      },
+      {
+        "item_id": "CX-I-2116-3",
+        "order_id": "DEMO-2116",
+        "name": "雪径配套年包",
+        "item_type": "subscription",
+        "quantity": 1,
+        "unit_amount_minor": 9600
+      },
+      {
+        "item_id": "CX-I-2117-1",
+        "order_id": "DEMO-2117",
+        "name": "霜林客户B团队包",
+        "item_type": "subscription",
+        "quantity": 1,
+        "unit_amount_minor": 26800
+      },
+      {
+        "item_id": "CX-I-2118-1",
+        "order_id": "DEMO-2118",
+        "name": "远汐预售附件",
+        "item_type": "accessory",
+        "quantity": 1,
+        "unit_amount_minor": 28900
+      },
+      {
+        "item_id": "CX-I-2119-1",
+        "order_id": "DEMO-2119",
+        "name": "海岬已结算设备",
+        "item_type": "device",
+        "quantity": 1,
+        "unit_amount_minor": 38400
+      },
+      {
+        "item_id": "CX-I-2120-1",
+        "order_id": "DEMO-2120",
+        "name": "碧舟组合设备",
+        "item_type": "device",
+        "quantity": 1,
+        "unit_amount_minor": 69900
+      },
+      {
+        "item_id": "CX-I-2120-2",
+        "order_id": "DEMO-2120",
+        "name": "桥影组合订阅",
+        "item_type": "subscription",
+        "quantity": 1,
+        "unit_amount_minor": 16800
+      }
+    ],
+    "payments": [
+      {
+        "payment_id": "CX-PAY-2001-1",
+        "order_id": "DEMO-2001",
+        "amount_minor": 75400,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T11:21:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2003-1",
+        "order_id": "DEMO-2003",
+        "amount_minor": 16000,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T13:23:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2004-1",
+        "order_id": "DEMO-2004",
+        "amount_minor": 70000,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T14:24:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2004-2",
+        "order_id": "DEMO-2004",
+        "amount_minor": 35000,
+        "status": "paid",
+        "channel": "demo-wallet",
+        "record_updated_at": "2026-10-24T14:24:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2005-1",
+        "order_id": "DEMO-2005",
+        "amount_minor": 4500,
+        "status": "refunded",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T15:25:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2006-1",
+        "order_id": "DEMO-2006",
+        "amount_minor": 19900,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T16:26:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2007-1",
+        "order_id": "DEMO-2007",
+        "amount_minor": 74400,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T08:27:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2008-1",
+        "order_id": "DEMO-2008",
+        "amount_minor": 8800,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T09:28:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2009-1",
+        "order_id": "DEMO-2009",
+        "amount_minor": 23800,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T10:29:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2010-1",
+        "order_id": "DEMO-2010",
+        "amount_minor": 43800,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T11:30:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2011-1",
+        "order_id": "DEMO-2011",
+        "amount_minor": 22500,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T12:31:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2012-1",
+        "order_id": "DEMO-2012",
+        "amount_minor": 7900,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T13:32:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2101-1",
+        "order_id": "DEMO-2101",
+        "amount_minor": 63500,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T12:01:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2102-1",
+        "order_id": "DEMO-2102",
+        "amount_minor": 32700,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T13:02:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2103-1",
+        "order_id": "DEMO-2103",
+        "amount_minor": 19800,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T14:03:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2104-1",
+        "order_id": "DEMO-2104",
+        "amount_minor": 95000,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T15:04:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2105-1",
+        "order_id": "DEMO-2105",
+        "amount_minor": 12900,
+        "status": "refunded",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T16:05:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2107-1",
+        "order_id": "DEMO-2107",
+        "amount_minor": 156800,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T09:07:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2108-1",
+        "order_id": "DEMO-2108",
+        "amount_minor": 20000,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T10:08:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2108-2",
+        "order_id": "DEMO-2108",
+        "amount_minor": 27700,
+        "status": "paid",
+        "channel": "demo-wallet",
+        "record_updated_at": "2026-10-24T10:08:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2109-1",
+        "order_id": "DEMO-2109",
+        "amount_minor": 129900,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T11:09:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2110-1",
+        "order_id": "DEMO-2110",
+        "amount_minor": 2900,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T12:10:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2111-1",
+        "order_id": "DEMO-2111",
+        "amount_minor": 99000,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T13:11:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2112-1",
+        "order_id": "DEMO-2112",
+        "amount_minor": 55800,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T14:12:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2113-1",
+        "order_id": "DEMO-2113",
+        "amount_minor": 78900,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T15:13:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2114-1",
+        "order_id": "DEMO-2114",
+        "amount_minor": 12900,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T16:14:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2115-1",
+        "order_id": "DEMO-2115",
+        "amount_minor": 65000,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T08:15:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2116-1",
+        "order_id": "DEMO-2116",
+        "amount_minor": 50000,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T09:16:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2116-2",
+        "order_id": "DEMO-2116",
+        "amount_minor": 50000,
+        "status": "paid",
+        "channel": "demo-wallet",
+        "record_updated_at": "2026-10-24T09:16:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2116-3",
+        "order_id": "DEMO-2116",
+        "amount_minor": 40600,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T09:16:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2117-1",
+        "order_id": "DEMO-2117",
+        "amount_minor": 26800,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T10:17:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2118-1",
+        "order_id": "DEMO-2118",
+        "amount_minor": 28900,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T11:18:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2119-1",
+        "order_id": "DEMO-2119",
+        "amount_minor": 38400,
+        "status": "refunded",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T12:19:00Z"
+      },
+      {
+        "payment_id": "CX-PAY-2120-1",
+        "order_id": "DEMO-2120",
+        "amount_minor": 86700,
+        "status": "paid",
+        "channel": "demo-store",
+        "record_updated_at": "2026-10-24T13:20:00Z"
+      }
+    ],
+    "shipments": [
+      {
+        "shipment_id": "CX-SHIP-2001-1",
+        "order_id": "DEMO-2001",
+        "item_id": "CX-I-2001-1",
+        "status": "in_transit",
+        "tracking_id": "CX-TRACK-2001-1",
+        "estimated_delivery": "2026-11-08",
+        "record_updated_at": "2026-10-24T11:21:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2001-2",
+        "order_id": "DEMO-2001",
+        "item_id": "CX-I-2001-2",
+        "status": "awaiting_dispatch",
+        "tracking_id": null,
+        "estimated_delivery": null,
+        "record_updated_at": "2026-10-24T11:21:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2004-1",
+        "order_id": "DEMO-2004",
+        "item_id": "CX-I-2004-1",
+        "status": "in_transit",
+        "tracking_id": "CX-TRACK-2004-1",
+        "estimated_delivery": "2026-11-09",
+        "record_updated_at": "2026-10-24T14:24:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2006-1",
+        "order_id": "DEMO-2006",
+        "item_id": "CX-I-2006-1",
+        "status": "delivery_disputed",
+        "tracking_id": "CX-TRACK-2006-1",
+        "estimated_delivery": null,
+        "record_updated_at": "2026-10-24T16:26:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2007-1",
+        "order_id": "DEMO-2007",
+        "item_id": "CX-I-2007-1",
+        "status": "delivered",
+        "tracking_id": "CX-TRACK-2007-1",
+        "estimated_delivery": null,
+        "record_updated_at": "2026-10-24T08:27:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2010-1",
+        "order_id": "DEMO-2010",
+        "item_id": "CX-I-2010-1",
+        "status": "delivered",
+        "tracking_id": "CX-TRACK-2010-1",
+        "estimated_delivery": null,
+        "record_updated_at": "2026-10-24T11:30:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2011-1",
+        "order_id": "DEMO-2011",
+        "item_id": "CX-I-2011-1",
+        "status": "in_transit",
+        "tracking_id": "CX-TRACK-2011-1",
+        "estimated_delivery": "2026-11-12",
+        "record_updated_at": "2026-10-24T12:31:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2101-1",
+        "order_id": "DEMO-2101",
+        "item_id": "CX-I-2101-1",
+        "status": "in_transit",
+        "tracking_id": "CX-TRACK-2101-1",
+        "estimated_delivery": "2026-11-15",
+        "record_updated_at": "2026-10-24T12:01:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2101-2",
+        "order_id": "DEMO-2101",
+        "item_id": "CX-I-2101-2",
+        "status": "awaiting_dispatch",
+        "tracking_id": null,
+        "estimated_delivery": null,
+        "record_updated_at": "2026-10-24T12:01:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2102-1",
+        "order_id": "DEMO-2102",
+        "item_id": "CX-I-2102-1",
+        "status": "delivered",
+        "tracking_id": "CX-TRACK-2102-1",
+        "estimated_delivery": null,
+        "record_updated_at": "2026-10-24T13:02:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2102-2",
+        "order_id": "DEMO-2102",
+        "item_id": "CX-I-2102-2",
+        "status": "delivered",
+        "tracking_id": "CX-TRACK-2102-2",
+        "estimated_delivery": null,
+        "record_updated_at": "2026-10-24T13:02:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2104-1",
+        "order_id": "DEMO-2104",
+        "item_id": "CX-I-2104-1",
+        "status": "in_transit",
+        "tracking_id": "CX-TRACK-2104-1",
+        "estimated_delivery": "2026-11-16",
+        "record_updated_at": "2026-10-24T15:04:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2104-2",
+        "order_id": "DEMO-2104",
+        "item_id": "CX-I-2104-2",
+        "status": "awaiting_dispatch",
+        "tracking_id": null,
+        "estimated_delivery": null,
+        "record_updated_at": "2026-10-24T15:04:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2107-1",
+        "order_id": "DEMO-2107",
+        "item_id": "CX-I-2107-1",
+        "status": "preorder",
+        "tracking_id": null,
+        "estimated_delivery": null,
+        "record_updated_at": "2026-10-24T09:07:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2108-1",
+        "order_id": "DEMO-2108",
+        "item_id": "CX-I-2108-1",
+        "status": "in_transit",
+        "tracking_id": "CX-TRACK-2108-1",
+        "estimated_delivery": "2026-11-18",
+        "record_updated_at": "2026-10-24T10:08:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2109-1",
+        "order_id": "DEMO-2109",
+        "item_id": "CX-I-2109-1",
+        "status": "delivery_disputed",
+        "tracking_id": "CX-TRACK-2109-1",
+        "estimated_delivery": null,
+        "record_updated_at": "2026-10-24T11:09:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2112-1",
+        "order_id": "DEMO-2112",
+        "item_id": "CX-I-2112-1",
+        "status": "delivered",
+        "tracking_id": "CX-TRACK-2112-1",
+        "estimated_delivery": null,
+        "record_updated_at": "2026-10-24T14:12:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2113-1",
+        "order_id": "DEMO-2113",
+        "item_id": "CX-I-2113-1",
+        "status": "awaiting_dispatch",
+        "tracking_id": null,
+        "estimated_delivery": "2026-11-14",
+        "record_updated_at": "2026-10-24T15:13:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2115-1",
+        "order_id": "DEMO-2115",
+        "item_id": "CX-I-2115-1",
+        "status": "delivered",
+        "tracking_id": "CX-TRACK-2115-1",
+        "estimated_delivery": null,
+        "record_updated_at": "2026-10-24T08:15:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2116-1",
+        "order_id": "DEMO-2116",
+        "item_id": "CX-I-2116-1",
+        "status": "delivered",
+        "tracking_id": "CX-TRACK-2116-1",
+        "estimated_delivery": null,
+        "record_updated_at": "2026-10-24T09:16:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2116-2",
+        "order_id": "DEMO-2116",
+        "item_id": "CX-I-2116-2",
+        "status": "in_transit",
+        "tracking_id": "CX-TRACK-2116-2",
+        "estimated_delivery": "2026-11-20",
+        "record_updated_at": "2026-10-24T09:16:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2118-1",
+        "order_id": "DEMO-2118",
+        "item_id": "CX-I-2118-1",
+        "status": "preorder",
+        "tracking_id": null,
+        "estimated_delivery": null,
+        "record_updated_at": "2026-10-24T11:18:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2119-1",
+        "order_id": "DEMO-2119",
+        "item_id": "CX-I-2119-1",
+        "status": "delivered",
+        "tracking_id": "CX-TRACK-2119-1",
+        "estimated_delivery": null,
+        "record_updated_at": "2026-10-24T12:19:00Z"
+      },
+      {
+        "shipment_id": "CX-SHIP-2120-1",
+        "order_id": "DEMO-2120",
+        "item_id": "CX-I-2120-1",
+        "status": "delivery_disputed",
+        "tracking_id": "CX-TRACK-2120-1",
+        "estimated_delivery": null,
+        "record_updated_at": "2026-10-24T13:20:00Z"
+      }
+    ],
+    "entitlements": [
+      {
+        "entitlement_id": "CX-ENT-2003-1",
+        "order_id": "DEMO-2003",
+        "status": "active",
+        "package_name": "星栈个人季节内容包",
+        "auto_renew": false,
+        "expires_at": "2027-02-28T00:00:00Z",
+        "record_updated_at": "2026-10-24T13:23:00Z"
+      },
+      {
+        "entitlement_id": "CX-ENT-2005-1",
+        "order_id": "DEMO-2005",
+        "status": "revoked_after_refund",
+        "package_name": "云桥专题内容包",
+        "auto_renew": false,
+        "expires_at": null,
+        "record_updated_at": "2026-10-24T15:25:00Z"
+      },
+      {
+        "entitlement_id": "CX-ENT-2007-1",
+        "order_id": "DEMO-2007",
+        "status": "activation_failed",
+        "package_name": "云桥年内短期包",
+        "auto_renew": true,
+        "expires_at": null,
+        "record_updated_at": "2026-10-24T08:27:00Z"
+      },
+      {
+        "entitlement_id": "CX-ENT-2009-1",
+        "order_id": "DEMO-2009",
+        "status": "active",
+        "package_name": "星栈许可甲",
+        "auto_renew": true,
+        "expires_at": "2027-01-15T00:00:00Z",
+        "record_updated_at": "2026-10-24T10:29:00Z"
+      },
+      {
+        "entitlement_id": "CX-ENT-2009-2",
+        "order_id": "DEMO-2009",
+        "status": "active",
+        "package_name": "星栈许可乙",
+        "auto_renew": false,
+        "expires_at": "2026-12-15T00:00:00Z",
+        "record_updated_at": "2026-10-24T10:29:00Z"
+      },
+      {
+        "entitlement_id": "CX-ENT-2012-1",
+        "order_id": "DEMO-2012",
+        "status": "activation_failed",
+        "package_name": "云桥客户B共享包",
+        "auto_renew": false,
+        "expires_at": null,
+        "record_updated_at": "2026-10-24T13:32:00Z"
+      },
+      {
+        "entitlement_id": "CX-ENT-2101-1",
+        "order_id": "DEMO-2101",
+        "status": "active",
+        "package_name": "雪径附带数字包",
+        "auto_renew": false,
+        "expires_at": "2027-02-05T00:00:00Z",
+        "record_updated_at": "2026-10-24T12:01:00Z"
+      },
+      {
+        "entitlement_id": "CX-ENT-2103-1",
+        "order_id": "DEMO-2103",
+        "status": "active",
+        "package_name": "桥影工作区甲",
+        "auto_renew": false,
+        "expires_at": "2027-03-01T00:00:00Z",
+        "record_updated_at": "2026-10-24T14:03:00Z"
+      },
+      {
+        "entitlement_id": "CX-ENT-2103-2",
+        "order_id": "DEMO-2103",
+        "status": "activation_failed",
+        "package_name": "桥影工作区乙",
+        "auto_renew": true,
+        "expires_at": null,
+        "record_updated_at": "2026-10-24T14:03:00Z"
+      },
+      {
+        "entitlement_id": "CX-ENT-2105-1",
+        "order_id": "DEMO-2105",
+        "status": "revoked_after_refund",
+        "package_name": "霜林单次数字内容",
+        "auto_renew": false,
+        "expires_at": null,
+        "record_updated_at": "2026-10-24T16:05:00Z"
+      },
+      {
+        "entitlement_id": "CX-ENT-2107-1",
+        "order_id": "DEMO-2107",
+        "status": "active",
+        "package_name": "雪径订阅包",
+        "auto_renew": false,
+        "expires_at": "2027-11-01T00:00:00Z",
+        "record_updated_at": "2026-10-24T09:07:00Z"
+      },
+      {
+        "entitlement_id": "CX-ENT-2110-1",
+        "order_id": "DEMO-2110",
+        "status": "active",
+        "package_name": "雪径短期个人包",
+        "auto_renew": false,
+        "expires_at": "2026-11-30T00:00:00Z",
+        "record_updated_at": "2026-10-24T12:10:00Z"
+      },
+      {
+        "entitlement_id": "CX-ENT-2111-1",
+        "order_id": "DEMO-2111",
+        "status": "active",
+        "package_name": "霜林协作权益包",
+        "auto_renew": true,
+        "expires_at": null,
+        "record_updated_at": "2026-10-24T13:11:00Z"
+      },
+      {
+        "entitlement_id": "CX-ENT-2114-1",
+        "order_id": "DEMO-2114",
+        "status": "activation_failed",
+        "package_name": "桥影开通测试包",
+        "auto_renew": false,
+        "expires_at": null,
+        "record_updated_at": "2026-10-24T16:14:00Z"
+      },
+      {
+        "entitlement_id": "CX-ENT-2116-1",
+        "order_id": "DEMO-2116",
+        "status": "active",
+        "package_name": "雪径配套年包",
+        "auto_renew": false,
+        "expires_at": "2027-10-24T00:00:00Z",
+        "record_updated_at": "2026-10-24T09:16:00Z"
+      },
+      {
+        "entitlement_id": "CX-ENT-2117-1",
+        "order_id": "DEMO-2117",
+        "status": "active",
+        "package_name": "霜林客户B团队包",
+        "auto_renew": true,
+        "expires_at": "2027-01-30T00:00:00Z",
+        "record_updated_at": "2026-10-24T10:17:00Z"
+      },
+      {
+        "entitlement_id": "CX-ENT-2120-1",
+        "order_id": "DEMO-2120",
+        "status": "activation_failed",
+        "package_name": "桥影组合订阅",
+        "auto_renew": true,
+        "expires_at": null,
+        "record_updated_at": "2026-10-24T13:20:00Z"
+      }
+    ],
+    "refunds": [
+      {
+        "refund_id": "CX-REF-2005-1",
+        "order_id": "DEMO-2005",
+        "status": "completed",
+        "amount_minor": 4500,
+        "record_updated_at": "2026-10-24T15:25:00Z"
+      },
+      {
+        "refund_id": "CX-REF-2006-1",
+        "order_id": "DEMO-2006",
+        "status": "pending_review",
+        "amount_minor": null,
+        "record_updated_at": "2026-10-24T16:26:00Z"
+      },
+      {
+        "refund_id": "CX-REF-2011-1",
+        "order_id": "DEMO-2011",
+        "status": "pending_review",
+        "amount_minor": 5000,
+        "record_updated_at": "2026-10-24T12:31:00Z"
+      },
+      {
+        "refund_id": "CX-REF-2102-1",
+        "order_id": "DEMO-2102",
+        "status": "completed",
+        "amount_minor": 4900,
+        "record_updated_at": "2026-10-24T13:02:00Z"
+      },
+      {
+        "refund_id": "CX-REF-2105-1",
+        "order_id": "DEMO-2105",
+        "status": "completed",
+        "amount_minor": 12900,
+        "record_updated_at": "2026-10-24T16:05:00Z"
+      },
+      {
+        "refund_id": "CX-REF-2109-1",
+        "order_id": "DEMO-2109",
+        "status": "pending_review",
+        "amount_minor": 29900,
+        "record_updated_at": "2026-10-24T11:09:00Z"
+      },
+      {
+        "refund_id": "CX-REF-2115-1",
+        "order_id": "DEMO-2115",
+        "status": "pending_review",
+        "amount_minor": null,
+        "record_updated_at": "2026-10-24T08:15:00Z"
+      },
+      {
+        "refund_id": "CX-REF-2119-1",
+        "order_id": "DEMO-2119",
+        "status": "completed",
+        "amount_minor": 38400,
+        "record_updated_at": "2026-10-24T12:19:00Z"
+      }
+    ]
+  }
+}

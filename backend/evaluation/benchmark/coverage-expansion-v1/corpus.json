@@ -1,0 +1,599 @@
+{
+  "schema_version": "serveflow-coverage-corpus-v1",
+  "kind": "author-synthetic-evaluation-only",
+  "provenance": "New author-written synthetic evaluation facts and questions; source-reviewed by code assistants, not real enterprise data, independent human blind review, training data, or observed model results. Development and validation use disjoint source documents and order IDs; similar mechanisms may recur.",
+  "documents": [
+    {
+      "document_id": "CX-D01",
+      "title": "青穗台灯标准退货条件",
+      "split": "development",
+      "family_id": "cx-d01-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\n青穗S2标准台灯仅限青穗合成自营渠道：签收次日起十二个自然日内、灯体未使用且包装配件完整时，可以提交退货核验；提交不等于审核通过。\n刻字面板与按客户尺寸制作的灯罩不适用上述标准退货窗口，即使仍未拆封也不能直接套用十二天规则。\n非质量原因的合规退货由购买人承担回寄运费；只有核验为发错货时才适用商家承担回寄运费的例外，金额仍以记录为准。\n本条不列具体订单的成交价、退款金额、审核结论或到账日。",
+      "facts": [
+        {
+          "fact_id": "CX-D01-F01",
+          "quote": "青穗S2标准台灯仅限青穗合成自营渠道：签收次日起十二个自然日内、灯体未使用且包装配件完整时，可以提交退货核验；提交不等于审核通过"
+        },
+        {
+          "fact_id": "CX-D01-F02",
+          "quote": "刻字面板与按客户尺寸制作的灯罩不适用上述标准退货窗口，即使仍未拆封也不能直接套用十二天规则"
+        },
+        {
+          "fact_id": "CX-D01-F03",
+          "quote": "非质量原因的合规退货由购买人承担回寄运费；只有核验为发错货时才适用商家承担回寄运费的例外，金额仍以记录为准"
+        },
+        {
+          "fact_id": "CX-D01-F04",
+          "quote": "本条不列具体订单的成交价、退款金额、审核结论或到账日"
+        }
+      ]
+    },
+    {
+      "document_id": "CX-D02",
+      "title": "青穗S60组合券退单核算",
+      "split": "development",
+      "family_id": "cx-d02-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\nS60券仅用于青穗标准灯具活动；退单时应先读取订单中已经记录的逐项优惠分摊，不能按商品标价直接把整单实付退回。\n退货后的活动商品实付仍满三百元时保留已用S60优惠；不足三百元时回收已用优惠，但回收额不超过本单实际使用的券额。\nS60券不能兑换现金，也不适用于数字订阅；本资料没有所有活动通用的返券或延期规则。\n未取得逐项分摊、实际用券额和保留商品实付时，不能计算这张订单的最终退款金额。",
+      "facts": [
+        {
+          "fact_id": "CX-D02-F01",
+          "quote": "S60券仅用于青穗标准灯具活动；退单时应先读取订单中已经记录的逐项优惠分摊，不能按商品标价直接把整单实付退回"
+        },
+        {
+          "fact_id": "CX-D02-F02",
+          "quote": "退货后的活动商品实付仍满三百元时保留已用S60优惠；不足三百元时回收已用优惠，但回收额不超过本单实际使用的券额"
+        },
+        {
+          "fact_id": "CX-D02-F03",
+          "quote": "S60券不能兑换现金，也不适用于数字订阅；本资料没有所有活动通用的返券或延期规则"
+        },
+        {
+          "fact_id": "CX-D02-F04",
+          "quote": "未取得逐项分摊、实际用券额和保留商品实付时，不能计算这张订单的最终退款金额"
+        }
+      ]
+    },
+    {
+      "document_id": "CX-D03",
+      "title": "Starharbor Personal offline cache policy",
+      "split": "development",
+      "family_id": "cx-d03-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\nStarharbor Personal monthly offline cache permits two desktop devices; online licence verification is needed within 72 hours after the last successful check.\nBrowser playback and single-chapter purchases have no offline cache; a chapter purchase is not a Personal monthly plan.\nShared passwords grant no cache licence. This article has no live device list or last-check time.",
+      "facts": [
+        {
+          "fact_id": "CX-D03-F01",
+          "quote": "Starharbor Personal monthly offline cache permits two desktop devices; online licence verification is needed within 72 hours after the last successful check."
+        },
+        {
+          "fact_id": "CX-D03-F02",
+          "quote": "Browser playback and single-chapter purchases have no offline cache; a chapter purchase is not a Personal monthly plan."
+        },
+        {
+          "fact_id": "CX-D03-F03",
+          "quote": "Shared passwords grant no cache licence. This article has no live device list or last-check time."
+        }
+      ]
+    },
+    {
+      "document_id": "CX-D04",
+      "title": "星栈个人购买账号迁移规则",
+      "split": "development",
+      "family_id": "cx-d04-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\n星栈个人购买账号迁移最多每九十个自然日申请一次，原账号和目标账号均须完成归属核验；客服只能整理申请资料，不能代办迁移。\n迁移经批准后仅承接剩余订阅期限，不重新起算完整周期；关闭自动续费也不视为已经提出迁移申请。\n组织工作区、团队席位与家庭成员的使用账号不适用个人购买账号迁移规则。",
+      "facts": [
+        {
+          "fact_id": "CX-D04-F01",
+          "quote": "星栈个人购买账号迁移最多每九十个自然日申请一次，原账号和目标账号均须完成归属核验；客服只能整理申请资料，不能代办迁移"
+        },
+        {
+          "fact_id": "CX-D04-F02",
+          "quote": "迁移经批准后仅承接剩余订阅期限，不重新起算完整周期；关闭自动续费也不视为已经提出迁移申请"
+        },
+        {
+          "fact_id": "CX-D04-F03",
+          "quote": "组织工作区、团队席位与家庭成员的使用账号不适用个人购买账号迁移规则"
+        }
+      ]
+    },
+    {
+      "document_id": "CX-D05",
+      "title": "晨屿C1现货配送安排",
+      "split": "development",
+      "family_id": "cx-d05-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\n晨屿C1配送区的已付款现货灯具安排在周二或周四九时至十八时的配送时段；预售、定制及C2配送区不适用这项安排。\n遇该配送区公布的非工作假日应重新确认配送时段，资料没有假日照常送达或恶劣天气必达的保证。\n配送时段是交付安排，不等于安装已经预约成功，也不是每个地址的实时预计到达时间。",
+      "facts": [
+        {
+          "fact_id": "CX-D05-F01",
+          "quote": "晨屿C1配送区的已付款现货灯具安排在周二或周四九时至十八时的配送时段；预售、定制及C2配送区不适用这项安排"
+        },
+        {
+          "fact_id": "CX-D05-F02",
+          "quote": "遇该配送区公布的非工作假日应重新确认配送时段，资料没有假日照常送达或恶劣天气必达的保证"
+        },
+        {
+          "fact_id": "CX-D05-F03",
+          "quote": "配送时段是交付安排，不等于安装已经预约成功，也不是每个地址的实时预计到达时间"
+        }
+      ]
+    },
+    {
+      "document_id": "CX-D06",
+      "title": "晨屿M2基础安装范围 / M2 mounting coverage",
+      "split": "development",
+      "family_id": "cx-d06-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\n晨屿M2的八十元基础安装仅包含在可承重实心墙上使用标准支架固定一台设备；运输费与安装费分别核对。\n瓷砖、玻璃、文保墙面及吊顶不在M2基础安装范围内；M2的安装条件与价格不能外推到其他型号。\nBefore a visit, the owner must confirm permission to mount and a usable power outlet; a delivery slot does not confirm an installation appointment.",
+      "facts": [
+        {
+          "fact_id": "CX-D06-F01",
+          "quote": "晨屿M2的八十元基础安装仅包含在可承重实心墙上使用标准支架固定一台设备；运输费与安装费分别核对"
+        },
+        {
+          "fact_id": "CX-D06-F02",
+          "quote": "瓷砖、玻璃、文保墙面及吊顶不在M2基础安装范围内；M2的安装条件与价格不能外推到其他型号"
+        },
+        {
+          "fact_id": "CX-D06-F03",
+          "quote": "Before a visit, the owner must confirm permission to mount and a usable power outlet; a delivery slot does not confirm an installation appointment."
+        }
+      ]
+    },
+    {
+      "document_id": "CX-D07",
+      "title": "澄谷G7故障日志与隐私采集规程",
+      "split": "development",
+      "family_id": "cx-d07-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\n澄谷G7首次报障应保留完整错误文字、发生日期时间及时区、应用版本、固件版本、连接方式与最小复现经过，设备序列号在交接摘要中只显示末四位。\n本地诊断日志默认保留最近七个自然日；这只是设备端的轮转期限，并不表示客服已经读取了七天日志，也不等于每个异常一定有日志。\n用户可以说明异常前后的操作及已经尝试的可逆检查；对已经确认无效的重启应用步骤应在摘要中标记完成，不要求反复操作同一步来填补未知根因。\n工单附件应当先去除无关截图、家庭成员姓名、地址和未遮盖的交易标识。排障不要求密码、短信验证码、完整银行卡号或远程控制码，也不能把这些秘密夹在日志说明里。\n设备离线、账号权限、版本不匹配和服务异常应分开记录；单独一张离线截图不能证明路由器损坏，日志中没有某条事件也不能证明事件从未发生。\n交接表分为用户陈述、已经实际执行的检查、所得结果及仍缺信息四栏；没有读取服务器日志时应写尚未读取，不能把建议执行的检查改写成已经修复后台。\n日志导出文件可以由用户自行保存在本地；只有用户明确同意本次上传、并核对附件已脱敏后，才可经已核实的支持入口提交一次，不存在默认持续上传或自动授权客服远程控制的许可。\n若同时出现电池鼓包、冒烟或异常烫伤风险，应先停止充电并按对应产品已核实的安全指引处理；普通离线检查不能替代风险处置，本文不判定真实设备已经安全。",
+      "facts": [
+        {
+          "fact_id": "CX-D07-F01",
+          "quote": "澄谷G7首次报障应保留完整错误文字、发生日期时间及时区、应用版本、固件版本、连接方式与最小复现经过，设备序列号在交接摘要中只显示末四位"
+        },
+        {
+          "fact_id": "CX-D07-F02",
+          "quote": "本地诊断日志默认保留最近七个自然日；这只是设备端的轮转期限，并不表示客服已经读取了七天日志，也不等于每个异常一定有日志"
+        },
+        {
+          "fact_id": "CX-D07-F03",
+          "quote": "用户可以说明异常前后的操作及已经尝试的可逆检查；对已经确认无效的重启应用步骤应在摘要中标记完成，不要求反复操作同一步来填补未知根因"
+        },
+        {
+          "fact_id": "CX-D07-F04",
+          "quote": "工单附件应当先去除无关截图、家庭成员姓名、地址和未遮盖的交易标识。排障不要求密码、短信验证码、完整银行卡号或远程控制码，也不能把这些秘密夹在日志说明里"
+        },
+        {
+          "fact_id": "CX-D07-F05",
+          "quote": "设备离线、账号权限、版本不匹配和服务异常应分开记录；单独一张离线截图不能证明路由器损坏，日志中没有某条事件也不能证明事件从未发生"
+        },
+        {
+          "fact_id": "CX-D07-F06",
+          "quote": "交接表分为用户陈述、已经实际执行的检查、所得结果及仍缺信息四栏；没有读取服务器日志时应写尚未读取，不能把建议执行的检查改写成已经修复后台"
+        },
+        {
+          "fact_id": "CX-D07-F07",
+          "quote": "日志导出文件可以由用户自行保存在本地；只有用户明确同意本次上传、并核对附件已脱敏后，才可经已核实的支持入口提交一次，不存在默认持续上传或自动授权客服远程控制的许可"
+        },
+        {
+          "fact_id": "CX-D07-F08",
+          "quote": "若同时出现电池鼓包、冒烟或异常烫伤风险，应先停止充电并按对应产品已核实的安全指引处理；普通离线检查不能替代风险处置，本文不判定真实设备已经安全"
+        }
+      ]
+    },
+    {
+      "document_id": "CX-D08",
+      "title": "云桥家庭共享邀请与购买权限细则",
+      "split": "development",
+      "family_id": "cx-d08-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\n云桥个人月度家庭包允许购买人在同一家庭组邀请最多四名其他成员，购买人自身不占这四个被邀请名额；家庭组不是团队工作区。\n每封家庭邀请自发出起十二小时内有效，过期需购买人重新发起；邀请发出不代表对方已经接受，也不代表服务已经在其使用账号开通。\n家庭成员用自己的使用账号接受邀请，账号显示名可以不同于购买人；核验共享异常时应区分邀请状态、使用账号及购买账号，不收集任何一方的密码或验证码。\n未成年人加入家庭组时需要监护人按产品已核实的入口确认。客服可以解释所需信息，但不能假定在聊天中自称监护人就完成了身份核验或取得其他成员的个人资料。\n购买人移除成员后，该成员下次联网需要重新核验共享许可；此前下载内容不因此变成永久个人购买，也不能将本地仍能打开的缓存当作共享持续有效的证明。\n共享权限仅涵盖本家庭包标明的内容，不能从家庭资格推出所有付费章节、设备保修、组织协作席位或另一账号购买项目均被包含。单独购买内容与共享许可应分别核对。\n被邀请成员可以使用共享内容，但没有购买人的付款、退订、退款、发票或账号迁移权限；客服也不能仅凭对方报出家庭组名称就给出购买人的账单。\n本文给出家庭包的上限与邀请规则，不连接实时家庭组账本；当前已接受成员、尚未接受邀请和可用空位必须读取对应账本，不能用四减去聊天里出现的人数来补造实时余额。",
+      "facts": [
+        {
+          "fact_id": "CX-D08-F01",
+          "quote": "云桥个人月度家庭包允许购买人在同一家庭组邀请最多四名其他成员，购买人自身不占这四个被邀请名额；家庭组不是团队工作区"
+        },
+        {
+          "fact_id": "CX-D08-F02",
+          "quote": "每封家庭邀请自发出起十二小时内有效，过期需购买人重新发起；邀请发出不代表对方已经接受，也不代表服务已经在其使用账号开通"
+        },
+        {
+          "fact_id": "CX-D08-F03",
+          "quote": "家庭成员用自己的使用账号接受邀请，账号显示名可以不同于购买人；核验共享异常时应区分邀请状态、使用账号及购买账号，不收集任何一方的密码或验证码"
+        },
+        {
+          "fact_id": "CX-D08-F04",
+          "quote": "未成年人加入家庭组时需要监护人按产品已核实的入口确认。客服可以解释所需信息，但不能假定在聊天中自称监护人就完成了身份核验或取得其他成员的个人资料"
+        },
+        {
+          "fact_id": "CX-D08-F05",
+          "quote": "购买人移除成员后，该成员下次联网需要重新核验共享许可；此前下载内容不因此变成永久个人购买，也不能将本地仍能打开的缓存当作共享持续有效的证明"
+        },
+        {
+          "fact_id": "CX-D08-F06",
+          "quote": "共享权限仅涵盖本家庭包标明的内容，不能从家庭资格推出所有付费章节、设备保修、组织协作席位或另一账号购买项目均被包含。单独购买内容与共享许可应分别核对"
+        },
+        {
+          "fact_id": "CX-D08-F07",
+          "quote": "被邀请成员可以使用共享内容，但没有购买人的付款、退订、退款、发票或账号迁移权限；客服也不能仅凭对方报出家庭组名称就给出购买人的账单"
+        },
+        {
+          "fact_id": "CX-D08-F08",
+          "quote": "本文给出家庭包的上限与邀请规则，不连接实时家庭组账本；当前已接受成员、尚未接受邀请和可用空位必须读取对应账本，不能用四减去聊天里出现的人数来补造实时余额"
+        }
+      ]
+    },
+    {
+      "document_id": "CX-V01",
+      "title": "海岬H4主机与电池保修期限",
+      "split": "validation",
+      "family_id": "cx-v01-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\n海岬H4标准主机的制造缺陷保修为购买日后十八个月，电池组件为六个月；应同时核对购买凭证、序列号与受理时的适用版本。\n进液、人为改线及外力破裂不适用制造缺陷保修，即使仍在十八个月内也不能据时间直接判定免费维修。\n本条不提供某台设备的实际购买日、受损原因、保修截止日或维修审批结果。",
+      "facts": [
+        {
+          "fact_id": "CX-V01-F01",
+          "quote": "海岬H4标准主机的制造缺陷保修为购买日后十八个月，电池组件为六个月；应同时核对购买凭证、序列号与受理时的适用版本"
+        },
+        {
+          "fact_id": "CX-V01-F02",
+          "quote": "进液、人为改线及外力破裂不适用制造缺陷保修，即使仍在十八个月内也不能据时间直接判定免费维修"
+        },
+        {
+          "fact_id": "CX-V01-F03",
+          "quote": "本条不提供某台设备的实际购买日、受损原因、保修截止日或维修审批结果"
+        }
+      ]
+    },
+    {
+      "document_id": "CX-V02",
+      "title": "海岬H4一年续保申请条款",
+      "split": "validation",
+      "family_id": "cx-v02-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\n海岬H4可申请的一年续保合成标价为一百八十八元，仅限原主机保修到期前三十个自然日内且设备经核验无既有损坏时提出。\n续保不追溯覆盖申请前已存在的故障，也不改变原保修中进液等排除事项；是否批准以及当日能否购买仍须业务记录确认。\n续保批准后从原有效截止日接续一年，不重新起算原十八个月主机保修；申请渠道以已核实入口为准，不在聊天中代收购买款。",
+      "facts": [
+        {
+          "fact_id": "CX-V02-F01",
+          "quote": "海岬H4可申请的一年续保合成标价为一百八十八元，仅限原主机保修到期前三十个自然日内且设备经核验无既有损坏时提出"
+        },
+        {
+          "fact_id": "CX-V02-F02",
+          "quote": "续保不追溯覆盖申请前已存在的故障，也不改变原保修中进液等排除事项；是否批准以及当日能否购买仍须业务记录确认"
+        },
+        {
+          "fact_id": "CX-V02-F03",
+          "quote": "续保批准后从原有效截止日接续一年，不重新起算原十八个月主机保修；申请渠道以已核实入口为准，不在聊天中代收购买款"
+        }
+      ]
+    },
+    {
+      "document_id": "CX-V03",
+      "title": "岸灯个人电子发票申请",
+      "split": "validation",
+      "family_id": "cx-v03-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\n岸灯合成商城个人电子发票可在付款日起一百八十个自然日内提出申请，开票前核对订单已确认、发票抬头与必要税务信息。\n申请已经提交不表示发票已经开具；发票号码、开具日期和下载状态以该订单开票记录为准。\n个人发票不自动保证符合雇主报销制度，本资料也不保存客户单位的报销审批规则。",
+      "facts": [
+        {
+          "fact_id": "CX-V03-F01",
+          "quote": "岸灯合成商城个人电子发票可在付款日起一百八十个自然日内提出申请，开票前核对订单已确认、发票抬头与必要税务信息"
+        },
+        {
+          "fact_id": "CX-V03-F02",
+          "quote": "申请已经提交不表示发票已经开具；发票号码、开具日期和下载状态以该订单开票记录为准"
+        },
+        {
+          "fact_id": "CX-V03-F03",
+          "quote": "个人发票不自动保证符合雇主报销制度，本资料也不保存客户单位的报销审批规则"
+        }
+      ]
+    },
+    {
+      "document_id": "CX-V04",
+      "title": "岸灯发票更正与退单关系",
+      "split": "validation",
+      "family_id": "cx-v04-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\n岸灯发票抬头更正应先核验并作废原发票，再按有效订单记录重新开具；新票完成前不能把更正申请说成已完成换票。\n重开金额不能超过对应订单有效实付，赠品标价不作为已付款金额补进发票；本资料未给出跨订单合并开票规则。\n作废发票不是执行退款，发票状态与订单付款、退款状态必须分别核对。",
+      "facts": [
+        {
+          "fact_id": "CX-V04-F01",
+          "quote": "岸灯发票抬头更正应先核验并作废原发票，再按有效订单记录重新开具；新票完成前不能把更正申请说成已完成换票"
+        },
+        {
+          "fact_id": "CX-V04-F02",
+          "quote": "重开金额不能超过对应订单有效实付，赠品标价不作为已付款金额补进发票；本资料未给出跨订单合并开票规则"
+        },
+        {
+          "fact_id": "CX-V04-F03",
+          "quote": "作废发票不是执行退款，发票状态与订单付款、退款状态必须分别核对"
+        }
+      ]
+    },
+    {
+      "document_id": "CX-V05",
+      "title": "砾石GRAIN2202积分活动",
+      "split": "validation",
+      "family_id": "cx-v05-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\nGRAIN2202活动以二百积分抵一元，抵扣上限为该活动合格商品实付的百分之五；这里只适用于GRAIN2202，不是全站兑换比例。\nGRAIN2202积分不能转给另一个账号，活动积分于二〇二六年十二月三十一日二十三时五十九分按中国标准时间到期。\n本资料没有不足整元积分如何取整的规则，也没有当前账号的积分余额与商品是否合格的实时记录。",
+      "facts": [
+        {
+          "fact_id": "CX-V05-F01",
+          "quote": "GRAIN2202活动以二百积分抵一元，抵扣上限为该活动合格商品实付的百分之五；这里只适用于GRAIN2202，不是全站兑换比例"
+        },
+        {
+          "fact_id": "CX-V05-F02",
+          "quote": "GRAIN2202积分不能转给另一个账号，活动积分于二〇二六年十二月三十一日二十三时五十九分按中国标准时间到期"
+        },
+        {
+          "fact_id": "CX-V05-F03",
+          "quote": "本资料没有不足整元积分如何取整的规则，也没有当前账号的积分余额与商品是否合格的实时记录"
+        }
+      ]
+    },
+    {
+      "document_id": "CX-V06",
+      "title": "砾石ONE80券适用范围",
+      "split": "validation",
+      "family_id": "cx-v06-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\nONE80券仅限单笔合格实物商品实付满四百元时使用八十元优惠，不计运输费与数字订阅金额，也不能和GRAIN2202积分抵扣叠加。\nONE80券的原有效期不会因为退单自动延长；是否返券须查看对应活动和这张订单的退单记录。\n每张ONE80券只能绑定一笔合格订单，不可拆分到多张订单；不同账号持有的券不能合并凑成一张券使用。",
+      "facts": [
+        {
+          "fact_id": "CX-V06-F01",
+          "quote": "ONE80券仅限单笔合格实物商品实付满四百元时使用八十元优惠，不计运输费与数字订阅金额，也不能和GRAIN2202积分抵扣叠加"
+        },
+        {
+          "fact_id": "CX-V06-F02",
+          "quote": "ONE80券的原有效期不会因为退单自动延长；是否返券须查看对应活动和这张订单的退单记录"
+        },
+        {
+          "fact_id": "CX-V06-F03",
+          "quote": "每张ONE80券只能绑定一笔合格订单，不可拆分到多张订单；不同账号持有的券不能合并凑成一张券使用"
+        }
+      ]
+    },
+    {
+      "document_id": "CX-V07",
+      "title": "Bridgeview workspace export policy",
+      "split": "validation",
+      "family_id": "cx-v07-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\nOnly a verified Bridgeview workspace owner can request a CSV export of saved-job metadata; media and private message bodies are excluded.\nA completed export link lasts 14 calendar days. Another request is allowed after 30 days; viewers cannot request an export for the owner.\nThis policy has no live job status, export link, owner record or account completion time.",
+      "facts": [
+        {
+          "fact_id": "CX-V07-F01",
+          "quote": "Only a verified Bridgeview workspace owner can request a CSV export of saved-job metadata; media and private message bodies are excluded."
+        },
+        {
+          "fact_id": "CX-V07-F02",
+          "quote": "A completed export link lasts 14 calendar days. Another request is allowed after 30 days; viewers cannot request an export for the owner."
+        },
+        {
+          "fact_id": "CX-V07-F03",
+          "quote": "This policy has no live job status, export link, owner record or account completion time."
+        }
+      ]
+    },
+    {
+      "document_id": "CX-V08",
+      "title": "Bridgeview deletion and export boundaries",
+      "split": "validation",
+      "family_id": "cx-v08-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\nA verified Bridgeview workspace owner can request deletion with a seven-day cooling-off period; cancellation must arrive before it ends.\nAn export does not cancel deletion. Demo support cannot delete a workspace or cancel a deletion request.\nBackups may remain for up to 35 days under standard retention. This policy gives no current backup status for any account.",
+      "facts": [
+        {
+          "fact_id": "CX-V08-F01",
+          "quote": "A verified Bridgeview workspace owner can request deletion with a seven-day cooling-off period; cancellation must arrive before it ends."
+        },
+        {
+          "fact_id": "CX-V08-F02",
+          "quote": "An export does not cancel deletion. Demo support cannot delete a workspace or cancel a deletion request."
+        },
+        {
+          "fact_id": "CX-V08-F03",
+          "quote": "Backups may remain for up to 35 days under standard retention. This policy gives no current backup status for any account."
+        }
+      ]
+    },
+    {
+      "document_id": "CX-V09",
+      "title": "雾港D5租借归还验收",
+      "split": "validation",
+      "family_id": "cx-v09-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\n雾港D5租借的应归还日期按每份租借合同记载，不存在本资料统一规定的七天或三十天借期。\n承运方签收回寄件仅说明包裹收件环节，不能替代逐项验收；押金结算需要验收完成后另行核对。\n验收范围以租借清单为准，客户自行购买的配件不能直接算作租赁缺件；本文没有某份合同的到期日、验收结论或扣款金额。",
+      "facts": [
+        {
+          "fact_id": "CX-V09-F01",
+          "quote": "雾港D5租借的应归还日期按每份租借合同记载，不存在本资料统一规定的七天或三十天借期"
+        },
+        {
+          "fact_id": "CX-V09-F02",
+          "quote": "承运方签收回寄件仅说明包裹收件环节，不能替代逐项验收；押金结算需要验收完成后另行核对"
+        },
+        {
+          "fact_id": "CX-V09-F03",
+          "quote": "验收范围以租借清单为准，客户自行购买的配件不能直接算作租赁缺件；本文没有某份合同的到期日、验收结论或扣款金额"
+        }
+      ]
+    },
+    {
+      "document_id": "CX-V10",
+      "title": "雾港D5标准押金结算",
+      "split": "validation",
+      "family_id": "cx-v10-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\n雾港D5标准租借押金为六百元，押金与租金分别列账，不能把押金直接作为已支付租金或商品购买价。\n如验收确认租借清单中有缺件，应依据该合同的缺件记录核验扣款；本资料不预设每次都扣款，也不列具体缺件价目。\n回寄物流显示签收不等于押金已经退回；退款金额、结算状态和到账日期仍需对应结算记录。",
+      "facts": [
+        {
+          "fact_id": "CX-V10-F01",
+          "quote": "雾港D5标准租借押金为六百元，押金与租金分别列账，不能把押金直接作为已支付租金或商品购买价"
+        },
+        {
+          "fact_id": "CX-V10-F02",
+          "quote": "如验收确认租借清单中有缺件，应依据该合同的缺件记录核验扣款；本资料不预设每次都扣款，也不列具体缺件价目"
+        },
+        {
+          "fact_id": "CX-V10-F03",
+          "quote": "回寄物流显示签收不等于押金已经退回；退款金额、结算状态和到账日期仍需对应结算记录"
+        }
+      ]
+    },
+    {
+      "document_id": "CX-V11",
+      "title": "碧舟B8L连接版本兼容说明",
+      "split": "validation",
+      "family_id": "cx-v11-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\n碧舟B8L固件三点二版的应用连接支持Android 14及以上或iOS 17及以上；本项兼容说明不适用于B8 Mini。\n系统版本达到最低要求只表示满足该项前提，不能单凭版本认定配对一定成功，也不能把配对失败直接判为网络故障。\n核验配对异常应记录准确型号、系统版本、应用版本、固件版本、发生时间与错误全文；本静态说明没有真实设备诊断日志。",
+      "facts": [
+        {
+          "fact_id": "CX-V11-F01",
+          "quote": "碧舟B8L固件三点二版的应用连接支持Android 14及以上或iOS 17及以上；本项兼容说明不适用于B8 Mini"
+        },
+        {
+          "fact_id": "CX-V11-F02",
+          "quote": "系统版本达到最低要求只表示满足该项前提，不能单凭版本认定配对一定成功，也不能把配对失败直接判为网络故障"
+        },
+        {
+          "fact_id": "CX-V11-F03",
+          "quote": "核验配对异常应记录准确型号、系统版本、应用版本、固件版本、发生时间与错误全文；本静态说明没有真实设备诊断日志"
+        }
+      ]
+    },
+    {
+      "document_id": "CX-V12",
+      "title": "碧舟B8L固件回退前提",
+      "split": "validation",
+      "family_id": "cx-v12-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\n碧舟B8L仅在对应官方回退公告允许的情形下讨论三点二版回退到三点一版，不适用于B8 Mini或任意跨版本降级。\n回退前须核对产品归属、备份、影响范围以及所有者明确确认，并只使用对应官方签名包；客服不能声称已刷写或替用户执行回退。\n本资料不含下载地址、包文件、校验值或具体刷写步骤，不能虚构一个链接或SHA256值来补全公告。",
+      "facts": [
+        {
+          "fact_id": "CX-V12-F01",
+          "quote": "碧舟B8L仅在对应官方回退公告允许的情形下讨论三点二版回退到三点一版，不适用于B8 Mini或任意跨版本降级"
+        },
+        {
+          "fact_id": "CX-V12-F02",
+          "quote": "回退前须核对产品归属、备份、影响范围以及所有者明确确认，并只使用对应官方签名包；客服不能声称已刷写或替用户执行回退"
+        },
+        {
+          "fact_id": "CX-V12-F03",
+          "quote": "本资料不含下载地址、包文件、校验值或具体刷写步骤，不能虚构一个链接或SHA256值来补全公告"
+        }
+      ]
+    },
+    {
+      "document_id": "CX-V13",
+      "title": "Frostpine Standard seats and guest permissions",
+      "split": "validation",
+      "family_id": "cx-v13-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\nFrostpine Standard permits five members and two read-only guests. Guests are not members and cannot manage billing or invite members.\nOnly a verified workspace owner can request a member removal; demo support cannot execute it.\nThese caps are not a live ledger. Free member seats and pending guest invitations need workspace records.",
+      "facts": [
+        {
+          "fact_id": "CX-V13-F01",
+          "quote": "Frostpine Standard permits five members and two read-only guests. Guests are not members and cannot manage billing or invite members."
+        },
+        {
+          "fact_id": "CX-V13-F02",
+          "quote": "Only a verified workspace owner can request a member removal; demo support cannot execute it."
+        },
+        {
+          "fact_id": "CX-V13-F03",
+          "quote": "These caps are not a live ledger. Free member seats and pending guest invitations need workspace records."
+        }
+      ]
+    },
+    {
+      "document_id": "CX-V14",
+      "title": "Frostpine audit export retention",
+      "split": "validation",
+      "family_id": "cx-v14-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\nFrostpine Plus audit retention is 90 calendar days; Basic retention is 14 days. Export timestamps use UTC.\nThe CSV contains event metadata, not private message bodies. Retention does not prove an event happened or an export finished.\nOnly an authorized workspace owner can request a standard audit export; a completed export and its time range must be checked in the export record.",
+      "facts": [
+        {
+          "fact_id": "CX-V14-F01",
+          "quote": "Frostpine Plus audit retention is 90 calendar days; Basic retention is 14 days. Export timestamps use UTC."
+        },
+        {
+          "fact_id": "CX-V14-F02",
+          "quote": "The CSV contains event metadata, not private message bodies. Retention does not prove an event happened or an export finished."
+        },
+        {
+          "fact_id": "CX-V14-F03",
+          "quote": "Only an authorized workspace owner can request a standard audit export; a completed export and its time range must be checked in the export record."
+        }
+      ]
+    },
+    {
+      "document_id": "CX-V15",
+      "title": "远汐X9首批预售与分项履约说明",
+      "split": "validation",
+      "family_id": "cx-v15-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\n远汐X9标准款第一批预售计划出库窗口为二〇二六年十一月二十一日至二十五日；窗口表示出库安排，不是承运方到达日，也不是安装已预约完成。\n进入第一批还须订单在二〇二六年十一月十日前完成付款确认，且型号与收货信息已核验；仅有定金截图或用户口头表示已经付款，不能替代订单的实际确认状态。\n窗口内会按有效订单清单组织出库，单张订单是否进入清单、确切出库时刻和单个包裹的预计到达日期均须读取业务记录。客服不能把静态窗口改成对任意订单的必达承诺。\n同一组合订单的标准主机、桌面支架和附带数字服务分别核对履约；支架可能单独打包，数字服务通过账号权益交付，没有快递单号，实物签收也不能证明权益已经激活。\n收货人应保留能对应商品的清单与脱敏凭证。出现少件、包装破损或签收争议时分别记录商品、包裹、签收与本人陈述，不从争议字段推出已由承运方认定丢件责任。\n天气或承运安排变更后应重新核对物流信息；该类变更不会依本文自动免除运输费、安装费或生成现金赔付。本文也没有各地天气预报、统一延迟赔偿表或安装人员的实时排班。\n未在首批截止前完成付款确认的订单进入后续待确认批次，本文没有其出库日期。即使商品页面曾展示第一批窗口，仍不得把这个窗口套到未完成确认的订单。\n上述第一批窗口明确排除刻字面板、客户尺寸灯罩及与标准款同名的渠道专供套装；这些定制或渠道项目须另查对应规则，不因订单显示已付款就自动获得首批标准款承诺。",
+      "facts": [
+        {
+          "fact_id": "CX-V15-F01",
+          "quote": "远汐X9标准款第一批预售计划出库窗口为二〇二六年十一月二十一日至二十五日；窗口表示出库安排，不是承运方到达日，也不是安装已预约完成"
+        },
+        {
+          "fact_id": "CX-V15-F02",
+          "quote": "进入第一批还须订单在二〇二六年十一月十日前完成付款确认，且型号与收货信息已核验；仅有定金截图或用户口头表示已经付款，不能替代订单的实际确认状态"
+        },
+        {
+          "fact_id": "CX-V15-F03",
+          "quote": "窗口内会按有效订单清单组织出库，单张订单是否进入清单、确切出库时刻和单个包裹的预计到达日期均须读取业务记录。客服不能把静态窗口改成对任意订单的必达承诺"
+        },
+        {
+          "fact_id": "CX-V15-F04",
+          "quote": "同一组合订单的标准主机、桌面支架和附带数字服务分别核对履约；支架可能单独打包，数字服务通过账号权益交付，没有快递单号，实物签收也不能证明权益已经激活"
+        },
+        {
+          "fact_id": "CX-V15-F05",
+          "quote": "收货人应保留能对应商品的清单与脱敏凭证。出现少件、包装破损或签收争议时分别记录商品、包裹、签收与本人陈述，不从争议字段推出已由承运方认定丢件责任"
+        },
+        {
+          "fact_id": "CX-V15-F06",
+          "quote": "天气或承运安排变更后应重新核对物流信息；该类变更不会依本文自动免除运输费、安装费或生成现金赔付。本文也没有各地天气预报、统一延迟赔偿表或安装人员的实时排班"
+        },
+        {
+          "fact_id": "CX-V15-F07",
+          "quote": "未在首批截止前完成付款确认的订单进入后续待确认批次，本文没有其出库日期。即使商品页面曾展示第一批窗口，仍不得把这个窗口套到未完成确认的订单"
+        },
+        {
+          "fact_id": "CX-V15-F08",
+          "quote": "上述第一批窗口明确排除刻字面板、客户尺寸灯罩及与标准款同名的渠道专供套装；这些定制或渠道项目须另查对应规则，不因订单显示已付款就自动获得首批标准款承诺"
+        }
+      ]
+    },
+    {
+      "document_id": "CX-V16",
+      "title": "雪径个人年包暂停与服务券说明",
+      "split": "validation",
+      "family_id": "cx-v16-source-family",
+      "content": "【ServeFlow覆盖扩展合成资料；仅供隔离评测，不代表真实企业政策】\n雪径个人年包在已核验剩余有效期不少于三十个自然日时，可申请一次最长十四个自然日的服务暂停；每三百六十五个自然日最多批准一次，申请记录与批准记录应分别核对。\n暂停是获准期间停止该年包的使用许可，不自动取消续费开关，也不表示已经退回付款。是否需要关闭续费应由购买人经已核实入口单独办理，客服没有代办开关的执行工具。\n计算剩余有效期应读取该年包的到期记录和适用时区，不能把设备保修、另一项内容授权或家庭成员的使用期限混作本年包期限；日期缺失时应明确不能确认暂停资格。\n申请摘要可以记录购买项目、购买账号、拟暂停起止日与已经核验的剩余时间。用户不用提交密码、验证码、完整银行卡号或远程控制码，客服也不能以排查暂停失败为由要求重复付款。\n恢复使用的安排以批准记录为准，聊天里的计划日期不代表实际恢复完成；若用户反馈恢复异常，应收集时间、错误全文及已完成的低风险检查，不能声称已查后台日志或已经修复。\n雪径另有按具体活动发放的服务券，券可抵活动约定的服务项目但不能兑换现金，券面天数不等于退款货币金额，退单也不自动延长服务券有效期。本文不保存每位用户的券余额。\n获准暂停后，年包恢复日期与有效期调整应分别读取批准记录；暂停申请未批准前，不能先把原到期日往后增加十四天，也不能把计划恢复日写成实际已恢复。\n本条暂停资格仅限个人年包，明确不适用于团队月包、家庭共享成员身份或赠送体验期；即使这些项目显示剩余三十天以上，也不能套用个人年包的十四天暂停规则。",
+      "facts": [
+        {
+          "fact_id": "CX-V16-F01",
+          "quote": "雪径个人年包在已核验剩余有效期不少于三十个自然日时，可申请一次最长十四个自然日的服务暂停；每三百六十五个自然日最多批准一次，申请记录与批准记录应分别核对"
+        },
+        {
+          "fact_id": "CX-V16-F02",
+          "quote": "暂停是获准期间停止该年包的使用许可，不自动取消续费开关，也不表示已经退回付款。是否需要关闭续费应由购买人经已核实入口单独办理，客服没有代办开关的执行工具"
+        },
+        {
+          "fact_id": "CX-V16-F03",
+          "quote": "计算剩余有效期应读取该年包的到期记录和适用时区，不能把设备保修、另一项内容授权或家庭成员的使用期限混作本年包期限；日期缺失时应明确不能确认暂停资格"
+        },
+        {
+          "fact_id": "CX-V16-F04",
+          "quote": "申请摘要可以记录购买项目、购买账号、拟暂停起止日与已经核验的剩余时间。用户不用提交密码、验证码、完整银行卡号或远程控制码，客服也不能以排查暂停失败为由要求重复付款"
+        },
+        {
+          "fact_id": "CX-V16-F05",
+          "quote": "恢复使用的安排以批准记录为准，聊天里的计划日期不代表实际恢复完成；若用户反馈恢复异常，应收集时间、错误全文及已完成的低风险检查，不能声称已查后台日志或已经修复"
+        },
+        {
+          "fact_id": "CX-V16-F06",
+          "quote": "雪径另有按具体活动发放的服务券，券可抵活动约定的服务项目但不能兑换现金，券面天数不等于退款货币金额，退单也不自动延长服务券有效期"
+        },
+        {
+          "fact_id": "CX-V16-F07",
+          "quote": "获准暂停后，年包恢复日期与有效期调整应分别读取批准记录；暂停申请未批准前，不能先把原到期日往后增加十四天，也不能把计划恢复日写成实际已恢复"
+        },
+        {
+          "fact_id": "CX-V16-F08",
+          "quote": "本条暂停资格仅限个人年包，明确不适用于团队月包、家庭共享成员身份或赠送体验期；即使这些项目显示剩余三十天以上，也不能套用个人年包的十四天暂停规则"
+        }
+      ]
+    }
+  ]
+}
