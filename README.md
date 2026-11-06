@@ -6,7 +6,7 @@
 
 ## 功能
 
-- 意图识别：LLM、本地模板相似度和关键词融合。
+- 意图识别：LLM、模板相似度和关键词融合；默认本地字符向量，可显式选用百炼千问Embedding。
 - 角色协作：通用客服、技术支持、账单售后、人工升级；复合问题支持主辅路由和结果合并。
 - 知识检索：Chroma中的演示政策，按需抽取原问题的完整句单元、召回和全文重排；支持无资料分支，不将向量近邻直接当作问题依据。
 - 政策依据保护：覆盖到的政策问题须先实际检索，再由程序展示完整资料片段及来源版本；没有有效资料时明确说明，不能由角色或合并模型补造规则。
@@ -87,6 +87,22 @@ npm run dev
 
 选择快捷问题只填写输入框，主动发送才进入模型链路。分类、Agent、检索改写／重排和后台记忆都可能产生模型费用。本地开发模式没有产品级硬额度；下面的受保护演示模式另有持久发送许可上限，不能把它当作通用生产计费系统。
 
+### 可选千问意图Embedding
+
+当前新增`qwen3.7-text-embedding`适配，仅用于意图示例与用户问题的语义相似度。聊天仍使用现有Flash，RAG及历史记忆继续使用Chroma的本地MiniLM；没有重建或替换旧索引。模型名称及接口依据[百炼模型说明](https://help.aliyun.com/zh/model-studio/qwen3-7-text-embedding)与[同步接口文档](https://help.aliyun.com/zh/model-studio/text-embedding-synchronous-api)，于2026-11-07核对。实际账号权限、可用性、延迟和分类增益尚未真实验证。
+
+本地开发的私有`backend/.env`可显式配置如下；只在自己的文件中填写密钥，不要在Git、聊天或命令行参数中提供。普通本地模式仍不具备演示模式的持久硬额度，主动请求会产生费用。
+
+```dotenv
+INTENT_EMBEDDING_PROVIDER=qwen
+QWEN_EMBEDDING_BASE_URL=https://YOUR_WORKSPACE_ID.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
+QWEN_EMBEDDING_API_KEY=
+```
+
+固定1024维、浮点输出、每批最多20条；每条最多4000字符、请求最多64KiB、响应最多1MiB。单次物理请求6秒，整次模板匹配沿用8秒截止，不自动重试、重定向或使用环境代理。模板首次按快照分批编码，缓存仅在当前进程内；当前54条模板的冷启动最多3批模板＋1次问题向量，后续新问题通常只需1次向量请求，聊天分类另计。进程重启或学习新示例可能需要重新编码，仍逐次计数。构造客户端、启动服务和读取状态均不主动请求模型。
+
+成功结果标记`qwen/qwen3.7-text-embedding`；普通服务、超时或向量结构故障后记录固定诊断码，在60秒冷却内整次使用本地模板和本地问题向量，标记`local-ngram`，不能把降级当成远程成功或混用两个向量空间。显式选择qwen但缺少有效密钥／地址时配置失败。持久额度耗尽、损坏或未决记录按原保护规则阻止新发送，不通过降级隐瞒计数失败。没有改动融合权重或旧评分，支持远程向量不代表分类一定更准确。
+
 ### 可选MySQL演示
 
 ```sh
@@ -112,7 +128,7 @@ uv pip install --python .venv/bin/python -r requirements-demo.txt
 ### 保护范围
 
 - 全站由Nginx Basic Auth保护，必须从精确配置的HTTPS来源访问。浏览器不会获得模型密钥、数据库密码或后端Bearer。服务端把访问者身份与随机会话绑定，Cookie为Secure、HttpOnly、SameSite Strict；写请求仍校验Origin与CSRF。
-- 只开放聊天、自己的合成订单／单条工具追踪及不含对话正文的汇总监控。知识写入、管理、评测、热加载和文档接口在网关、后端双重拒绝；外部MCP、Webhook和远程Embedding关闭。
+- 只开放聊天、自己的合成订单／单条工具追踪及不含对话正文的汇总监控。知识写入、管理、评测、热加载和文档接口在网关、后端双重拒绝；外部MCP和Webhook关闭，远程意图Embedding默认关闭、仅接受下述服务端显式启用。
 - 只发布`127.0.0.1:8080`，由宿主HTTPS站点转发；API、MySQL和Redis不映射宿主端口。API/Web完成读取私密配置的短bootstrap后降权运行，源码只读。私密配置不能作为前端构建参数。
 - 网关聊天限流：每访问用户名2次／分钟、全局6次／分钟、各允许1次突发，同时最多1个聊天连接。这是入口频率保护，不代表一次聊天只有一次模型请求。
 - 受保护API运行链路的模型步骤，包括分类、检索、角色、合并及后台记忆，共用**生命周期发送许可**。默认100，创建配置时可选1–1000；每次实际网络发送前文件锁下持久占额，SDK重试关闭。已发送失败、取消、不确定结果及已占额但确认未发送均不自动返额；未完成记录或计数故障阻止新增发送。不是每日额度、每账号额度或精确人民币成本上限，不会因等一会儿、重启或重新初始化而恢复。已提交成功回执在耗尽后仍能读取。保留的离线研究CLI不属于对客入口，不应交给访客或用演示凭据另行运行。
@@ -180,6 +196,25 @@ uv pip install --python .venv/bin/python -r requirements-demo.txt
 
 ### 访问撤销、更新与数据
 
+演示部署可由管理员明确设置`DEMO_INTENT_EMBEDDING_PROVIDER=qwen`；默认`local`保持既有行为，只允许这两个值。API会复用已有私密`api.json`中的百炼密钥及北京业务空间，将同一已校验主机的路径改为`/compatible-mode/v1`；不新增前端配置或任意上游地址，也不改写已有配置文件。密钥需在该业务空间具备Embedding权限，部署者尚未实测此权限。每批向量请求与Messages共同扣除**同一现有台账的剩余许可**，每批算一次物理发送，失败及取消保守占额；没有新额度、自动初始化或返额。
+
+管理员选择启用时，在服务器源码目录更新代码并核对工作区后，可按以下方式重建API、替换API与Web容器；Web重建容器用于重新解析API地址，不需要重新构建前端。以下是待执行说明，本次没有操作云端。
+
+```sh
+sfcompose() {
+  sudo env DEMO_PRIVATE_DIR=/opt/serveflow-demo/private \
+    DEMO_PUBLIC_ORIGIN=https://serveflow.zijinglab.com \
+    DEMO_INTENT_EMBEDDING_PROVIDER=qwen \
+    docker compose --env-file /dev/null -f deploy/demo/compose.yaml "$@"
+}
+sfcompose config --quiet
+sfcompose build api
+sfcompose up -d --no-build --no-deps --force-recreate --wait --wait-timeout 180 api web
+sfcompose --profile tools run --rm ops quota-status
+```
+
+不运行`init`／`quota-init`或删除卷。关闭远程能力时将上述变量改回`local`并重新创建API／Web，保留新版本的台账读取逻辑和所有数据。新增记录使用明确的`intent_embedding`阶段和`qwen3.7-text-embedding`模型，旧Messages记录和身份文件原样保留；旧版仅支持聊天模型的程序会拒绝读取新增记录，不能通过回滚、删除或恢复旧台账绕过该保护。
+
 最多10个受邀用户名。管理员可用`htpasswd -B -C 10 /opt/serveflow-demo/private/htpasswd 新用户名`交互添加／改密，或`htpasswd -D /opt/serveflow-demo/private/htpasswd 用户名`撤销；不得使用命令行明文密码的`-b`。保留至少一个账号，重新执行配置`check`。工具可能替换文件inode，因此随后须`docker compose --env-file /dev/null -f deploy/demo/compose.yaml up -d --force-recreate web`重新挂载，不能只reload；撤销不保证已经发送的模型停止计费。Basic Auth可能被浏览器缓存，可关闭全部相关窗口或使用独立浏览器配置测试撤销，没有实现应用登录／退出系统。
 
 涉及API更新时，应重建并一起重建启动API/Web，避免网关缓存旧容器IP；若只改web模板／web启动分支，可只重建web并用--no-deps保留其余健康容器。保留配置与三个卷。回退镜像不回退数据／会话／发送许可。冷备份应先停止API、再干净停止MySQL/Redis，确认无写入后备份三卷和私密配置；运行中备份须使用各存储支持的一致性方案，不能直接复制活跃数据库文件。备份须加密、限制读取，恢复到新的隔离目录演练；当前未交付自动备份恢复或可安全回滚额度的工具。管理员整目录回滚／删除仍可绕过文件计数，文件哈希链不是防恶意管理员或独立审计账本。
@@ -203,6 +238,8 @@ uv pip install --python .venv/bin/python -r requirements-demo.txt
 2026-11-06受保护演示站服务端部署回执：操作者已在Ubuntu目标机完成Docker镜像构建、独立合成MySQL初始化／只读验证及额度初始化。网页补修后四个容器healthy；HTTPS证书签发成功，所报有效期至2027-02-03；未认证根页面401、认证健康接口200、禁用管理路径403。对新站cert-name执行`renew --dry-run --run-deploy-hooks`成功，所报Certbot定时任务已排程；该结论只覆盖新站证书，不是旧Trip证书或所有全局任务验收。Hook中的Nginx语法成功信息写在stderr，不能仅凭“error output”字样判失败。另由执行者从外部做不带凭据的HTTP／HTTPS只读探测，与操作者提供的认证／持久化回执分别记录，未连接SSH或读取服务器密钥。
 
 部署核对未发送模型请求，最后一次额度回执仍为100／已用0／未决0；没有将部署上限转作旧试验的新授权。原初次密码哈希失败、网页只读路径失败、HTTP验证文件首查404均保留，不回写成首次成功。浏览器页面尚未收到确认，真实模型权限及云端端到端对话、实际负载、备份恢复和多邀请身份的真人验证仍未完成；原模型超时与检索质量限制不因部署成功而消失。证据位于`backend/data/deploy-checks/protected-demo-deployment-receipts-20261106-v1/`。本次收口仅更新部署记录，不改业务功能、私密配置、数据库或额度，不重跑业务测试或构建。
+
+2026-11-07千问意图Embedding离线接入：在`fc66400`上新增固定北京地址、固定模型、1024维的有界适配，复用原意图融合、模板快照缓存和本地降级；增加受保护部署的显式开关，默认不变。仅扩展台账允许的明确阶段／模型配对，不改身份文件、上限或旧事件，未迁移数据库或重建RAG索引。本轮真实模型和外部业务调用0，未填写凭据、连接服务器或开启线上远程能力；准确率、Macro-F1及延迟提升没有新实测数据。后端与部署完整离线回归合计**4389通过、10跳过**，其中新增千问适配检查67项均包含在完整回归中；跳过项未配置专用MySQL集成库。覆盖原意图／Agent／记忆／HTTP／权限、真实临时文件额度、旧台账前缀、并发竞争、取消、失败和未决拒发，HTTPX与SDK使用受控上游，不是实时模型或Linux容器验收。前端源码和业务响应结构未改，未重复前端构建或浏览器验收。五个原缓存、私密环境、现有数据和旧证据哈希复核不变。停止在可选适配与离线验证完成，真实服务权限与分类效果仍待新一轮明确授权；私有证据保存在`backend/data/deploy-checks/qwen-intent-embedding-20261107-v1/`。
 
 ## 检查
 

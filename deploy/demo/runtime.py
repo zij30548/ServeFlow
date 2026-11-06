@@ -67,12 +67,14 @@ def _check_mode_inputs(config):
     if (os.getenv("DEMO_PUBLIC_ORIGIN") != config["public_origin"]
             or os.getenv("MCP_EXTERNAL_ENABLED", "false").lower() not in {"false", "0"}
             or os.getenv("ALERT_WEBHOOK_URL") or os.getenv("SILICONFLOW_API_KEY")
-            or os.getenv("INTENT_EMBEDDING_PROVIDER", "local") != "local"):
+            or os.getenv("INTENT_EMBEDDING_PROVIDER", "local") != "local"
+            or os.getenv("DEMO_INTENT_EMBEDDING_PROVIDER", "local") not in {"local", "qwen"}
+            or os.getenv("QWEN_EMBEDDING_API_KEY") or os.getenv("QWEN_EMBEDDING_BASE_URL")):
         raise ConfigurationError("demo_public_config_or_optional_integration_invalid")
 
 
 def _api_environment(config):
-    return {
+    environment = {
         "ECHOMIND_ENV": "protected-demo",
         "ECHOMIND_API_TOKENS": json.dumps({config["gateway_bearer"]: {"role": "user", "user_id": "protected-demo-proxy"}}),
         "ANTHROPIC_API_KEY": config["api_key"], "ANTHROPIC_BASE_URL": config["model_origin"],
@@ -87,6 +89,15 @@ def _api_environment(config):
         "ANONYMIZED_TELEMETRY": "False", "TOKENIZERS_PARALLELISM": "false", "OMP_NUM_THREADS": "1",
         "PROFILE_UPDATE_WORKERS": "1", "PROMETHEUS_PORT": "0", "HOME": "/home/serveflow",
     }
+    if os.getenv("DEMO_INTENT_EMBEDDING_PROVIDER", "local") == "qwen":
+        # Same reviewed Beijing workspace and server key; no extra secret file,
+        # arbitrary endpoint, config rewrite or quota initialization is needed.
+        from settings import model_origin
+        origin = model_origin(config["model_origin"])
+        environment.update(INTENT_EMBEDDING_PROVIDER="qwen",
+            QWEN_EMBEDDING_API_KEY=config["api_key"],
+            QWEN_EMBEDDING_BASE_URL=origin.removesuffix("/apps/anthropic") + "/compatible-mode/v1")
+    return environment
 
 
 def prepare_api(config, *, admin_secret=False):

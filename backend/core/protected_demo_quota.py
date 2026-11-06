@@ -28,13 +28,20 @@ SCHEMA = "serveflow-protected-demo-permits-v1"
 MAX_LIMIT = 10000
 JOURNAL_LIMIT = 16 * 1024 * 1024
 MODEL = "qwen3.7-flash-2026-07-15"
-PHASES = frozenset({"intent", "agent", "retrieval", "memory", "judge", "provider"})
+EMBEDDING_MODEL = "qwen3.7-text-embedding"
+EMBEDDING_PHASE = "intent_embedding"
+PHASES = frozenset({"intent", "agent", "retrieval", "memory", "judge", "provider", EMBEDDING_PHASE})
 OUTCOMES = frozenset({"received", "http_error", "network_error", "timeout", "cancelled", "response_limit", "unknown", "not_sent"})
 _SHA = re.compile(r"[0-9a-f]{64}\Z")
 _OP = re.compile(r"[0-9a-f]{32}\Z")
 _PROCESS = uuid.uuid4().hex
 _PROCESS_PID = os.getpid()
 _ACTIVE: set[tuple[str, str]] = set()
+
+
+def _valid_model_phase(model, phase):
+    return (type(phase) is str and phase in PHASES and
+            (model == EMBEDDING_MODEL if phase == EMBEDDING_PHASE else model == MODEL))
 
 
 def _process_id():
@@ -257,7 +264,7 @@ class QuotaStore:
             if (type(event) is not dict or set(event) != common or event["seq"] != state["seq"] + 1
                     or type(event["seq"]) is not int or not _OP.fullmatch(event["operation_id"])
                     or not _OP.fullmatch(event["process_id"]) or event["phase"] not in PHASES
-                    or event["model"] != MODEL or not _SHA.fullmatch(event["payload_sha256"])
+                    or not _valid_model_phase(event["model"], event["phase"]) or not _SHA.fullmatch(event["payload_sha256"])
                     or event["previous_hash"] != state["chain"]
                     or event["chain_hash"] != _digest({k: v for k, v in event.items() if k != "chain_hash"})
                     or type(event["attempt"]) is not int or not 1 <= event["attempt"] <= self.limit):
@@ -320,7 +327,7 @@ class QuotaStore:
         _write(fd, _canonical(value) + b"\n")
 
     def reserve(self, *, model, phase, payload_sha256):
-        if (model != MODEL or type(phase) is not str or phase not in PHASES
+        if (not _valid_model_phase(model, phase)
                 or not isinstance(payload_sha256, str) or not _SHA.fullmatch(payload_sha256)):
             raise ProtectedDemoQuotaError("demo_model_request_rejected")
         with self._locked() as (fd, state):

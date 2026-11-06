@@ -150,7 +150,7 @@ class IntentRecognizer:
     """
     端到端意图识别器。
 
-    初始化时不加载任何本地模型，所有 AI 能力通过 Anthropic API 调用。
+    LLM 使用现有 Messages 接口；模板向量独立选择本地算法或远程服务。
     模板 Embedding 在首次请求时懒加载并缓存，后续复用。
     """
 
@@ -336,8 +336,9 @@ class IntentRecognizer:
                     best_score, best_cat = score, cat
 
             return {"intent": best_cat, "confidence": min(1.0, max(0.0, best_score)), "source": source}
-        except Exception as ex:
-            logger.warning(f"Embedding 识别失败: {ex}")
+        except Exception:
+            # Never format provider bodies, credentials or user text here.
+            logger.warning("Embedding 识别失败，未取得可用模板匹配")
             return {"intent": IntentCategory.OTHER, "confidence": 0.0}
 
     def _pattern_recognize(self, message: str) -> Dict[str, Any]:

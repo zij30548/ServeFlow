@@ -32,7 +32,9 @@ def test_browser_gateway_has_no_model_or_database_secrets():
     assert services["api"]["secrets"] == ["api_config"]
     assert set(services["ops"]["secrets"]) == {"api_config", "mysql_root_password"}
     assert services["mysql"]["secrets"] == ["mysql_root_password"]
-    for name in ("api", "web", "ops"):
+    assert set(services["api"]["environment"]) == {"DEMO_PUBLIC_ORIGIN", "DEMO_INTENT_EMBEDDING_PROVIDER"}
+    assert services["api"]["environment"]["DEMO_INTENT_EMBEDDING_PROVIDER"] == "${DEMO_INTENT_EMBEDDING_PROVIDER:-local}"
+    for name in ("web", "ops"):
         assert set(services[name]["environment"]) == {"DEMO_PUBLIC_ORIGIN"}
     for row in document["secrets"].values():
         assert set(row) == {"file"}

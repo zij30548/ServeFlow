@@ -180,6 +180,41 @@ def test_api_bootstrap_removes_inherited_mysql_admin_url(prepare, configuration)
     assert "SERVEFLOW_DEMO_ADMIN_MYSQL_URL" not in runtime.os.environ
 
 
+@pytest.mark.parametrize("model_origin", ["https://dashscope.aliyuncs.com/apps/anthropic",
+    "https://workspace-test.cn-beijing.maas.aliyuncs.com/apps/anthropic"])
+def test_explicit_qwen_opt_in_derives_same_workspace_and_keeps_config_and_quota(prepare, configuration, model_origin):
+    configuration["model_origin"] = model_origin
+    before = dict(configuration)
+    runtime.os.environ["DEMO_INTENT_EMBEDDING_PROVIDER"] = "qwen"
+    result = runtime.prepare_api(configuration)
+    from core.qwen_embedding import canonical_base_url
+    assert result["INTENT_EMBEDDING_PROVIDER"] == "qwen"
+    assert result["QWEN_EMBEDDING_API_KEY"] == configuration["api_key"]
+    assert canonical_base_url(result["QWEN_EMBEDDING_BASE_URL"]) == model_origin.removesuffix("/apps/anthropic") + "/compatible-mode/v1"
+    assert result["ANTHROPIC_MODEL"] == configuration["model"]
+    assert result["ANTHROPIC_BASE_URL"] == model_origin
+    assert result["SERVEFLOW_DEMO_QUOTA_DIR"] == str(runtime.DATA / "usage")
+    assert result["SERVEFLOW_DEMO_MODEL_LIMIT"] == "100" and configuration == before
+    assert result["CHROMA_PERSIST_DIRECTORY"] == str(runtime.DATA / "chroma")
+
+
+def test_default_api_keeps_remote_embedding_disabled(prepare, configuration):
+    result = runtime.prepare_api(configuration)
+    assert result["INTENT_EMBEDDING_PROVIDER"] == "local"
+    assert "QWEN_EMBEDDING_API_KEY" not in result and "QWEN_EMBEDDING_BASE_URL" not in result
+
+
+@pytest.mark.parametrize("key,value", [("DEMO_INTENT_EMBEDDING_PROVIDER", "siliconflow"),
+    ("DEMO_INTENT_EMBEDDING_PROVIDER", "QWEN"), ("DEMO_INTENT_EMBEDDING_PROVIDER", ""),
+    ("QWEN_EMBEDDING_BASE_URL", "https://evil.test/compatible-mode/v1"),
+    ("QWEN_EMBEDDING_API_KEY", "unexpected-key")])
+def test_unreviewed_embedding_configuration_stops_before_private_state_work(prepare, configuration, key, value):
+    runtime.os.environ[key] = value
+    with pytest.raises(runtime.ConfigurationError, match="optional_integration"):
+        runtime.prepare_api(configuration)
+    assert prepare == []
+
+
 def test_initializer_alone_receives_explicit_new_root_secret(prepare, monkeypatch, configuration):
     read = Mock(return_value=b"p" * 40)
     monkeypatch.setattr(runtime, "private_read", read)
