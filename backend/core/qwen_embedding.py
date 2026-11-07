@@ -12,10 +12,12 @@ import json
 import logging
 import math
 import re
+import ssl
 import time
 from urllib.parse import urlsplit
 
 import httpx
+import httpcore
 
 from core import protected_demo_quota as quota
 
@@ -120,6 +122,61 @@ def _delegate():
         limits=httpx.Limits(max_connections=2, max_keepalive_connections=1))
 
 
+def _failure_codes(error):
+    """Only fixed classifications, never exception messages/args or type names."""
+    allowed = (
+        (httpx.ConnectTimeout, "connect_timeout"), (httpx.ReadTimeout, "read_timeout"),
+        (httpx.WriteTimeout, "write_timeout"), (httpx.PoolTimeout, "pool_timeout"),
+        (httpx.TimeoutException, "timeout"),
+        (httpx.RemoteProtocolError, "remote_protocol_error"),
+        (httpx.LocalProtocolError, "local_protocol_error"),
+        (httpx.ConnectError, "connect_error"), (httpx.ReadError, "read_error"),
+        (httpx.WriteError, "write_error"), (httpx.CloseError, "close_error"),
+        (httpx.RequestError, "request_error"),
+        (httpcore.ConnectTimeout, "core_connect_timeout"),
+        (httpcore.ReadTimeout, "core_read_timeout"),
+        (httpcore.RemoteProtocolError, "core_remote_protocol_error"),
+        (httpcore.LocalProtocolError, "core_local_protocol_error"),
+        (httpcore.ConnectError, "core_connect_error"), (httpcore.ReadError, "core_read_error"),
+        (httpcore.WriteError, "core_write_error"),
+        (ssl.SSLCertVerificationError, "tls_certificate_error"),
+        (ssl.SSLEOFError, "tls_unexpected_eof"), (ssl.SSLError, "tls_error"),
+        (ConnectionResetError, "connection_reset"), (BrokenPipeError, "broken_pipe"),
+        (ConnectionAbortedError, "connection_aborted"),
+        (ConnectionRefusedError, "connection_refused"),
+        (asyncio.CancelledError, "cancelled"), (TimeoutError, "timeout"),
+    )
+    codes, seen = [], set()
+    current = error
+    for _ in range(6):
+        if current is None or id(current) in seen:
+            break
+        seen.add(id(current))
+        code = next((code for kind, code in allowed if isinstance(current, kind)), None)
+        if code is not None and code not in codes:
+            codes.append(code)
+        current = current.__cause__ or (None if current.__suppress_context__ else current.__context__)
+    return codes
+
+
+def _response_details(response, *, api_key=None):
+    """Bounded protocol metadata, independent of whether the body finishes."""
+    length = response.headers.get("content-length", "")
+    expected = int(length) if length.isascii() and length.isdigit() and len(length) <= 7 else None
+    if expected is not None and expected > RESPONSE_LIMIT:
+        expected = None
+    framing = ("content_length" if expected is not None else
+               "chunked" if response.headers.get("transfer-encoding", "").lower() == "chunked" else "unknown")
+    version = response.extensions.get("http_version")
+    version = version.decode("ascii") if version in (b"HTTP/1.0", b"HTTP/1.1", b"HTTP/2", b"HTTP/3") else "unknown"
+    request_id = response.headers.get("x-request-id", "") or response.headers.get("x-dashscope-request-id", "")
+    if (not re.fullmatch(r"[A-Za-z0-9_.:-]{1,150}", request_id)
+            or api_key and api_key in request_id):
+        request_id = "unknown"
+    return {"expected_response_bytes": expected, "response_framing": framing,
+            "http_version": version, "request_id": request_id}
+
+
 async def request_embeddings(texts, *, base_url, api_key, purpose="query", diagnostic=None):
     """One bounded physical request; reserve before send, never refund or retry."""
     base_url, api_key = canonical_base_url(base_url), validate_key(api_key)
@@ -132,7 +189,9 @@ async def request_embeddings(texts, *, base_url, api_key, purpose="query", diagn
     info = {"purpose": purpose, "phase": "admission", "deadline_s": timeout,
         "admission_ms": None,
         "headers_ms": None, "first_byte_ms": None, "body_complete_ms": None,
-        "response_bytes": 0, "http_status": None, "error_code": None}
+        "response_bytes": 0, "http_status": None, "error_code": None,
+        "transport_failure_codes": [], "expected_response_bytes": None,
+        "response_framing": "unknown", "http_version": "unknown", "request_id": "unknown"}
     operation, store, response, client = None, None, None, None
     entered = False
     status = None
@@ -166,6 +225,7 @@ async def request_embeddings(texts, *, base_url, api_key, purpose="query", diagn
             response = await client.send(request, stream=True)
             status = response.status_code
             info.update(headers_ms=elapsed(), http_status=status, phase="reading_body")
+            info.update(_response_details(response, api_key=api_key))
             if (response.headers.get("content-encoding", "identity").lower() != "identity"
                     or "content-length" in response.headers and
                        (not response.headers["content-length"].isdigit()
@@ -198,6 +258,7 @@ async def request_embeddings(texts, *, base_url, api_key, purpose="query", diagn
         info["phase"] = "complete"
         return vectors
     except BaseException as error:
+        info["transport_failure_codes"] = _failure_codes(error)
         cancelled = isinstance(error, asyncio.CancelledError)
         if operation is not None:
             outcome = ("not_sent" if not entered else
@@ -236,6 +297,7 @@ async def request_embeddings(texts, *, base_url, api_key, purpose="query", diagn
             diagnostic.clear()
             diagnostic.update(info)
         if info["error_code"]:
-            logger.warning("embedding_failure purpose=%s phase=%s code=%s elapsed_ms=%s headers_ms=%s first_byte_ms=%s response_bytes=%s",
+            logger.warning("embedding_failure purpose=%s phase=%s code=%s elapsed_ms=%s headers_ms=%s first_byte_ms=%s response_bytes=%s transport_codes=%s framing=%s expected_bytes=%s",
                 info["purpose"], info["phase"], info["error_code"], info["elapsed_ms"],
-                info["headers_ms"], info["first_byte_ms"], info["response_bytes"])
+                info["headers_ms"], info["first_byte_ms"], info["response_bytes"],
+                info["transport_failure_codes"], info["response_framing"], info["expected_response_bytes"])

@@ -199,7 +199,7 @@ class TemplateCache:
                 except FileExistsError: pass
             if not _same(_read(version, 'identity.json', maximum=2048), identity): raise TemplateCacheError()
             yield version
-        except TemplateCacheError:
+        except (TemplateCacheError, qwen.EmbeddingError):
             raise
         except (OSError, ValueError, TypeError):
             raise TemplateCacheError() from None
