@@ -72,7 +72,7 @@ def test_partial_response_preserves_protocol_failure_without_claiming_full_body(
         assert diagnostic['response_framing']=='content_length' and diagnostic['http_version']=='HTTP/1.1'
         assert diagnostic['request_id']=='controlled-request-01' and diagnostic['http_status']==200
         assert diagnostic['first_byte_ms'] is not None and diagnostic['body_complete_ms'] is None
-        assert diagnostic['deadline_s']==15 and diagnostic['elapsed_ms']<15000
+        assert diagnostic['deadline_s']==30 and diagnostic['elapsed_ms']<30000
         events=[json.loads(s) for s in (offline/'journal.jsonl').read_text().splitlines()]
         assert events[-1]['outcome']==outcome and events[-1]['http_status']==200
         assert quota.status()['used']==1 and quota.status()['unresolved']==0

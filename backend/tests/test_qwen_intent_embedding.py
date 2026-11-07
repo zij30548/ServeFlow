@@ -88,7 +88,7 @@ def test_httpx_request_fixed_model_parameters_no_metadata_and_order_reconstructi
             assert request.headers["authorization"] == "Bearer " + KEY
             assert request.headers["accept-encoding"] == "identity"
             assert json.loads(request.content) == {"model": e.MODEL, "dimensions": 1024,
-                "encoding_format": "float", "input": ["first", "second"]}
+                "encoding_format": "base64", "input": ["first", "second"]}
             return output(request)
         monkeypatch.setattr(e, "_delegate", lambda: httpx.MockTransport(provider))
         vectors = await send(["first", "second"])

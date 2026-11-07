@@ -28,7 +28,7 @@ from core import qwen_embedding as qwen
 VERSION = 1
 MAX_TEMPLATES = 256
 FILE_LIMIT = 8 * 1024 * 1024
-PREPARE_DEADLINE = 60.0
+PREPARE_DEADLINE = 120.0
 ROOT_MARKER = {'version': VERSION, 'kind': 'serveflow-qwen-intent-templates'}
 
 
@@ -271,9 +271,15 @@ class TemplateCache:
                     if _exists(target, name + '.result.json'): raise TemplateCacheError()
                     if _exists(target, name + '.claim.json'):
                         claim = _read(target, name + '.claim.json', maximum=2048)
+                        # Explicit recovery may preserve a claim from the old
+                        # float-wire version. Inputs/model/dimensions must be
+                        # identical; only the documented wire encoding differs.
+                        valid_hashes = {hashlib.sha256(qwen._payload(batch, encoding_format=f)).hexdigest()
+                                        for f in ('float', 'base64')}
                         expected = {'version': VERSION, 'cache_version': digest(identity), 'batch': i,
-                            'payload_sha256': hashlib.sha256(qwen._payload(batch)).hexdigest()}
-                        if not _same(claim, expected): raise TemplateCacheError()
+                            'payload_sha256': claim.get('payload_sha256') if type(claim) is dict else None}
+                        if not _same(claim, expected) or expected['payload_sha256'] not in valid_hashes:
+                            raise TemplateCacheError()
                         incomplete.append(digest(claim))
                 if incomplete != [claim_digest]: raise TemplateCacheError()
                 root = _directory(self.path)

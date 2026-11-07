@@ -94,6 +94,20 @@ def test_existing_completed_batch_is_never_replaced(tmp_path):
     asyncio.run(run())
 
 
+def test_explicit_import_can_preserve_an_exact_legacy_float_payload_claim(tmp_path):
+    async def run():
+        import hashlib
+        target,source,snapshot,args=await fixture(tmp_path)
+        claim=target.path/c.digest(target.plan(snapshot)[0])/'batch-000.claim.json'
+        data=json.loads(claim.read_text())
+        data['payload_sha256']=hashlib.sha256(q._payload(['template'],encoding_format='float')).hexdigest()
+        claim.write_bytes(c.canonical(data)+b'\n')
+        original=claim.read_bytes();args['claim_digest']=c.digest(data)
+        assert target.import_prepared(snapshot,source,**args)['imported']
+        assert claim.read_bytes()==original
+    asyncio.run(run())
+
+
 def test_receipt_collision_or_busy_preparer_stops_without_publishing(tmp_path):
     async def run():
         import fcntl,os

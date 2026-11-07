@@ -7,12 +7,14 @@ redirects, environment proxies, alternative models or automatic index migrations
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import json
 import logging
 import math
 import re
 import ssl
+import struct
 import time
 from urllib.parse import urlsplit
 
@@ -25,7 +27,8 @@ MODEL = "qwen3.7-text-embedding"
 DIMENSIONS = 1024
 BATCH_SIZE = 20
 TIMEOUT = 6.0
-PREPARE_TIMEOUT = 15.0
+PREPARE_TIMEOUT = 30.0
+ENCODING_FORMAT = "base64"
 REQUEST_LIMIT = 65536
 RESPONSE_LIMIT = 1024 * 1024
 MAX_TEXT_CHARS = 4000
@@ -69,12 +72,13 @@ def validate_key(value):
     return value
 
 
-def _payload(texts):
+def _payload(texts, *, encoding_format=ENCODING_FORMAT):
     if (type(texts) is not list or not 1 <= len(texts) <= BATCH_SIZE
-            or any(type(t) is not str or not t.strip() or len(t) > MAX_TEXT_CHARS for t in texts)):
+            or any(type(t) is not str or not t.strip() or len(t) > MAX_TEXT_CHARS for t in texts)
+            or type(encoding_format) is not str or encoding_format not in {"float", "base64"}):
         raise EmbeddingError("embedding_input_invalid")
     raw = json.dumps({"model": MODEL, "input": texts, "dimensions": DIMENSIONS,
-                      "encoding_format": "float"}, ensure_ascii=True, allow_nan=False,
+                      "encoding_format": encoding_format}, ensure_ascii=True, allow_nan=False,
                      separators=(",", ":"), sort_keys=True).encode()
     if len(raw) > REQUEST_LIMIT:
         raise EmbeddingError("embedding_request_limit")
@@ -100,10 +104,25 @@ def parse_vectors(raw, count):
                 or type(body.get("data")) is not list or len(body["data"]) != count):
             raise ValueError()
         vectors = [None] * count
+        response_format = None
         for row in body["data"]:
             if type(row) is not dict:
                 raise ValueError()
             i, vector = row.get("index"), row.get("embedding")
+            kind = type(vector)
+            if kind not in (str, list) or response_format not in (None, kind):
+                raise ValueError()
+            response_format = kind
+            if kind is str:
+                # OpenAI-compatible base64 vectors are little-endian float32.
+                # Old official gateways may still return float arrays even
+                # when base64 was requested; both paths remain strict.
+                if len(vector) != ((DIMENSIONS * 4 + 2) // 3) * 4:
+                    raise ValueError()
+                binary = base64.b64decode(vector, validate=True)
+                if len(binary) != DIMENSIONS * 4 or base64.b64encode(binary).decode('ascii') != vector:
+                    raise ValueError()
+                vector = list(struct.unpack('<' + str(DIMENSIONS) + 'f', binary))
             if (type(i) is not int or not 0 <= i < count or vectors[i] is not None
                     or type(vector) is not list or len(vector) != DIMENSIONS
                     or any(type(x) not in (int, float) or not math.isfinite(x) for x in vector)):
@@ -113,7 +132,7 @@ def parse_vectors(raw, count):
                 raise ValueError()
             vectors[i] = [x / norm for x in vector]
         return vectors
-    except (ValueError, TypeError, OverflowError, RecursionError, UnicodeError):
+    except (ValueError, TypeError, OverflowError, RecursionError, UnicodeError, struct.error):
         raise EmbeddingError("embedding_response_invalid") from None
 
 
