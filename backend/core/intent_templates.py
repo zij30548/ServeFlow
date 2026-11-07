@@ -42,17 +42,31 @@ async def prepare_templates(*, max_requests, diagnostics=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Read status or explicitly prepare private intent templates; preparation may incur model charges.')
-    parser.add_argument('command', choices=('status', 'prepare'))
+    parser.add_argument('command', choices=('status', 'prepare', 'import-prepared'))
     parser.add_argument('--max-requests', type=int)
+    parser.add_argument('--source-cache')
+    parser.add_argument('--source-token')
+    parser.add_argument('--claim-digest')
+    parser.add_argument('--authorization-sha256')
     args = parser.parse_args(argv)
-    if (args.command == 'prepare') != (args.max_requests is not None):
-        parser.error('prepare requires --max-requests; status does not accept it')
+    recovery = (args.source_cache, args.source_token, args.claim_digest, args.authorization_sha256)
+    if ((args.command == 'prepare') != (args.max_requests is not None)
+            or args.command == 'import-prepared' and not all(recovery)
+            or args.command != 'import-prepared' and any(v is not None for v in recovery)):
+        parser.error('prepare requires only --max-requests; import-prepared requires all four explicit recovery arguments; status accepts none')
     from dotenv import load_dotenv
     load_dotenv(Path(__file__).resolve().parents[1] / '.env', override=False)
     diagnostics = []
     try:
-        result = (template_status() if args.command == 'status' else
-                  asyncio.run(prepare_templates(max_requests=args.max_requests, diagnostics=diagnostics)))
+        if args.command == 'import-prepared':
+            from core.intent_recognizer import _TEMPLATES
+            target = configured_cache()
+            result = target.import_prepared(_TEMPLATES, TemplateCache(target.base_url, args.source_cache),
+                source_token=args.source_token, claim_digest=args.claim_digest,
+                authorization_sha256=args.authorization_sha256)
+        else:
+            result = (template_status() if args.command == 'status' else
+                      asyncio.run(prepare_templates(max_requests=args.max_requests, diagnostics=diagnostics)))
         print(json.dumps({'result': result, 'request_diagnostics': diagnostics}, ensure_ascii=True))
         return 0
     except (TemplateCacheError, qwen.EmbeddingError, quota.ProtectedDemoQuotaError) as error:

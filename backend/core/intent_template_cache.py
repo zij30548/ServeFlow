@@ -21,6 +21,7 @@ import os
 from pathlib import Path
 import secrets
 import stat
+import re
 
 from core import qwen_embedding as qwen
 
@@ -229,6 +230,75 @@ class TemplateCache:
             return {'state': 'ready', 'version': digest(identity), 'templates': identity['template_count'], 'batches': len(batches)}
         except (TemplateCacheError, qwen.EmbeddingError) as error:
             return {'state': 'unprepared' if str(error) == 'embedding_templates_not_prepared' else 'invalid', 'error_code': str(error)}
+
+    def import_prepared(self, snapshot, source, *, source_token, claim_digest, authorization_sha256):
+        """Explicit operator recovery, zero sends; never erase a failed claim.
+
+        Only a fully validated, separately prepared version may be published.
+        A private immutable receipt binds the new authorization and source to
+        the existing incomplete claim. No automatic recovery or model retry.
+        """
+        if (not isinstance(source, TemplateCache) or source.path == self.path
+                or source.base_url != self.base_url
+                or any(type(v) is not str or not re.fullmatch(r'[0-9a-f]{64}', v)
+                       for v in (source_token, claim_digest, authorization_sha256))):
+            raise TemplateCacheError()
+        identity, batches = self.plan(snapshot)
+        with source._version(identity) as source_fd:
+            values, token = source._load(source_fd, identity)
+        if token != source_token:
+            raise TemplateCacheError()
+        receipt = {'version': VERSION, 'action': 'explicit_import_after_incomplete_prepare',
+            'identity': identity, 'source_token': token,
+            'source_path_sha256': hashlib.sha256(str(source.path).encode()).hexdigest(),
+            'incomplete_claim_digest': claim_digest, 'authorization_sha256': authorization_sha256}
+        lock, root = None, None
+        try:
+            with self._version(identity) as target:
+                if fcntl is None: raise TemplateCacheError()
+                lock = os.open('prepare.lock', os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=target)
+                _file(lock)
+                try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError: raise TemplateCacheError('embedding_template_preparation_busy') from None
+                allowed = {'identity.json', 'prepare.lock', 'templates.json'}
+                allowed |= {f'batch-{i:03d}.{kind}.json' for i in range(len(batches)) for kind in ('claim', 'result')}
+                if set(os.listdir(target)) - allowed: raise TemplateCacheError()
+                incomplete = []
+                for i, batch in enumerate(batches):
+                    name = f'batch-{i:03d}'
+                    # This deliberately narrow repair does not replace any
+                    # previously validated/completed batch or merge versions.
+                    if _exists(target, name + '.result.json'): raise TemplateCacheError()
+                    if _exists(target, name + '.claim.json'):
+                        claim = _read(target, name + '.claim.json', maximum=2048)
+                        expected = {'version': VERSION, 'cache_version': digest(identity), 'batch': i,
+                            'payload_sha256': hashlib.sha256(qwen._payload(batch)).hexdigest()}
+                        if not _same(claim, expected): raise TemplateCacheError()
+                        incomplete.append(digest(claim))
+                if incomplete != [claim_digest]: raise TemplateCacheError()
+                root = _directory(self.path)
+                name = 'recovery-' + authorization_sha256 + '.json'
+                if _exists(root, name):
+                    if not _same(_read(root, name, maximum=4096), receipt): raise TemplateCacheError()
+                else:
+                    # A ready target with no matching receipt is not adopted.
+                    if _exists(target, 'templates.json'): raise TemplateCacheError()
+                    _write(root, name, receipt)
+                if _exists(target, 'templates.json'):
+                    if self._load(target, identity)[1] != token: raise TemplateCacheError()
+                    imported = False
+                else:
+                    _publish(target, 'templates.json', _sealed({'identity': identity, 'vectors': values}))
+                    imported = True
+                return {'ready': True, 'templates': len(values), 'model_requests': 0,
+                    'imported': imported, 'source_token': token, 'preserved_incomplete_claim': claim_digest}
+        except TemplateCacheError:
+            raise
+        except (OSError, ValueError, TypeError):
+            raise TemplateCacheError() from None
+        finally:
+            if root is not None: os.close(root)
+            if lock is not None: os.close(lock)
 
     async def prepare(self, snapshot, fetch, *, max_requests):
         identity, batches = self.plan(snapshot)
