@@ -13,6 +13,8 @@ from core import protected_demo_quota as quota
 from core import qwen_embedding as qwen
 from core.intent_template_cache import TemplateCache, TemplateCacheError, digest
 
+QWEN_MATCH_TIMEOUT = 17.0
+
 
 class IntentEmbedding:
     MODEL = 'BAAI/bge-m3'
@@ -71,7 +73,7 @@ class IntentEmbedding:
 
     async def _qwen_vectors(self, message, snapshot, fingerprint, local_embed):
         try:
-            async with asyncio.timeout(8):
+            async with asyncio.timeout(QWEN_MATCH_TIMEOUT):
                 groups, token = await asyncio.to_thread(self.template_cache.read, snapshot)
                 if token != self._last_cache_token:
                     self.retry_at = 0.

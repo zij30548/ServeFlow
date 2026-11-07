@@ -13,6 +13,7 @@ import pytest
 
 from core import protected_demo_quota as quota
 from core import qwen_embedding as embedding
+from core import intent_embedding as matching
 from core.intent_embedding import IntentEmbedding
 from core.intent_recognizer import _TEMPLATES
 
@@ -175,4 +176,39 @@ def test_preparation_and_query_use_different_bounded_request_deadlines(isolated,
         assert len(values[0]) == 1024 and diagnostic['purpose'] == 'prepare'
         assert diagnostic['deadline_s'] == .2 and diagnostic['phase'] == 'complete'
         assert diagnostic['body_complete_ms'] is not None and diagnostic['error_code'] is None
+    asyncio.run(run())
+
+
+def test_qwen_live_match_does_not_keep_the_old_eight_second_outer_limit(isolated,monkeypatch):
+    async def run():
+        # Scale the policy to keep this deterministic offline check quick.
+        monkeypatch.setattr(embedding,'TIMEOUT',.12)
+        monkeypatch.setattr(matching,'QWEN_MATCH_TIMEOUT',.15)
+        async def provider(request):
+            await asyncio.sleep(.08)
+            return httpx.Response(200,json=body(request))
+        monkeypatch.setattr(embedding,'_delegate',lambda:httpx.MockTransport(provider))
+        client=IntentEmbedding()
+        async def local_preparation(texts):return [[1.]+[0.]*1023 for _ in texts]
+        await client.template_cache.prepare(_TEMPLATES,local_preparation,max_requests=3)
+        _,vector,source=await client.vectors('controlled',_TEMPLATES,lambda t:[1.,0.])
+        assert source=='qwen/'+embedding.MODEL and len(vector)==1024
+        assert client.last_diagnostic['deadline_s']==.12 and client.last_error is None
+        assert quota.status()['used']==1
+    asyncio.run(run())
+
+
+def test_qwen_match_deadline_cancels_and_charges_once_without_local_retry(isolated,monkeypatch):
+    async def run():
+        monkeypatch.setattr(embedding,'TIMEOUT',.15)
+        monkeypatch.setattr(matching,'QWEN_MATCH_TIMEOUT',.04)
+        calls=[]
+        async def provider(request):calls.append(request);await asyncio.Event().wait()
+        monkeypatch.setattr(embedding,'_delegate',lambda:httpx.MockTransport(provider))
+        client=IntentEmbedding()
+        async def local_preparation(texts):return [[1.]+[0.]*1023 for _ in texts]
+        await client.template_cache.prepare(_TEMPLATES,local_preparation,max_requests=3)
+        result=await client.vectors('controlled',_TEMPLATES,lambda t:[1.,0.])
+        assert result[2]=='local-ngram' and client.last_error=='embedding_match_timeout'
+        assert len(calls)==quota.status()['used']==1 and quota.status()['unresolved']==0
     asyncio.run(run())

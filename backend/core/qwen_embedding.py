@@ -26,7 +26,7 @@ from core import protected_demo_quota as quota
 MODEL = "qwen3.7-text-embedding"
 DIMENSIONS = 1024
 BATCH_SIZE = 20
-TIMEOUT = 6.0
+TIMEOUT = 15.0
 PREPARE_TIMEOUT = 30.0
 ENCODING_FORMAT = "base64"
 REQUEST_LIMIT = 65536
