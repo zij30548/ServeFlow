@@ -96,7 +96,8 @@ def _api_environment(config):
         origin = model_origin(config["model_origin"])
         environment.update(INTENT_EMBEDDING_PROVIDER="qwen",
             QWEN_EMBEDDING_API_KEY=config["api_key"],
-            QWEN_EMBEDDING_BASE_URL=origin.removesuffix("/apps/anthropic") + "/compatible-mode/v1")
+            QWEN_EMBEDDING_BASE_URL=origin.removesuffix("/apps/anthropic") + "/compatible-mode/v1",
+            QWEN_INTENT_CACHE_DIRECTORY=str(DATA / "intent-templates"))
     return environment
 
 
@@ -241,8 +242,11 @@ def health(web_mode=False):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("api", "web", "api-health", "web-health", "init", "verify", "quota-init", "quota-status"))
+    parser.add_argument("command", choices=("api", "web", "api-health", "web-health", "init", "verify", "quota-init", "quota-status", "templates-status", "prepare-templates"))
+    parser.add_argument("--max-requests", type=int)
     args = parser.parse_args(argv)
+    if (args.command == "prepare-templates") != (args.max_requests is not None):
+        parser.error("prepare-templates requires --max-requests; other commands do not accept it")
     try:
         if args.command.endswith("-health"):
             health(args.command == "web-health")
@@ -259,6 +263,21 @@ def main(argv=None):
             result = quota.status()
         elif args.command == "init":
             result = initialize_mysql(environment, config)
+        elif args.command in {"templates-status", "prepare-templates"}:
+            import asyncio
+            from core.intent_templates import template_status, prepare_templates
+            diagnostics = []
+            try:
+                result = (template_status() if args.command == "templates-status" else
+                    asyncio.run(prepare_templates(max_requests=args.max_requests, diagnostics=diagnostics)))
+            except Exception as error:
+                from core.intent_template_cache import TemplateCacheError
+                from core.qwen_embedding import EmbeddingError
+                if isinstance(error, (TemplateCacheError, EmbeddingError, quota.ProtectedDemoQuotaError)):
+                    print(json.dumps({"result": "stopped", "error_code": error.code, "request_diagnostics": diagnostics}))
+                    return 2
+                raise
+            result = {**result, "request_diagnostics": diagnostics}
         else:
             result = _verify_reader(environment)
             quota.verify()

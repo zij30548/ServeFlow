@@ -17,7 +17,7 @@ KEY = "controlled-only-not-a-real-key"
 
 
 @pytest.fixture(autouse=True)
-def offline(monkeypatch):
+def offline(monkeypatch, tmp_path):
     def deny(*a, **k):
         raise AssertionError("real services forbidden")
     monkeypatch.setattr(socket.socket, "connect", deny)
@@ -27,6 +27,7 @@ def offline(monkeypatch):
     monkeypatch.setenv("INTENT_EMBEDDING_PROVIDER", "qwen")
     monkeypatch.setenv("QWEN_EMBEDDING_API_KEY", KEY)
     monkeypatch.setenv("QWEN_EMBEDDING_BASE_URL", BASE)
+    monkeypatch.setenv("QWEN_INTENT_CACHE_DIRECTORY", str(tmp_path.resolve() / "templates"))
 
 
 @pytest.fixture
@@ -51,6 +52,14 @@ def output(request, *, changes=None):
 
 async def send(texts=None, **kwargs):
     return await e.request_embeddings(texts or ["controlled question"], base_url=BASE, api_key=KEY, **kwargs)
+
+
+async def prepare_cache(embedding, templates, *, real_adapter=True):
+    async def fetch(texts):
+        if real_adapter: return await e.request_embeddings(texts, base_url=BASE, api_key=KEY, purpose='prepare')
+        return [[1.] + [0.] * 1023 for _ in texts]
+    count = (sum(len(v) for v in templates.values()) + 19) // 20
+    return await embedding.template_cache.prepare(templates, fetch, max_requests=count)
 
 
 @pytest.mark.parametrize("base", [BASE, "https://dashscope.aliyuncs.com/compatible-mode/v1"])
@@ -135,6 +144,8 @@ def test_template_batch_size_cache_invalidation_and_cold_single_flight(monkeypat
         embedding = IntentEmbedding()
         templates = {"a": [str(i) for i in range(41)]}
         local = lambda t: [1., 0.]
+        # Preparation is explicit; concurrent live questions never initialize.
+        await prepare_cache(embedding, templates)
         results = await asyncio.gather(*(embedding.vectors("q" + str(i), templates, local) for i in range(3)))
         assert [len(c) for c in calls[:3]] == [20, 20, 1]
         assert len(calls) == 6  # three template batches + three questions
@@ -142,6 +153,10 @@ def test_template_batch_size_cache_invalidation_and_cold_single_flight(monkeypat
         assert embedding.status()["model"] == e.MODEL
         await embedding.vectors("later", templates, local)
         assert len(calls) == 7 and calls[-1] == ["later"]
+        before = len(calls)
+        assert (await embedding.vectors("after learn", {"a": ["new template"]}, local))[2] == 'local-ngram'
+        assert len(calls) == before
+        await prepare_cache(embedding, {"a": ["new template"]})
         await embedding.vectors("after learn", {"a": ["new template"]}, local)
         assert calls[-2:] == [["new template"], ["after learn"]]
     asyncio.run(run())
@@ -156,6 +171,7 @@ def test_query_failure_falls_back_to_local_space_with_visible_source_and_cooldow
             return httpx.Response(503, text="private body") if texts == ["question"] else output(request)
         monkeypatch.setattr(e, "_delegate", lambda: httpx.MockTransport(provider))
         embedding = IntentEmbedding()
+        await prepare_cache(embedding, {"a": ["template"]})
         for question in ("question", "during cooldown"):
             groups, vector, source = await embedding.vectors(question, {"a": ["template"]}, lambda t: [1., 0.])
             assert source == "local-ngram" and len(vector) == len(groups["a"][0]) == 2
@@ -251,6 +267,8 @@ def test_simultaneous_requests_cannot_exceed_global_cap(counted, monkeypatch):
 def test_uncertain_or_broken_accounting_blocks_fallback_and_new_sends(counted, monkeypatch, fault):
     async def run():
         calls = []
+        embedding = IntentEmbedding()
+        await prepare_cache(embedding, {"a": ["t"]}, real_adapter=False)
         def provider(request): calls.append(request); return output(request)
         monkeypatch.setattr(e, "_delegate", lambda: httpx.MockTransport(provider))
         if fault == "missing": (counted / "journal.jsonl").unlink()
@@ -266,7 +284,6 @@ def test_uncertain_or_broken_accounting_blocks_fallback_and_new_sends(counted, m
                 original(fd, raw)
             monkeypatch.setattr(q, "_write", fail_finish)
         with q.request_scope():
-            embedding = IntentEmbedding()
             with pytest.raises(q.ProtectedDemoQuotaError):
                 await embedding.vectors("q", {"a": ["t"]}, lambda t: [1., 0.])
             with pytest.raises(q.ProtectedDemoQuotaError): q.raise_if_request_blocked()
@@ -310,6 +327,8 @@ def test_real_sdk_and_recognizer_use_qwen_templates_and_messages_in_same_request
         monkeypatch.setattr(m, "_delegate", lambda: httpx.MockTransport(chat_provider))
         recognizer = IntentRecognizer(KEY, base_url=messages_base, model=q.MODEL)
         try:
+            from core.intent_recognizer import _TEMPLATES
+            await prepare_cache(recognizer._embedding, _TEMPLATES)
             with q.request_scope():
                 result = await recognizer.recognize("退款进度怎么查")
                 q.raise_if_request_blocked()

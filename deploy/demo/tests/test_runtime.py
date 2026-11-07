@@ -204,6 +204,12 @@ def test_default_api_keeps_remote_embedding_disabled(prepare, configuration):
     assert "QWEN_EMBEDDING_API_KEY" not in result and "QWEN_EMBEDDING_BASE_URL" not in result
 
 
+def test_qwen_cache_uses_existing_private_app_volume(prepare, configuration):
+    runtime.os.environ['DEMO_INTENT_EMBEDDING_PROVIDER']='qwen'
+    result=runtime.prepare_api(configuration)
+    assert result['QWEN_INTENT_CACHE_DIRECTORY']==str(runtime.DATA/'intent-templates')
+
+
 @pytest.mark.parametrize("key,value", [("DEMO_INTENT_EMBEDDING_PROVIDER", "siliconflow"),
     ("DEMO_INTENT_EMBEDDING_PROVIDER", "QWEN"), ("DEMO_INTENT_EMBEDDING_PROVIDER", ""),
     ("QWEN_EMBEDDING_BASE_URL", "https://evil.test/compatible-mode/v1"),
@@ -424,6 +430,27 @@ def test_quota_initializer_runs_once_only_for_absent_directory(dispatch, monkeyp
     monkeypatch.setattr(quota, "verify", lambda *a, **k: pytest.fail("absent counter verified"))
     assert runtime.main(["quota-init"]) == 0
     initialize.assert_called_once_with()
+
+
+def test_template_ops_are_explicit_and_never_initialize_quota_or_touch_sql(dispatch, monkeypatch, capsys):
+    _,quota,_=dispatch
+    from core import intent_templates
+    calls=[]
+    async def prepare_templates(*,max_requests,diagnostics):
+        calls.append(max_requests)
+        return {'ready':True,'new_requests':3}
+    monkeypatch.setattr(intent_templates,'prepare_templates',prepare_templates)
+    monkeypatch.setattr(intent_templates,'template_status',lambda:{'state':'unprepared'})
+    monkeypatch.setattr(quota,'initialize',lambda:pytest.fail('quota reset'))
+    monkeypatch.setattr(runtime,'_verify_reader',lambda *a:pytest.fail('unexpected SQL'))
+    assert runtime.main(['templates-status'])==0 and calls==[]
+    assert runtime.main(['prepare-templates','--max-requests','3'])==0 and calls==[3]
+    assert 'new_requests' in capsys.readouterr().out
+
+
+def test_prepare_templates_requires_cap_before_any_private_bootstrap(monkeypatch):
+    monkeypatch.setattr(runtime,'load',lambda *a,**k:pytest.fail('private bootstrap before explicit cap'))
+    with pytest.raises(SystemExit):runtime.main(['prepare-templates'])
 
 
 def test_api_starts_one_worker_only_after_schema_quota_and_cache_checks(dispatch, monkeypatch):

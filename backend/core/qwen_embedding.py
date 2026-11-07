@@ -9,8 +9,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import math
 import re
+import time
 from urllib.parse import urlsplit
 
 import httpx
@@ -21,10 +23,12 @@ MODEL = "qwen3.7-text-embedding"
 DIMENSIONS = 1024
 BATCH_SIZE = 20
 TIMEOUT = 6.0
+PREPARE_TIMEOUT = 15.0
 REQUEST_LIMIT = 65536
 RESPONSE_LIMIT = 1024 * 1024
 MAX_TEXT_CHARS = 4000
 _WORKSPACE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cn-beijing\.maas\.aliyuncs\.com\Z")
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingError(ValueError):
@@ -32,7 +36,7 @@ class EmbeddingError(ValueError):
     _CODES = frozenset({"embedding_beijing_endpoint_required", "embedding_api_key_required",
         "embedding_input_invalid", "embedding_request_limit", "embedding_response_invalid",
         "embedding_response_limit", "embedding_http_error", "embedding_timeout",
-        "embedding_network_error", "embedding_unavailable"})
+        "embedding_network_error", "embedding_unavailable", "embedding_provider_required"})
 
     def __init__(self, code="embedding_unavailable"):
         self.code = code if code in self._CODES else "embedding_unavailable"
@@ -116,10 +120,19 @@ def _delegate():
         limits=httpx.Limits(max_connections=2, max_keepalive_connections=1))
 
 
-async def request_embeddings(texts, *, base_url, api_key):
+async def request_embeddings(texts, *, base_url, api_key, purpose="query", diagnostic=None):
     """One bounded physical request; reserve before send, never refund or retry."""
     base_url, api_key = canonical_base_url(base_url), validate_key(api_key)
     raw = _payload(texts)
+    if purpose not in {"query", "prepare"} or diagnostic is not None and type(diagnostic) is not dict:
+        raise EmbeddingError("embedding_input_invalid")
+    timeout = PREPARE_TIMEOUT if purpose == "prepare" else TIMEOUT
+    started = time.monotonic()
+    elapsed = lambda: round(max(0., time.monotonic() - started) * 1000, 2)
+    info = {"purpose": purpose, "phase": "admission", "deadline_s": timeout,
+        "admission_ms": None,
+        "headers_ms": None, "first_byte_ms": None, "body_complete_ms": None,
+        "response_bytes": 0, "http_status": None, "error_code": None}
     operation, store, response, client = None, None, None, None
     entered = False
     status = None
@@ -132,7 +145,7 @@ async def request_embeddings(texts, *, base_url, api_key):
                     or api_key != os.getenv("QWEN_EMBEDDING_API_KEY")):
                 raise quota.ProtectedDemoQuotaError("demo_model_request_rejected")
             quota.raise_if_request_blocked()
-        client = httpx.AsyncClient(transport=_delegate(), timeout=TIMEOUT,
+        client = httpx.AsyncClient(transport=_delegate(), timeout=timeout,
                                   follow_redirects=False, trust_env=False)
         request = client.build_request("POST", base_url + "/embeddings", content=raw,
             headers={"Authorization": "Bearer " + api_key, "Content-Type": "application/json",
@@ -146,10 +159,13 @@ async def request_embeddings(texts, *, base_url, api_key):
                                       payload_sha256=hashlib.sha256(raw).hexdigest())
         if current.cancelling():
             raise asyncio.CancelledError()
-        async with asyncio.timeout(TIMEOUT):
+        info["admission_ms"] = elapsed()
+        async with asyncio.timeout(timeout):
+            info["phase"] = "waiting_headers"
             entered = True
             response = await client.send(request, stream=True)
             status = response.status_code
+            info.update(headers_ms=elapsed(), http_status=status, phase="reading_body")
             if (response.headers.get("content-encoding", "identity").lower() != "identity"
                     or "content-length" in response.headers and
                        (not response.headers["content-length"].isdigit()
@@ -157,22 +173,30 @@ async def request_embeddings(texts, *, base_url, api_key):
                 raise EmbeddingError("embedding_response_limit")
             if response.is_stream_consumed:
                 body = response.content
+                info.update(first_byte_ms=elapsed() if body else None, response_bytes=len(body))
             else:
                 chunks, size = [], 0
                 async for part in response.aiter_raw():
+                    if part and info["first_byte_ms"] is None: info["first_byte_ms"] = elapsed()
                     size += len(part)
+                    info["response_bytes"] = size
                     if size > RESPONSE_LIMIT:
                         raise EmbeddingError("embedding_response_limit")
                     chunks.append(part)
                 body = b"".join(chunks)
             if len(body) > RESPONSE_LIMIT:
                 raise EmbeddingError("embedding_response_limit")
+            info["body_complete_ms"] = elapsed()
+            info["phase"] = "accounting"
         if operation is not None:
             completed, operation = operation, None
             store.finish(completed, "received" if 200 <= status < 300 else "http_error", status)
         if not 200 <= status < 300:
             raise EmbeddingError("embedding_http_error")
-        return parse_vectors(body, len(texts))
+        info["phase"] = "validating_vectors"
+        vectors = parse_vectors(body, len(texts))
+        info["phase"] = "complete"
+        return vectors
     except BaseException as error:
         cancelled = isinstance(error, asyncio.CancelledError)
         if operation is not None:
@@ -188,13 +212,16 @@ async def request_embeddings(texts, *, base_url, api_key):
                 error = quota.ProtectedDemoQuotaError()
         if isinstance(error, quota.ProtectedDemoQuotaError):
             quota.block_request(error)
+            info["error_code"] = error.code
         if cancelled:
+            if info["error_code"] is None: info["error_code"] = "embedding_cancelled"
             raise asyncio.CancelledError() from None
         if isinstance(error, quota.ProtectedDemoQuotaError):
             raise error from None
         code = ("embedding_timeout" if isinstance(error, (TimeoutError, httpx.TimeoutException)) else
                 "embedding_network_error" if isinstance(error, httpx.RequestError) else
                 error.code if isinstance(error, EmbeddingError) else "embedding_unavailable")
+        info["error_code"] = code
         raise EmbeddingError(code) from None
     finally:
         for resource in (response, client):
@@ -203,3 +230,12 @@ async def request_embeddings(texts, *, base_url, api_key):
                     await asyncio.wait_for(resource.aclose(), .25)
                 except BaseException:
                     pass
+        info["elapsed_ms"] = elapsed()
+        info["delegate_entered"] = entered
+        if diagnostic is not None:
+            diagnostic.clear()
+            diagnostic.update(info)
+        if info["error_code"]:
+            logger.warning("embedding_failure purpose=%s phase=%s code=%s elapsed_ms=%s headers_ms=%s first_byte_ms=%s response_bytes=%s",
+                info["purpose"], info["phase"], info["error_code"], info["elapsed_ms"],
+                info["headers_ms"], info["first_byte_ms"], info["response_bytes"])

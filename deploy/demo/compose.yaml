@@ -169,6 +169,7 @@ services:
     restart: "no"
     environment:
       DEMO_PUBLIC_ORIGIN: ${DEMO_PUBLIC_ORIGIN:?set the reviewed HTTPS origin}
+      DEMO_INTENT_EMBEDDING_PROVIDER: ${DEMO_INTENT_EMBEDDING_PROVIDER:-local}
     secrets:
       - api_config
       - mysql_root_password

@@ -188,6 +188,9 @@ class IntentRecognizer:
         history 格式：[{"role": "user"/"assistant", "content": "..."}]
         """
         key = self._cache_key(message, history)
+        if getattr(self._embedding, 'provider', None) == 'qwen':
+            token = await self._embedding.cache_token(_TEMPLATES)
+            key = hashlib.sha256((key + ':' + token).encode()).hexdigest()
         if key in self._cache and time.monotonic() < self._cache_expiries.get(key, 0):
             self.cache_hits += 1
             return self._cache[key]

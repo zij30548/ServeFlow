@@ -11,6 +11,7 @@ import httpx
 
 from core import protected_demo_quota as quota
 from core import qwen_embedding as qwen
+from core.intent_template_cache import TemplateCache, TemplateCacheError, digest
 
 
 class IntentEmbedding:
@@ -37,16 +38,76 @@ class IntentEmbedding:
         self.remote_templates = {}
         self.local_templates = {}
         self.lock = asyncio.Lock()
+        self.template_cache = TemplateCache(self.base_url) if self.provider == 'qwen' else None
+        self.last_diagnostic = {}
+        self._last_cache_token = None
 
     def status(self):
-        return {'configured_provider': self.provider, 'online_configured': self.enabled,
+        result = {'configured_provider': self.provider, 'online_configured': self.enabled,
                 'model': self.model if self.enabled else 'local-ngram-256',
                 'cooldown': time.monotonic() < self.retry_at, 'last_error': self.last_error}
+        if self.provider == 'qwen':
+            from core.intent_recognizer import _TEMPLATES
+            result['template_cache'] = self.template_cache.status(_TEMPLATES)
+            result['last_request'] = dict(self.last_diagnostic)
+        return result
+
+    async def cache_token(self, templates):
+        """Make classification cache change when templates become ready/invalid."""
+        snapshot = {k: tuple(v) for k, v in templates.items()}
+        def token():
+            try:
+                identity, _ = self.template_cache.plan(snapshot)
+            except (TemplateCacheError, qwen.EmbeddingError) as error:
+                return error.code
+            try: return self.template_cache.read(snapshot)[1]
+            except TemplateCacheError as error:
+                return error.code + ':' + digest(identity)
+        try:
+            async with asyncio.timeout(1):
+                return await asyncio.to_thread(token)
+        except TimeoutError:
+            return 'embedding_template_cache_read_timeout'
+
+    async def _qwen_vectors(self, message, snapshot, fingerprint, local_embed):
+        try:
+            async with asyncio.timeout(8):
+                groups, token = await asyncio.to_thread(self.template_cache.read, snapshot)
+                if token != self._last_cache_token:
+                    self.retry_at = 0.
+                    self._last_cache_token = token
+                if time.monotonic() < self.retry_at:
+                    return self._local_vectors(message, snapshot, fingerprint, local_embed)
+                vector = (await qwen.request_embeddings([message], base_url=self.base_url, api_key=self.key,
+                    purpose='query', diagnostic=self.last_diagnostic))[0]
+                self.remote_templates = {fingerprint: groups}
+                self.last_error = None
+                return groups, vector, self.source
+        except asyncio.CancelledError:
+            raise
+        except quota.ProtectedDemoQuotaError:
+            raise
+        except TemplateCacheError as error:
+            self.remote_templates.clear()
+            self.last_error = error.code
+            self.last_diagnostic = {'purpose': 'query', 'phase': 'template_cache',
+                'error_code': error.code, 'response_bytes': 0, 'http_status': None}
+        except Exception as error:
+            self.last_error = error.code if isinstance(error, qwen.EmbeddingError) else 'embedding_match_timeout' if isinstance(error, TimeoutError) else 'embedding_unavailable'
+            self.retry_at = time.monotonic() + 60
+        return self._local_vectors(message, snapshot, fingerprint, local_embed)
+
+    def _local_vectors(self, message, snapshot, fingerprint, local_embed):
+        if fingerprint not in self.local_templates:
+            self.local_templates = {fingerprint: {key: [local_embed(t) for t in group] for key, group in snapshot.items()}}
+        return self.local_templates[fingerprint], local_embed(message), 'local-ngram'
 
     async def vectors(self, message, templates, local_embed):
         # 快照防止 learn 在远程请求期间改变模板顺序或数量。
         snapshot = {key: tuple(texts) for key, texts in templates.items()}
         fingerprint = hashlib.sha256(json.dumps([(str(k), v) for k, v in snapshot.items()], ensure_ascii=True).encode()).hexdigest()
+        if self.provider == 'qwen':
+            return await self._qwen_vectors(message, snapshot, fingerprint, local_embed)
         if self.enabled and time.monotonic() >= self.retry_at:
             try:
                 async with asyncio.timeout(8):
@@ -87,9 +148,7 @@ class IntentEmbedding:
                 self.last_error = (ex.code if isinstance(ex, qwen.EmbeddingError) else
                                    f'http_{ex.response.status_code}' if isinstance(ex, httpx.HTTPStatusError) else type(ex).__name__)
                 self.retry_at = time.monotonic() + 60
-        if fingerprint not in self.local_templates:
-            self.local_templates = {fingerprint: {key: [local_embed(t) for t in group] for key, group in snapshot.items()}}
-        return self.local_templates[fingerprint], local_embed(message), 'local-ngram'
+        return self._local_vectors(message, snapshot, fingerprint, local_embed)
 
     async def _request(self, client, texts):
         if self.provider == 'qwen':
