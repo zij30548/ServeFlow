@@ -25,6 +25,8 @@
 !backend/skills/**
 !backend/tooling/
 !backend/tooling/**
+!backend/workflows/
+!backend/workflows/**
 !backend/requirements.txt
 !backend/requirements-demo.txt
 !frontend/

@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from collections import deque
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -6,6 +7,7 @@ import httpx
 import pytest
 
 from api import main
+from agents.agent_orchestrator import AgentOrchestrator
 from core.intent_recognizer import IntentCategory, UrgencyLevel
 from demo_business.session import COOKIE_NAME, DemoSessionService
 from demo_business.store import DemoStoreError
@@ -73,8 +75,7 @@ async def test_demo_disabled_keeps_original_routes_compatible(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_chat_authority_is_server_bound_and_checked_before_model(demo, monkeypatch):
-    store, sessions = demo
-    captured = []
+    store, _ = demo
 
     @asynccontextmanager
     async def conversation(*args):
@@ -83,16 +84,10 @@ async def test_chat_authority_is_server_bound_and_checked_before_model(demo, mon
     intent = SimpleNamespace(intent=IntentCategory.ORDER_STATUS, intent_group='query',
                              urgency=UrgencyLevel.LOW, confidence=.9, entities={}, source_scores={})
 
-    async def run(req):
-        captured.append(req)
-        return SimpleNamespace(request_id=req.request_id, response='受控工具接线结果，不是实时模型回答',
-            intent=req.intent, agent_type=SimpleNamespace(value='general'), agent_types=[],
-            primary_agent=None, supporting_agents=[], tools_used=['read_demo_order'], tool_traces=[],
-            routing_reason='controlled', routing_confidence=.9, escalated=False,
-            status='success', retryable=False, error_code=None)
-
-    orchestrator = SimpleNamespace(recognize_intent=AsyncMock(return_value=intent), run=run,
-                                   get_tool_trace=lambda request_id: {})
+    orchestrator = AgentOrchestrator.__new__(AgentOrchestrator)
+    orchestrator._recent_tool_traces = deque()
+    orchestrator.recognize_intent = AsyncMock(return_value=intent)
+    orchestrator.run = AsyncMock()
     memory = SimpleNamespace(conversation=conversation, get_turn_receipt=AsyncMock(return_value=None),
         get_context=AsyncMock(return_value=SimpleNamespace(recent_messages=[], state={}, to_prompt_text=lambda: '')),
         commit_turn=AsyncMock())
@@ -104,10 +99,12 @@ async def test_chat_authority_is_server_bound_and_checked_before_model(demo, mon
         body = {'message': '查DEMO-1001', 'user_id': 'client-forged-owner'}
         assert (await client.post('/chat', json=body)).status_code == 403
         orchestrator.recognize_intent.assert_not_called()
+        store.read_order.assert_not_called()
         response = await client.post('/chat', json=body, headers={
             'Origin': 'http://127.0.0.1:5173', 'X-ServeFlow-Demo-CSRF': bootstrap['csrf_token'],
         })
         assert response.status_code == 200
-        assert captured[0].user_id == bootstrap['workspace_user_id']
-        assert captured[0].demo_customer_id == 'demo-customer-a'
-        assert captured[0].demo_order_reader == store.read_order
+        assert response.json()['route_kind'] == 'workflow'
+        assert memory.commit_turn.call_args.args[0] == bootstrap['workspace_user_id']
+        store.read_order.assert_awaited_once_with('demo-customer-a', 'DEMO-1001')
+        orchestrator.run.assert_not_awaited()

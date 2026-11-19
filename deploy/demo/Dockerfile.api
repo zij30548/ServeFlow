@@ -49,6 +49,7 @@ COPY backend/memory ./memory
 COPY backend/monitor ./monitor
 COPY backend/skills ./skills
 COPY backend/tooling ./tooling
+COPY backend/workflows ./workflows
 COPY deploy/demo/runtime.py deploy/demo/settings.py deploy/demo/model_cache.py /opt/serveflow/deploy/demo/
 COPY LICENSE NOTICE.md /opt/serveflow/
 COPY deploy/demo/licenses /opt/serveflow/third-party-licenses

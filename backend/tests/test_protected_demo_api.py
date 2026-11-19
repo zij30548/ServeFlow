@@ -63,7 +63,10 @@ async def services(monkeypatch, tmp_path):
             agent_type=SimpleNamespace(value="general"), agent_types=[], primary_agent=None, supporting_agents=[], tools_used=[], tool_traces=[],
             routing_reason="controlled", routing_confidence=.9, escalated=False, status="success", retryable=False, error_code=None)
     orc = SimpleNamespace(recognize_intent=AsyncMock(return_value=intent), run=AsyncMock(side_effect=run),
-        get_tool_trace=lambda k: traces.get(k), get_stats=lambda: {})
+        get_tool_trace=lambda k: traces.get(k), get_stats=lambda: {},
+        _record_tool_trace=lambda result: traces.update({
+            result.request_id: {"request_id": result.request_id, "tool_calls": result.tool_traces},
+        }))
     for name, value in {"_demo_store": store, "_demo_sessions": sessions, "_memory": memory, "_orchestrator": orc,
         "_profile_updater": None, "_monitor": SimpleNamespace(_prom={}, summary=lambda: {"agent_stats": {}, "tool_stats": {}})}.items():
         monkeypatch.setattr(main, name, value)
@@ -82,10 +85,32 @@ async def bootstrap(http):
 
 
 def body(key="one", **extra):
-    return {"message": "查询DEMO-1001", "user_id": "forged-workspace", "conv_id": "controlled-conversation", "client_request_id": key, **extra}
+    return {"message": "请介绍客服可以提供哪些帮助", "user_id": "forged-workspace", "conv_id": "controlled-conversation", "client_request_id": key, **extra}
 
 
 def csrf(data): return {"Origin": ORIGIN, "X-ServeFlow-Demo-CSRF": data["csrf_token"]}
+
+
+@pytest.mark.asyncio
+async def test_protected_order_workflow_preserves_csrf_identity_receipt_and_trace_owner(services):
+    async with client("alice") as a, client("bob") as b:
+        aa, _ = await bootstrap(a)
+        await bootstrap(b)
+        turn = body(message="查询DEMO-1001")
+        assert (await a.post("/chat", json=turn)).status_code == 403
+        services.store.read_order.assert_not_awaited()
+        reply = await a.post("/chat", json=turn, headers=csrf(aa))
+        assert reply.status_code == 200
+        result = reply.json()
+        assert result["route_kind"] == "workflow" and result["primary_agent"] == ""
+        services.store.read_order.assert_awaited_once_with("demo-customer-a", "DEMO-1001")
+        services.orc.run.assert_not_awaited()
+        assert (await a.post("/chat", json=turn, headers=csrf(aa))).json() == result
+        assert services.store.read_order.await_count == 1
+        path = "/trace/tool/" + result["request_id"]
+        assert (await a.get(path)).json()["trace"]["tool_calls"][0]["execution_kind"] == "workflow"
+        assert not (await b.get(path)).json()["found"]
+        assert services.usage.status()["used"] == 0
 
 
 @pytest.mark.asyncio

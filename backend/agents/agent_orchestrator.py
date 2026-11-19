@@ -27,7 +27,7 @@ from collections import deque
 from datetime import datetime
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional, Tuple
 
 from anthropic import APITimeoutError
 from core.model_client import AsyncAnthropic
@@ -241,6 +241,14 @@ class Request:
         return self.order_history if self.order_history is not None else self.history
 
 
+def update_conversation_state(req: Request) -> None:
+    if req.conversation_state is not None:
+        from core.conversation_state import merge_state
+        req.conversation_state = merge_state(req.conversation_state, req.entities,
+            req.intent_group, req.message, req.request_id)
+        req.entities = req.conversation_state["entities"]
+
+
 _READONLY_SCOPE_NOTICE = (
     "这里只能查询和整理信息，不能执行退款、关闭自动续费、冻结、解绑或其他业务变更；"
     "这些操作尚未完成，需通过已核实的业务渠道处理。"
@@ -369,7 +377,7 @@ def _project_business_result(req, *, order=None, policy=None, diagnostic=None,
 class OrchestratorResult:
     request_id:  str
     response:    str
-    agent_type:  AgentType
+    agent_type:  Optional[AgentType]
     intent:      Optional[IntentCategory]
     escalated:   bool  = False
     latency_ms:  float = 0.0
@@ -383,6 +391,8 @@ class OrchestratorResult:
     status: str = "success"
     retryable: bool = False
     error_code: Optional[str] = None
+    route_kind: Literal["agent", "workflow", "hybrid"] = "agent"
+    workflow_id: Optional[Literal["order_lookup"]] = None
 
 
 @dataclass
@@ -1314,6 +1324,8 @@ class AgentOrchestrator:
     def _record_tool_trace(self, result: OrchestratorResult) -> None:
         trace = {
             "request_id": result.request_id,
+            "route_kind": result.route_kind,
+            "workflow_id": result.workflow_id,
             "timestamp": datetime.now().isoformat(),
             "intent": result.intent.value if result.intent else None,
             "primary_agent": result.primary_agent.value if result.primary_agent else None,
@@ -1358,11 +1370,7 @@ class AgentOrchestrator:
             req.intent_confidence = intent_result.confidence
             req.entities = intent_result.entities
 
-        if req.conversation_state is not None:
-            from core.conversation_state import merge_state
-            req.conversation_state = merge_state(req.conversation_state, req.entities,
-                req.intent_group, req.message, req.request_id)
-            req.entities = req.conversation_state["entities"]
+        update_conversation_state(req)
 
         if self._needs_clarification(req):
             clarification = _readonly_scope_result(req, AgentCallResult(
@@ -1792,14 +1800,18 @@ class AgentOrchestrator:
             return False
         return all(not agent.stats.available() for agent in agents)
 
-    async def _execute(self, req: Request, agent_type: AgentType) -> AgentResponse:
+    async def run_technical_branch(self, req: Request) -> AgentResponse:
+        """Run only the selected technical role inside a mixed request."""
+        return await self._execute(req, AgentType.TECHNICAL, allow_fallback=False)
+
+    async def _execute(self, req: Request, agent_type: AgentType, *, allow_fallback: bool = True) -> AgentResponse:
         """执行 Agent，失败时降级到 GeneralAgent。"""
         agent = self._best_agent(agent_type)
-        if agent is None:
+        if agent is None and allow_fallback:
             agent = self._best_agent(AgentType.GENERAL)
         if agent is None:
             return AgentResponse(
-                agent_type=AgentType.GENERAL,
+                agent_type=AgentType.GENERAL if allow_fallback else agent_type,
                 content="服务暂时不可用，请稍后重试。",
                 success=False,
                 status="failed",
@@ -1813,7 +1825,7 @@ class AgentOrchestrator:
             return response
 
         # 专属 Agent 失败时降级到 GeneralAgent
-        if not response.success and agent_type not in (AgentType.GENERAL, AgentType.ESCALATION):
+        if allow_fallback and not response.success and agent_type not in (AgentType.GENERAL, AgentType.ESCALATION):
             logger.warning(f"{agent_type.value} 失败，降级到 GeneralAgent")
             fallback = self._best_agent(AgentType.GENERAL)
             if fallback:

@@ -108,6 +108,8 @@ def test_fixed_images_and_linux_build_instead_of_host_native_artifacts():
 def test_image_public_code_readability_and_source_notices_are_explicit():
     rules = (ROOT / ".dockerignore").read_text().splitlines()
     assert "!LICENSE" in rules and "!NOTICE.md" in rules
+    assert "!backend/workflows/" in rules and "!backend/workflows/**" in rules
+    assert "COPY backend/workflows ./workflows" in (DEPLOY / "Dockerfile.api").read_text()
     for name in ("Dockerfile.api", "Dockerfile.web"):
         source = (DEPLOY / name).read_text()
         assert "COPY LICENSE NOTICE.md /opt/serveflow/" in source

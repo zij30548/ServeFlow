@@ -127,7 +127,7 @@
                       <strong>{{ item.role === 'user' ? '你' : '智应客服协同系统' }}</strong>
                       <span v-if="item.error" class="error-label">请求失败</span>
                       <span v-else-if="item.status === 'partial'" class="error-label">部分完成</span>
-                      <small v-else-if="item.role === 'assistant'">Agent</small>
+                      <small v-else-if="item.role === 'assistant'">{{ { workflow: '订单查询流程', hybrid: '订单查询＋技术支持' }[item.routeKind] || 'Agent' }}</small>
                     </div>
                     <p>{{ item.content }}</p>
                     <p v-if="item.status === 'partial'" class="muted">本次仅取得部分结果，尚未完整处理你的问题；不会自动重试。</p>
@@ -144,7 +144,7 @@
                       <div v-for="(call, index) in item.trace.toolCalls" :key="`${item.id}-${index}`" class="trace-call-item">
                         <div class="trace-call-meta">
                           <strong>{{ call.tool_name || 'unknown_tool' }}</strong>
-                          <span :class="call.success ? 'success' : 'danger'">{{ call.success ? '成功' : '失败' }}</span>
+                          <span :class="call.success && call.result_success !== false ? 'success' : 'danger'">{{ call.success && call.result_success !== false ? '成功' : '失败' }}</span>
                         </div>
                         <pre>{{ formatJson(call.input || {}) }}</pre>
                       </div>
@@ -671,7 +671,7 @@ async function sendMessage() {
     lastResponse.value = response
     const meta = [response.intent, response.primaryAgent || response.agentType, response.knowledgeUsed ? 'RAG' : '', response.escalated ? '转人工' : ''].filter(Boolean).join(' · ')
     const message = { id: createMessageId(), role: 'assistant', content: response.response, meta,
-      status: response.status, error: response.status === 'failed', trace: null }
+      routeKind: response.routeKind, status: response.status, error: response.status === 'failed', trace: null }
     messages.value.push(message)
     // Optional tracing must never delay the reply or keep the composer busy.
     void loadResponseTrace(response.requestId, request, message.id)

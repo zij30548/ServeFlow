@@ -237,6 +237,8 @@ function normalizeChatResponse(type, raw) {
   if (!/^[A-Za-z0-9_.:-]{1,128}$/.test(conversationId) ||
       (requestId !== '' && !/^[A-Za-z0-9_.:-]{1,128}$/.test(requestId))) throw new Error('chat_response_invalid')
   const errorCode = Object.hasOwn(CHAT_FAILURES, raw.error_code) ? raw.error_code : raw.error_code == null ? null : 'unknown_error'
+  const routeKind = raw.workflow_id === 'order_lookup' && ['workflow', 'hybrid'].includes(raw.route_kind)
+    ? raw.route_kind : 'agent'
   return {
     backend: type,
     conversationId,
@@ -251,6 +253,7 @@ function normalizeChatResponse(type, raw) {
     agentTypes: raw.agent_types || raw.agentTypes || [],
     primaryAgent: raw.primary_agent || raw.primaryAgent || '',
     supportingAgents: raw.supporting_agents || raw.supportingAgents || [],
+    routeKind,
     routingReason: raw.routing_reason || raw.routingReason || '',
     routingConfidence: Number(raw.routing_confidence ?? raw.routingConfidence ?? 0),
     entities: raw.entities || {},

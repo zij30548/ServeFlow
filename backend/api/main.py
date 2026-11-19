@@ -329,6 +329,8 @@ class ChatResponse(BaseModel):
     agent_types: List[str] = Field(default_factory=list)
     primary_agent: str = ""
     supporting_agents: List[str] = Field(default_factory=list)
+    route_kind: Literal["agent", "workflow", "hybrid"] = "agent"
+    workflow_id: Optional[Literal["order_lookup"]] = None
     tools_used: List[str] = Field(default_factory=list)
     routing_reason: str = ""
     routing_confidence: float = 0.0
@@ -448,7 +450,7 @@ async def demo_order(order_id: str, request: HTTPRequest, response: Response):
 async def chat(req: ChatRequest, http_request: HTTPRequest):
     """
     主对话接口。完整流程：
-      记忆读取 → 意图识别 → Agent 路由 → 执行 → 记忆写入
+      记忆读取 → 意图识别 → Workflow／Agent 路由 → 执行 → 记忆写入
     """
     if _orchestrator is None or _memory is None:
         raise HTTPException(503, "服务未就绪")
@@ -536,20 +538,24 @@ async def chat(req: ChatRequest, http_request: HTTPRequest):
             orch_req.before_unsafe_tool = before_unsafe_tool
 
             # 3. 执行
-            result = await _orchestrator.run(orch_req)
+            from workflows.hybrid_router import dispatch_chat
+            result = await dispatch_chat(_orchestrator, orch_req)
             if protected:
                 raise_if_request_blocked()
 
+            agent_type = result.agent_type.value if result.agent_type else ""
             response = ChatResponse(
                 conv_id=conv_id,
                 request_id=result.request_id,
                 response=result.response,
                 intent=result.intent.value if result.intent else "other",
                 intent_group=intent_result.intent_group,
-                agent_type=result.agent_type.value,
+                agent_type=agent_type,
                 agent_types=[agent_type.value for agent_type in result.agent_types],
-                primary_agent=result.primary_agent.value if result.primary_agent else result.agent_type.value,
+                primary_agent=result.primary_agent.value if result.primary_agent else agent_type,
                 supporting_agents=[agent_type.value for agent_type in result.supporting_agents],
+                route_kind=getattr(result, "route_kind", "agent"),
+                workflow_id=getattr(result, "workflow_id", None),
                 tools_used=result.tools_used,
                 routing_reason=result.routing_reason,
                 routing_confidence=result.routing_confidence,

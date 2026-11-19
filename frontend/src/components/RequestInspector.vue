@@ -33,8 +33,8 @@
             <AppIcon name="route" />
           </span>
           <div>
-            <strong>Agent 路由</strong>
-            <p>{{ lastResponse ? lastResponse.primaryAgent || lastResponse.agentType || '未返回 Agent' : '分配给合适的 Agent' }}</p>
+            <strong>处理路径</strong>
+            <p>{{ routeSummary }}</p>
           </div>
         </li>
         <li>
@@ -120,6 +120,13 @@ const props = defineProps({
 defineEmits(['refresh'])
 const activeAlerts = computed(() => props.monitorData.active_alerts || [])
 const responseState = computed(() => ({ success: '已完成', partial: '部分完成', failed: '未完成' }[props.lastResponse?.status] || '待开始'))
+const routeSummary = computed(() => {
+  const response = props.lastResponse
+  if (!response) return '等待分配'
+  if (response.routeKind === 'workflow') return '订单查询流程'
+  if (response.routeKind === 'hybrid') return '订单查询流程＋技术 Agent'
+  return response.primaryAgent || response.agentType || '未分配 Agent'
+})
 const agentCount = computed(() => Object.keys(props.monitorData.agent_stats || {}).length)
 const totalAgentExecutions = computed(() => {
   const values = Object.values(props.monitorData.agent_stats || {}).map(item => item.total)

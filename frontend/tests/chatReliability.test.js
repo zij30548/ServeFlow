@@ -71,6 +71,22 @@ test('partial is retained; invalid structured response and arbitrary HTTP error 
   } finally { globalThis.fetch = previous }
 })
 
+test('chat shows the actual workflow route and accepts old chat receipts', async () => {
+  const previous = globalThis.fetch
+  try {
+    for (const [fields, expected] of [
+      [{ route_kind: 'workflow', workflow_id: 'order_lookup', agent_types: [] }, 'workflow'],
+      [{ route_kind: 'hybrid', workflow_id: 'order_lookup', primary_agent: 'technical' }, 'hybrid'],
+      [{}, 'agent'],
+      [{ route_kind: 'workflow', workflow_id: 'unrecognized' }, 'agent']
+    ]) {
+      globalThis.fetch = async () => new Response(JSON.stringify(reply(fields)))
+      const result = await requestChat('python', settings(), '订单处理路径')
+      assert.equal(result.routeKind, expected)
+    }
+  } finally { globalThis.fetch = previous }
+})
+
 test('timeout and invalid-protocol failures have explicit safe messages and never expose backend prose', async () => {
   const previous = globalThis.fetch
   try {

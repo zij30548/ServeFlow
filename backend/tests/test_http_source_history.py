@@ -15,13 +15,14 @@ import pytest
 import pytest_asyncio
 
 import api.main as api
-from agents.agent_orchestrator import AgentOrchestrator, AgentType, GeneralAgent, ResponseComposer
+from agents.agent_orchestrator import AgentOrchestrator, AgentType, GeneralAgent, ResponseComposer, TechnicalAgent
 from core.intent_recognizer import IntentCategory, IntentRecognizer, IntentResult, UrgencyLevel
 from core.order_evidence import resolve_order_id, source_bound_order_history
 from demo_business.session import COOKIE_NAME, DemoSessionService
 from demo_business.store import load_fixture
 from evaluation.task_evidence import fixture_order_result
 from test_conversation_memory import memory, offline_only
+from workflows import hybrid_router
 
 
 @pytest_asyncio.fixture
@@ -44,6 +45,10 @@ async def order_http(memory, monkeypatch):
             content = [{"type": "tool_use", "id": f"native-{len(payloads)}", "name": "read_demo_order",
                         "input": {"order_id": planned_tools.popleft()}}]
             stop = "tool_use"
+        elif payload.get("tool_choice", {}).get("name") == "lookup_error_code":
+            content = [{"type": "tool_use", "id": f"native-{len(payloads)}", "name": "lookup_error_code",
+                        "input": {"error_code": control.get("diagnostic_code", "401")}}]
+            stop = "tool_use"
         else:
             prompt = payload["messages"][0]["content"]
             content = [{"type": "text", "text": control["summary"] if "总结以下对话" in prompt else control["reply"]}]
@@ -57,7 +62,8 @@ async def order_http(memory, monkeypatch):
                             max_retries=0, http_client=provider)
         memory._client = sdk
         runtime = AgentOrchestrator.__new__(AgentOrchestrator)
-        runtime._pool = {AgentType.GENERAL: [GeneralAgent(sdk, "controlled-model")]}
+        runtime._pool = {AgentType.GENERAL: [GeneralAgent(sdk, "controlled-model")],
+                         AgentType.TECHNICAL: [TechnicalAgent(sdk, "controlled-model")]}
         runtime._composer = ResponseComposer(sdk, "controlled-model")
         runtime._recent_tool_traces = deque(maxlen=100)
         extractor = IntentRecognizer.__new__(IntentRecognizer)
@@ -67,31 +73,37 @@ async def order_http(memory, monkeypatch):
                                 extractor._extract_entities(message), "controlled routing", 0)
 
         runtime.recognize_intent = AsyncMock(side_effect=recognize)
-        actual_run = runtime.run
+        actual_dispatch = hybrid_router.dispatch_chat
 
-        async def run(request):
+        async def observed_dispatch(orchestrator, request):
             observed.append({"message": request.message, "history": deepcopy(request.history),
                 "order_history": deepcopy(request.order_history), "customer": request.demo_customer_id,
                 "user": request.user_id})
-            return await actual_run(request)
+            return await actual_dispatch(orchestrator, request)
 
-        runtime.run = run
+        monkeypatch.setattr(hybrid_router, "dispatch_chat", observed_dispatch)
         for name, value in (("_memory", memory), ("_orchestrator", runtime), ("_profile_updater", None),
                             ("_monitor", None), ("_demo_store", store), ("_demo_sessions", sessions)):
             monkeypatch.setattr(api, name, value)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api.app), base_url="http://test") as http:
             number = 0
 
-            async def post(message, *, identity="a", conv="c", expected_order=None):
+            async def post(message, *, identity="a", conv="c", expected_order=None, client_id=None):
                 nonlocal number
                 number += 1
                 token, claims = identities[identity]
                 http.cookies.set(COOKIE_NAME, token)
+                reads_before = store.read_order.await_count
                 if expected_order is not None:
                     planned_tools.append(expected_order)
                 response = await http.post("/chat", json={"message": message, "user_id": "forged-identity",
-                    "conv_id": conv, "client_request_id": f"actual-http-{number}"},
+                    "conv_id": conv, "client_request_id": client_id or f"actual-http-{number}"},
                     headers={"Origin": "http://127.0.0.1:5173", "X-ServeFlow-Demo-CSRF": sessions.csrf(claims)})
+                if expected_order is not None:
+                    if response.json()["route_kind"] in {"workflow", "hybrid"}:
+                        assert planned_tools.popleft() == expected_order
+                    assert store.read_order.await_count == reads_before + 1
+                    store.read_order.assert_awaited_with("demo-customer-" + identity, expected_order)
                 assert not planned_tools, "expected native order step was never reached"
                 return response
 
@@ -111,6 +123,8 @@ async def test_http_order_reference_survives_three_neutral_turns_and_reads_fresh
     service = order_http
     first = await service.post("查询DEMO-1001的订单付款状态", expected_order="DEMO-1001")
     assert first.status_code == 200
+    assert first.json()["route_kind"] == "workflow" and first.json()["agent_types"] == []
+    assert service.payloads == []
     await neutral_turns(service)
     final = await service.post("这笔订单的退款状态呢？", expected_order="DEMO-1001")
     assert final.status_code == 200 and "DEMO-1001" in final.json()["response"]
@@ -123,7 +137,36 @@ async def test_http_order_reference_survives_three_neutral_turns_and_reads_fresh
     assert last["order_history"][0]["source"] == "user_message"
     assert resolve_order_id(last["message"], last["order_history"]).order_id == "DEMO-1001"
     trace = await service.memory.get_trace(final.json()["request_id"])
+    assert trace["route_kind"] == "workflow"
     assert trace["tool_calls"][0]["input"] == {"order_id": "DEMO-1001"}
+    assert "tool_use_id" not in trace["tool_calls"][0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model_code", ["401", "500"])
+async def test_chat_combines_readonly_workflow_and_native_diagnostic_without_repeat(order_http, model_code):
+    service = order_http
+    service.control["diagnostic_code"] = model_code
+    question = "登录报 401，而且这笔订单 DEMO-1001 好像扣了两次。"
+    first = await service.post(question, expected_order="DEMO-1001", client_id="mixed-one")
+    assert first.status_code == 200
+    result = first.json()
+    assert result["route_kind"] == "hybrid" and result["workflow_id"] == "order_lookup"
+    assert result["primary_agent"] == "technical" and result["agent_types"] == ["technical"]
+    assert "DEMO-1001" in result["response"] and "不能单凭一笔记录认定重复扣款" in result["response"]
+    assert result["status"] == ("success" if model_code == "401" else "partial")
+    assert len(service.payloads) == 1
+    assert "DEMO-1001" not in json.dumps(service.payloads[0])
+    assert service.payloads[0]["tool_choice"]["name"] == "lookup_error_code"
+    trace = await service.memory.get_trace(result["request_id"])
+    assert trace["tool_calls"][0]["execution_kind"] == "workflow"
+    if model_code == "401":
+        assert trace["tool_calls"][1]["tool_use_id"] == "native-1"
+    else:
+        assert "技术排查部分本次未完成" in result["response"]
+        assert len(trace["tool_calls"]) == 1
+    again = await service.post(question, client_id="mixed-one")
+    assert again.json() == result and service.store.read_order.await_count == 1 and len(service.payloads) == 1
 
 
 @pytest.mark.asyncio
