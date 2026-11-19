@@ -169,7 +169,7 @@ def test_api_bootstrap_never_reads_root_mysql_secret_and_drops_before_applicatio
     assert result["HOME"] == "/home/serveflow" and result["MCP_EXTERNAL_ENABLED"] == "false"
     assert result["SERVEFLOW_DEMO_MYSQL_URL"].startswith("mysql+pymysql://sf_demo_reader:")
     assert "@mysql:3306/serveflow_demo_customer" in result["SERVEFLOW_DEMO_MYSQL_URL"]
-    assert json.loads(result["ECHOMIND_API_TOKENS"])[configuration["gateway_bearer"]]["role"] == "user"
+    assert json.loads(result["SERVEFLOW_API_TOKENS"])[configuration["gateway_bearer"]]["role"] == "user"
     assert prepare[2][0] == "private" and prepare[2][2] == b"s" * 32
     assert [event[0] for event in prepare] == ["directory", "directory", "private", "drop", "chdir"]
 
@@ -302,7 +302,7 @@ class Connection:
 
 @pytest.fixture
 def database(monkeypatch, configuration):
-    runtime.os.environ["ECHOMIND_ENV"] = "protected-demo"
+    runtime.os.environ["SERVEFLOW_ENV"] = "protected-demo"
     from demo_business import initialize, store
     import pymysql
     environment = runtime._api_environment(configuration)
@@ -374,7 +374,7 @@ def test_partial_mysql_ddl_failure_is_preserved_never_dropped_or_retried(databas
     (["GRANT USAGE ON *.* TO `reader`@`%`"], False),
 ])
 def test_reader_grants_require_exact_select_scope_and_always_close(configuration, monkeypatch, privileges, accepted):
-    runtime.os.environ["ECHOMIND_ENV"] = "protected-demo"
+    runtime.os.environ["SERVEFLOW_ENV"] = "protected-demo"
     from demo_business import initialize, store
     verified = Mock(return_value={"schema": "controlled verified"})
     monkeypatch.setattr(initialize, "verify_database", verified)

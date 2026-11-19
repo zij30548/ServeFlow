@@ -24,7 +24,7 @@ def offline(monkeypatch):
     monkeypatch.setattr(socket.socket,'connect',denied)
     monkeypatch.setattr(socket.socket,'connect_ex',denied)
     monkeypatch.setattr(socket,'create_connection',denied)
-    monkeypatch.setenv('ECHOMIND_ENV','development')
+    monkeypatch.setenv('SERVEFLOW_ENV','development')
 
 
 def test_base64_and_documented_float_gateway_response_have_same_normalized_values():

@@ -75,8 +75,8 @@ def _check_mode_inputs(config):
 
 def _api_environment(config):
     environment = {
-        "ECHOMIND_ENV": "protected-demo",
-        "ECHOMIND_API_TOKENS": json.dumps({config["gateway_bearer"]: {"role": "user", "user_id": "protected-demo-proxy"}}),
+        "SERVEFLOW_ENV": "protected-demo",
+        "SERVEFLOW_API_TOKENS": json.dumps({config["gateway_bearer"]: {"role": "user", "user_id": "protected-demo-proxy"}}),
         "ANTHROPIC_API_KEY": config["api_key"], "ANTHROPIC_BASE_URL": config["model_origin"],
         "ANTHROPIC_MODEL": config["model"], "SERVEFLOW_DEMO_PUBLIC_ORIGIN": config["public_origin"],
         "SERVEFLOW_DEMO_SESSION_KEY_FILE": str(RUN / "session.key"),

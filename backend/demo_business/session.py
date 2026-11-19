@@ -80,7 +80,7 @@ class DemoSessionService:
 
     @classmethod
     def from_env(cls):
-        mode = os.getenv('ECHOMIND_ENV', 'development').lower()
+        mode = os.getenv('SERVEFLOW_ENV', 'development').lower()
         if mode == 'production':
             raise DemoSessionError('demo_requires_local_development')
         if mode == 'protected-demo':

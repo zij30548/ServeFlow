@@ -13,7 +13,7 @@ def logging_state(monkeypatch):
     root = logging.getLogger()
     factory, level = logging.getLogRecordFactory(), root.level
     existing = [(handler, list(handler.filters)) for handler in root.handlers]
-    monkeypatch.setenv("ECHOMIND_ENV", "protected-demo")
+    monkeypatch.setenv("SERVEFLOW_ENV", "protected-demo")
     try:
         yield
     finally:
@@ -76,7 +76,7 @@ def test_info_suppressed_and_legacy_modes_keep_their_original_logs(logging_state
     info = logging.LogRecord("core.skill_loader", logging.INFO, "", 1, "private-user-question", (), None)
     assert filtered.filter(info) is False
     configure_protected_logging()
-    monkeypatch.setenv("ECHOMIND_ENV", "development")
+    monkeypatch.setenv("SERVEFLOW_ENV", "development")
     record = logging.getLogRecordFactory()("core.skill_loader", logging.INFO, "", 1, "legacy %s", ("unchanged",), None)
     assert filtered.filter(record) is True
     assert record.getMessage() == "legacy unchanged"

@@ -37,7 +37,7 @@ def isolated(monkeypatch):
     monkeypatch.setattr(socket.socket, "connect_ex", denied)
     monkeypatch.setattr(socket, "create_connection", denied)
     for key in tuple(os.environ):
-        if key.startswith("ECHOMIND_"):
+        if key.startswith("SERVEFLOW_"):
             monkeypatch.delenv(key)
     monkeypatch.setenv("INTENT_EMBEDDING_PROVIDER", "local")
     monkeypatch.setenv("ORT_DISABLE_TELEMETRY", "1")
@@ -169,7 +169,7 @@ def test_freeze_or_authorization_changes_prevent_data_access_and_spending(tmp_pa
 
 
 @pytest.mark.parametrize("key,value", [
-    ("ECHOMIND_LLM_TIMEOUT_S", "30"), ("ECHOMIND_GENERAL_MODEL", "other-model"),
+    ("SERVEFLOW_LLM_TIMEOUT_S", "30"), ("SERVEFLOW_GENERAL_MODEL", "other-model"),
     ("INTENT_EMBEDDING_PROVIDER", "auto"), ("ORT_DISABLE_TELEMETRY", "0"),
 ])
 def test_existing_effective_parameter_guard_remains_active(tmp_path, monkeypatch, key, value):

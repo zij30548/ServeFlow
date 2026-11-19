@@ -34,16 +34,16 @@ def test_origin_rejects_ambiguous_or_untrusted_form(origin):
 
 
 def test_mode_is_explicit_and_tokens_never_optional(monkeypatch):
-    monkeypatch.setenv("ECHOMIND_ENV", "development")
-    monkeypatch.delenv("ECHOMIND_API_TOKENS", raising=False)
+    monkeypatch.setenv("SERVEFLOW_ENV", "development")
+    monkeypatch.delenv("SERVEFLOW_API_TOKENS", raising=False)
     assert ProtectedDemoConfig.from_env() is None and identity("") is None
-    monkeypatch.setenv("ECHOMIND_ENV", "protected-demo")
+    monkeypatch.setenv("SERVEFLOW_ENV", "protected-demo")
     with pytest.raises(ValueError): identity("")
     with pytest.raises(ProtectedDemoError): ProtectedDemoConfig.from_env()
     monkeypatch.setenv("SERVEFLOW_DEMO_PUBLIC_ORIGIN", "https://demo.example.com")
     assert ProtectedDemoConfig.from_env().origin == "https://demo.example.com"
     token = "controlled-proxy-token-1234567890"
-    monkeypatch.setenv("ECHOMIND_API_TOKENS", json.dumps({token: {"role": "user", "user_id": "protected-demo-proxy"}}))
+    monkeypatch.setenv("SERVEFLOW_API_TOKENS", json.dumps({token: {"role": "user", "user_id": "protected-demo-proxy"}}))
     assert identity("Bearer " + token)["role"] == "user"
     assert identity("Bearer forged") == {}
 
@@ -114,19 +114,19 @@ def test_protected_factory_keeps_private_file_checks_and_old_production_rejectio
     monkeypatch.setenv("SERVEFLOW_DEMO_SESSION_KEY_FILE", str(key))
     monkeypatch.setenv("SERVEFLOW_DEMO_PUBLIC_ORIGIN", "https://demo.example.com")
     monkeypatch.setenv("SERVEFLOW_DEMO_ORIGINS", "https://ignored.example.com")
-    monkeypatch.setenv("ECHOMIND_ENV", "protected-demo")
+    monkeypatch.setenv("SERVEFLOW_ENV", "protected-demo")
     result = DemoSessionService.from_env()
     assert result.protected and result.cookie_secure and result.origins == ("https://demo.example.com",)
     key.chmod(0o444)
     with pytest.raises(DemoSessionError, match="key_invalid"): DemoSessionService.from_env()
     key.chmod(0o600)
-    monkeypatch.setenv("ECHOMIND_ENV", "production")
+    monkeypatch.setenv("SERVEFLOW_ENV", "production")
     with pytest.raises(DemoSessionError, match="local_development"): DemoSessionService.from_env()
 
 
 def test_mysql_service_name_only_in_protected_mode(monkeypatch):
     for mode in ["development", "production", "protected-demo"]:
-        monkeypatch.setenv("ECHOMIND_ENV", mode)
+        monkeypatch.setenv("SERVEFLOW_ENV", mode)
         for host in ["localhost", "127.0.0.1"]:
             assert DemoDatabaseConfig.parse(f"mysql://u:p@{host}/serveflow_demo_test").host == host
         if mode == "protected-demo":

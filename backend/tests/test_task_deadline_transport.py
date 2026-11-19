@@ -434,7 +434,7 @@ def test_actual_intent_deadline_and_sdk_serialization_keep_original_model_parame
     from core.intent_recognizer import IntentCategory, IntentRecognizer
     from evaluation.task_transport import BoundClient
     calls = []
-    monkeypatch.setenv("ECHOMIND_INTENT_TIMEOUT_S", ".1")  # Explicit test-only scale; runtime default is 8.
+    monkeypatch.setenv("SERVEFLOW_INTENT_TIMEOUT_S", ".1")  # Explicit test-only scale; runtime default is 8.
     async def handle(req):
         calls.append(json.loads(req.content))
         await asyncio.sleep(.025)

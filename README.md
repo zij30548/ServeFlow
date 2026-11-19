@@ -60,6 +60,9 @@ cp .env.example .env
 - `ANTHROPIC_MODEL`：当前使用`qwen3.7-flash-2026-07-15`。
 - `REDIS_URL`：自己的Redis连接。开发默认回环6379，也可配置私有Unix socket。
 - `CHROMA_PERSIST_DIRECTORY`：私有本地数据目录；默认`./data/chroma`。
+- `SERVEFLOW_ENV`：必填。本机填写`development`，受保护演示镜像由启动脚本填写`protected-demo`。生产和受保护演示模式还必须配置`SERVEFLOW_API_TOKENS`。
+
+从旧版升级时，将本地或自管服务配置里的旧项目变量前缀统一改为`SERVEFLOW_`，保留每个变量原来的后缀和值。私有演示配置文件沿用原格式，更新镜像时由启动脚本注入新变量。已有 Redis、Chroma 和 MySQL 数据继续使用原有位置。前端更新后需要重新设置自定义浏览器偏好。直接使用标准 MCP 的客户端请更新资源 URI 为`serveflow://knowledge/stats`，如有自定义服务域名则继续通过`MCP_ALLOWED_HOSTS`明确配置。
 
 如果没有Redis实例，可在独立终端启动本机开发实例：
 
@@ -827,7 +830,7 @@ ORT_DISABLE_TELEMETRY=1 TOKENIZERS_PARALLELISM=false .venv/bin/python -B -m eval
 
 ### 四臂效果对照接线（2026-11-04）
 
-在原四组设计基础上新增[实验运行时](backend/evaluation/quality_arm_runtime.py)、[共享评分](backend/evaluation/quality_scoring.py)、[执行工具](backend/evaluation/quality_trial.py)及[全局计数](backend/evaluation/quality_budget.py)。A为非强制重新查单＋模型自然总结，B为强制重新查单＋自然总结，C为非强制重新查单＋程序投影，D为强制重新查单＋程序投影。A是当前共同安全基础上的关闭机制方案，不是未经修改的历史EchoMind版本；正式HTTP入口没有选择实验组的参数，默认行为仍为D。
+在原四组设计基础上新增[实验运行时](backend/evaluation/quality_arm_runtime.py)、[共享评分](backend/evaluation/quality_scoring.py)、[执行工具](backend/evaluation/quality_trial.py)及[全局计数](backend/evaluation/quality_budget.py)。A为非强制重新查单＋模型自然总结，B为强制重新查单＋自然总结，C为非强制重新查单＋程序投影，D为强制重新查单＋程序投影。A是当前共同安全基础上的关闭机制方案，不是未经修改的上游版本；正式HTTP入口没有选择实验组的参数，默认行为仍为D。
 
 A/C允许模型主动读取，不人为削弱基线；如果本组本题此前已有实际校验的工具记录，两者给模型提供同字节、明确标为“先前静态快照，非本轮新查”的资料。B/D强制重新读取，不注入这份旧缓存。系统提示、Skills、模型、采样、工具权限与业务资料相同，必要的历史快照、`tool_choice`及工具续写差异明确冻结，不声称四组完整消息逐字相同。当前冲突读取由原合并规则拒绝，失败新读不能退回旧成功；身份、会话、订单及每组运行实例隔离。
 
@@ -1390,7 +1393,7 @@ ORT_DISABLE_TELEMETRY=1 .venv/bin/python -B -m evaluation.current_task_ablation 
 
 在上述离线冻结完成后，用户明确确认继续本批最多120次真实千问请求。新授权与执行记录独立，准备阶段的“授权0／调用0”及旧暂停余额不改。本批实际执行版本为`59a19d026d94b28e51bcee1a3d6dd6797f0577cf`，公共业务基础仍为`7abdb6216a3a7eb0742b4b406ec58e48aa30c4a7`；执行期间未修改业务、提示、Schema、角色、Skills、资料、原12题、评分依据或参数。**24/24个固定位置全部完成，真实模型75/120次，无重试、暂停、未知发送或未执行项。** 未用45次不转作其他用途。
 
-本批A为“自主选择读单＋自由订单正文”，D为“强制当次读取＋严格类型投影＋按问题解释日期缺口／证据关系”。两臂保留相同的当前安全基础，包括身份、只读、政策、技术及写操作保护；A也可自主读取，p12的共同写操作保护会让两臂都投影原记录并拒绝修改。不是原始EchoMind与新项目的比较，也不能单独归因于多Agent、fresh read或某一层投影。两臂每个位置均新runtime和缓存，首个意图请求每题成对同字节、各自独立取得输出；中间工具Schema／选择及答复指令随机制开关不同，不能称全部中间请求相同。
+本批A为“自主选择读单＋自由订单正文”，D为“强制当次读取＋严格类型投影＋按问题解释日期缺口／证据关系”。两臂保留相同的当前安全基础，包括身份、只读、政策、技术及写操作保护；A也可自主读取，p12的共同写操作保护会让两臂都投影原记录并拒绝修改。不是上游原版与当前版本的比较，也不能单独归因于多Agent、fresh read或某一层投影。两臂每个位置均新runtime和缓存，首个意图请求每题成对同字节、各自独立取得输出；中间工具Schema／选择及答复指令随机制开关不同，不能称全部中间请求相同。
 
 | 冻结指标 | A | D | 本批差值（D−A） |
 | --- | ---: | ---: | ---: |
@@ -1514,7 +1517,7 @@ ORT_DISABLE_TELEMETRY=1 .venv/bin/python -B -m evaluation.expanded_trial report
 
 范围为**真实千问＋真实Orchestrator执行＋独立只读MySQL的合成订单＋原6篇合成政策**。意图共享观察，任务A/D各自发送，RAG使用同一临时本地索引；没有评分模型、远程Embedding、后台记忆、高德、真实商家交易或Chrome验收。提供的history是冻结脚本输入，不是实际多轮记忆或恢复证明。开发集先运行，验证集后运行，期间没有改代码、提示、参数、题目、gold或检索方法。
 
-**三组对照的含义不同。** 意图比较同一LLM观察经原解析与本地融合后的决策；RAG比较原query向量Top3与原改写／多查询召回／去重／重排的整条组合；任务A/D共享当前安全边界，A可自主读工具，D再启用强制新鲜读取、类型化事实投影及现有有限问题说明。A不是未修改的原始EchoMind，不能将组合差异单独归因给多Agent、某个组件或记忆能力。
+**三组对照的含义不同。** 意图比较同一LLM观察经原解析与本地融合后的决策；RAG比较原query向量Top3与原改写／多查询召回／去重／重排的整条组合；任务A/D共享当前安全边界，A可自主读工具，D再启用强制新鲜读取、类型化事实投影及现有有限问题说明。A并非未经修改的上游版本，不能将组合差异单独归因给多Agent、某个组件或记忆能力。
 
 | 项目 | 开发集 | 冻结验证集 |
 | --- | --- | --- |

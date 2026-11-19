@@ -39,9 +39,9 @@ def offline(monkeypatch):
 
 @pytest_asyncio.fixture
 async def services(monkeypatch, tmp_path):
-    monkeypatch.setenv("ECHOMIND_ENV", "protected-demo")
+    monkeypatch.setenv("SERVEFLOW_ENV", "protected-demo")
     monkeypatch.setenv("SERVEFLOW_DEMO_PUBLIC_ORIGIN", ORIGIN)
-    monkeypatch.setenv("ECHOMIND_API_TOKENS", json.dumps({TOKEN: {"user_id": "protected-demo-proxy", "role": "user"}}))
+    monkeypatch.setenv("SERVEFLOW_API_TOKENS", json.dumps({TOKEN: {"user_id": "protected-demo-proxy", "role": "user"}}))
     path = tmp_path.resolve() / "usage"
     monkeypatch.setenv("SERVEFLOW_DEMO_QUOTA_DIR", str(path))
     monkeypatch.setenv("SERVEFLOW_DEMO_MODEL_LIMIT", "1")
@@ -137,8 +137,8 @@ async def test_monitor_http_returns_only_numeric_whitelisted_aggregate(services,
 
 @pytest.mark.asyncio
 async def test_legacy_monitor_response_is_not_reinterpreted(services, monkeypatch):
-    monkeypatch.setenv("ECHOMIND_ENV", "development")
-    monkeypatch.delenv("ECHOMIND_API_TOKENS")
+    monkeypatch.setenv("SERVEFLOW_ENV", "development")
+    monkeypatch.delenv("SERVEFLOW_API_TOKENS")
     raw = {"agent_stats": {}, "tool_stats": {}, "suggestions": [{"action": "original local operator detail"}]}
     monkeypatch.setattr(main._monitor, "summary", lambda: raw)
     async with client() as http:
@@ -163,7 +163,7 @@ async def test_direct_forged_proxy_and_disabled_routes_never_reach_model_or_stor
 @pytest.mark.asyncio
 async def test_ordinary_user_bearer_cannot_assert_trusted_proxy_identity(services, monkeypatch):
     ordinary_token = "controlled-ordinary-user-token-1234567890"
-    monkeypatch.setenv("ECHOMIND_API_TOKENS", json.dumps({
+    monkeypatch.setenv("SERVEFLOW_API_TOKENS", json.dumps({
         TOKEN: {"user_id": "protected-demo-proxy", "role": "user"},
         ordinary_token: {"user_id": "ordinary-customer", "role": "user"}}))
     async with client() as http:

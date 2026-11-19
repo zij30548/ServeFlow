@@ -36,7 +36,7 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(socket.socket, "connect_ex", deny)
     monkeypatch.setattr(socket, "create_connection", deny)
     for key in tuple(os.environ):
-        if key.startswith("ECHOMIND_"): monkeypatch.delenv(key)
+        if key.startswith("SERVEFLOW_"): monkeypatch.delenv(key)
     monkeypatch.setenv("ORT_DISABLE_TELEMETRY", "1")
     monkeypatch.setenv("INTENT_EMBEDDING_PROVIDER", "local")
     secret_reads = []

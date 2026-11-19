@@ -112,12 +112,28 @@ def test_read_only_rejects_write_and_unspecified_tools():
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("mode", [None, "", "prod"])
+def test_server_startup_stops_without_an_explicit_valid_mode(monkeypatch, mode):
+    from core.access import validate_server_access
+
+    if mode is None:
+        monkeypatch.delenv("SERVEFLOW_ENV", raising=False)
+    else:
+        monkeypatch.setenv("SERVEFLOW_ENV", mode)
+    with pytest.raises(ValueError, match="SERVEFLOW_ENV"):
+        validate_server_access()
+
+
 def test_access_tokens_bind_identity_and_production_fails_closed(monkeypatch):
-    monkeypatch.delenv('ECHOMIND_API_TOKENS',raising=False)
-    monkeypatch.setenv('ECHOMIND_ENV','production')
-    with pytest.raises(ValueError): identity('')
+    from core.access import validate_server_access
+
+    monkeypatch.delenv('SERVEFLOW_API_TOKENS',raising=False)
+    monkeypatch.setenv('SERVEFLOW_ENV','production')
+    with pytest.raises(ValueError, match="SERVEFLOW_API_TOKENS"):
+        validate_server_access()
     token = 'test-token-with-at-least-24-characters'
-    monkeypatch.setenv('ECHOMIND_API_TOKENS',json.dumps({token:{'user_id':'u1','role':'user'}}))
+    monkeypatch.setenv('SERVEFLOW_API_TOKENS',json.dumps({token:{'user_id':'u1','role':'user'}}))
+    validate_server_access()
     assert identity('Bearer '+token)['user_id'] == 'u1'
     assert identity('Bearer wrong') == {}
 

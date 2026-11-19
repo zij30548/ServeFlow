@@ -31,7 +31,7 @@ class ProtectedDemoError(ValueError):
 
 
 def enabled():
-    return os.getenv("ECHOMIND_ENV", "development").lower() == MODE
+    return os.getenv("SERVEFLOW_ENV", "development").lower() == MODE
 
 
 def _safe_log_record(record):

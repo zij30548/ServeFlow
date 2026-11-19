@@ -25,7 +25,7 @@ def no_external_services(monkeypatch):
     monkeypatch.setattr(socket, "create_connection", denied)
     monkeypatch.setattr(socket, "getaddrinfo", denied)
     for name in tuple(os.environ):
-        if name.startswith(("ECHOMIND_", "SILICONFLOW_", "EVAL_JUDGE_")):
+        if name.startswith(("SERVEFLOW_", "SILICONFLOW_", "EVAL_JUDGE_")):
             monkeypatch.delenv(name)
 
 

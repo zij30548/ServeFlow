@@ -29,7 +29,7 @@ def isolated(monkeypatch):
     monkeypatch.setattr(socket.socket, "connect_ex", denied)
     monkeypatch.setattr(socket, "create_connection", denied)
     for key in tuple(__import__("os").environ):
-        if key.startswith("ECHOMIND_"): monkeypatch.delenv(key)
+        if key.startswith("SERVEFLOW_"): monkeypatch.delenv(key)
     monkeypatch.setenv("INTENT_EMBEDDING_PROVIDER", "local")
     monkeypatch.setenv("ORT_DISABLE_TELEMETRY", "1")
     def configuration(*, secret=False):
@@ -113,13 +113,13 @@ def test_changed_freeze_or_allowance_blocks_before_database(tmp_path, monkeypatc
 
 
 @pytest.mark.parametrize("key,value", [
-    ("ECHOMIND_INTENT_TIMEOUT_S", "9"), ("ECHOMIND_LLM_TIMEOUT_S", "30"),
-    ("ECHOMIND_COMPOSER_TIMEOUT_S", "9"), ("ECHOMIND_COMPOSER_MAX_TOKENS", "2000"),
-    ("ECHOMIND_COMPOSER_TEMPERATURE", ".2"), ("ECHOMIND_MONITOR_FALLBACK_PENALTY", ".8"),
-    ("ECHOMIND_MONITOR_COOLDOWN_SECONDS", "120"), ("ECHOMIND_TOOL_TRACE_MAX", "100"),
-    ("ECHOMIND_GENERAL_MODEL", "different"), ("ECHOMIND_TECHNICAL_MODEL", base.MODEL),
+    ("SERVEFLOW_INTENT_TIMEOUT_S", "9"), ("SERVEFLOW_LLM_TIMEOUT_S", "30"),
+    ("SERVEFLOW_COMPOSER_TIMEOUT_S", "9"), ("SERVEFLOW_COMPOSER_MAX_TOKENS", "2000"),
+    ("SERVEFLOW_COMPOSER_TEMPERATURE", ".2"), ("SERVEFLOW_MONITOR_FALLBACK_PENALTY", ".8"),
+    ("SERVEFLOW_MONITOR_COOLDOWN_SECONDS", "120"), ("SERVEFLOW_TOOL_TRACE_MAX", "100"),
+    ("SERVEFLOW_GENERAL_MODEL", "different"), ("SERVEFLOW_TECHNICAL_MODEL", base.MODEL),
     ("ORT_DISABLE_TELEMETRY", "0"), ("INTENT_EMBEDDING_PROVIDER", "auto"),
-    ("ECHOMIND_LLM_TIMEOUT_S", "nan"), ("ECHOMIND_TOOL_TRACE_MAX", "bad")])
+    ("SERVEFLOW_LLM_TIMEOUT_S", "nan"), ("SERVEFLOW_TOOL_TRACE_MAX", "bad")])
 def test_effective_configuration_changes_fail_closed(tmp_path, monkeypatch, key, value):
     trial, p = prepared(tmp_path); before = tree(trial.root)
     monkeypatch.setenv(key, value)

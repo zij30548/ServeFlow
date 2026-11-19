@@ -26,8 +26,8 @@ from test_conversation_memory import memory, offline_only
 
 @pytest_asyncio.fixture
 async def order_http(memory, monkeypatch):
-    monkeypatch.setenv("ECHOMIND_ENV", "development")
-    monkeypatch.delenv("ECHOMIND_API_TOKENS", raising=False)
+    monkeypatch.setenv("SERVEFLOW_ENV", "development")
+    monkeypatch.delenv("SERVEFLOW_API_TOKENS", raising=False)
     snapshot = load_fixture()
     store = SimpleNamespace(read_order=AsyncMock(side_effect=lambda customer, order_id:
         fixture_order_result(snapshot, customer, order_id)), list_sample_orders=lambda customer: [])

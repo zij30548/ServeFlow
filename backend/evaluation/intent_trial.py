@@ -109,11 +109,11 @@ def _write(root, name, value):
 def _configuration(*, secret=False):
     from dotenv import dotenv_values
     raw = dotenv_values(bench.BACKEND_ROOT / ".env")
-    names = ["ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL", "ECHOMIND_INTENT_TIMEOUT_S", "INTENT_EMBEDDING_PROVIDER"]
+    names = ["ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL", "SERVEFLOW_INTENT_TIMEOUT_S", "INTENT_EMBEDDING_PROVIDER"]
     values = {name: os.environ.get(name, raw.get(name)) for name in names}
     base = validated_endpoint(values["ANTHROPIC_BASE_URL"] or "")
     try:
-        timeout = float(values["ECHOMIND_INTENT_TIMEOUT_S"] or 8)
+        timeout = float(values["SERVEFLOW_INTENT_TIMEOUT_S"] or 8)
     except (TypeError, ValueError):
         _fail("configuration")
     if values["ANTHROPIC_MODEL"] != MODEL or timeout != 8 or values["INTENT_EMBEDDING_PROVIDER"] != "local":

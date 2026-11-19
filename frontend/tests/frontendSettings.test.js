@@ -16,13 +16,19 @@ test('old Java selection cannot change the Python-only product entry', () => {
 
 test('saved product settings keep Python fixed without persisting credentials', () => {
   const previous = globalThis.localStorage
-  let stored
-  globalThis.localStorage = { setItem: (_, value) => { stored = JSON.parse(value) } }
+  const storage = new Map()
+  globalThis.localStorage = {
+    setItem: (key, value) => storage.set(key, value),
+    getItem: key => storage.get(key)
+  }
   try {
-    saveSettings({ backend: 'java', pythonToken: 'test-only-secret', endpoints: { python: '/api/python' } })
+    saveSettings({ backend: 'java', pythonToken: 'test-only-secret', userId: 'test-user',
+      conversationId: 'test-conversation', endpoints: { python: '/api/python' } })
+    const stored = JSON.parse(storage.get('serveflow.frontend.settings'))
     assert.equal(stored.backend, 'python')
     assert.equal(stored.pythonToken, undefined)
     assert.equal(stored.endpoints.python, '/api/python')
+    assert.equal(createInitialSettings().conversationId, 'test-conversation')
   } finally { globalThis.localStorage = previous }
 })
 

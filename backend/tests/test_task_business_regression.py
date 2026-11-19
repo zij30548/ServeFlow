@@ -36,7 +36,7 @@ def isolated(monkeypatch):
     monkeypatch.setattr(socket.socket, "connect_ex", denied)
     monkeypatch.setattr(socket, "create_connection", denied)
     for key in tuple(os.environ):
-        if key.startswith("ECHOMIND_"):
+        if key.startswith("SERVEFLOW_"):
             monkeypatch.delenv(key)
     monkeypatch.setenv("INTENT_EMBEDDING_PROVIDER", "local")
     monkeypatch.setenv("ORT_DISABLE_TELEMETRY", "1")
@@ -166,7 +166,7 @@ def test_prepare_has_zero_authorization_no_secrets_and_explicit_312_upper_bound(
     assert p["authorized_model_requests"] == 0 and p["proposed_model_requests"] == 312
     assert p["limits"] == {**engine.LIMITS, "cases": 12, "turns": 13, "physical_requests": 312}
     assert p["http_limits"] == engine.HTTP_LIMITS and p["http_limits"]["request_deadline_s"] == 8
-    assert p["effective_environment"]["ECHOMIND_LLM_TIMEOUT_S"] == 15
+    assert p["effective_environment"]["SERVEFLOW_LLM_TIMEOUT_S"] == 15
     assert trial.verify() == p and trial.ledger(p).status()["attempts"] == 0
     assert not any(isolated.config_reads)
     assert len(p["initial_intent_requests"]) == 12
@@ -190,7 +190,7 @@ def test_changed_identity_blocks_before_store_or_send(tmp_path, monkeypatch, mut
         monkeypatch.setattr(module, "cases", changed)
     elif mutation == "policy": monkeypatch.setitem(module.REVIEW_POLICY, "version", "changed")
     elif mutation == "data": monkeypatch.setattr(module.repair, "data_binding", lambda: "d" * 64)
-    elif mutation == "timeout": monkeypatch.setenv("ECHOMIND_LLM_TIMEOUT_S", "30")
+    elif mutation == "timeout": monkeypatch.setenv("SERVEFLOW_LLM_TIMEOUT_S", "30")
     else:
         shutil.copytree(trial.root, tmp_path / "copied-batch")
         trial = module.BusinessRegression(tmp_path / "copied-batch")

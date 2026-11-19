@@ -40,7 +40,7 @@ def no_real_services(monkeypatch):
     monkeypatch.setattr(socket.socket, "connect_ex", denied)
     monkeypatch.setattr(socket, "create_connection", denied)
     monkeypatch.setattr(socket, "getaddrinfo", denied)
-    monkeypatch.delenv("ECHOMIND_LLM_TIMEOUT_S", raising=False)
+    monkeypatch.delenv("SERVEFLOW_LLM_TIMEOUT_S", raising=False)
 
 
 @pytest.fixture

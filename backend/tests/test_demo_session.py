@@ -60,13 +60,13 @@ def test_key_file_is_explicit_private_and_not_overwritten(monkeypatch, tmp_path)
     key.chmod(0o600)
     monkeypatch.setenv('SERVEFLOW_DEMO_SESSION_KEY_FILE', str(key))
     monkeypatch.setenv('SERVEFLOW_DEMO_ORIGINS', 'http://127.0.0.1:5173')
-    monkeypatch.setenv('ECHOMIND_ENV', 'development')
+    monkeypatch.setenv('SERVEFLOW_ENV', 'development')
     assert DemoSessionService.from_env().origins == ('http://127.0.0.1:5173',)
     assert key.read_bytes() == b'x' * 32
     key.chmod(0o644)
     with pytest.raises(DemoSessionError):
         DemoSessionService.from_env()
     key.chmod(0o600)
-    monkeypatch.setenv('ECHOMIND_ENV', 'production')
+    monkeypatch.setenv('SERVEFLOW_ENV', 'production')
     with pytest.raises(DemoSessionError, match='local_development'):
         DemoSessionService.from_env()

@@ -33,7 +33,7 @@ def isolated_no_network(monkeypatch):
     monkeypatch.setattr(socket, "create_connection", denied)
     # Test defaults rather than machine-local tuning. No dotenv is loaded.
     for key in tuple(os.environ):
-        if key.startswith(("ECHOMIND_", "SILICONFLOW_", "EVAL_JUDGE_")):
+        if key.startswith(("SERVEFLOW_", "SILICONFLOW_", "EVAL_JUDGE_")):
             monkeypatch.delenv(key)
 
 

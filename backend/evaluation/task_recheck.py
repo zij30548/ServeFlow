@@ -58,10 +58,10 @@ def data_binding():
 
 def effective_environment():
     """Freeze effective trial settings without loading unrelated dotenv values."""
-    defaults = {"ECHOMIND_INTENT_TIMEOUT_S": 8., "ECHOMIND_LLM_TIMEOUT_S": 15.,
-        "ECHOMIND_COMPOSER_TIMEOUT_S": 8., "ECHOMIND_COMPOSER_MAX_TOKENS": 1000,
-        "ECHOMIND_COMPOSER_TEMPERATURE": .1, "ECHOMIND_MONITOR_FALLBACK_PENALTY": .5,
-        "ECHOMIND_MONITOR_COOLDOWN_SECONDS": 60., "ECHOMIND_TOOL_TRACE_MAX": 200}
+    defaults = {"SERVEFLOW_INTENT_TIMEOUT_S": 8., "SERVEFLOW_LLM_TIMEOUT_S": 15.,
+        "SERVEFLOW_COMPOSER_TIMEOUT_S": 8., "SERVEFLOW_COMPOSER_MAX_TOKENS": 1000,
+        "SERVEFLOW_COMPOSER_TEMPERATURE": .1, "SERVEFLOW_MONITOR_FALLBACK_PENALTY": .5,
+        "SERVEFLOW_MONITOR_COOLDOWN_SECONDS": 60., "SERVEFLOW_TOOL_TRACE_MAX": 200}
     effective = {}
     for key, default in defaults.items():
         try:
@@ -72,7 +72,7 @@ def effective_environment():
             base._fail("task_recheck_effective_configuration")
         effective[key] = value
     for role in ("GENERAL", "TECHNICAL", "BILLING", "ESCALATION"):
-        key = "ECHOMIND_" + role + "_MODEL"
+        key = "SERVEFLOW_" + role + "_MODEL"
         value = os.environ.get(key, "").strip()
         if value:
             base._fail("task_recheck_role_model_override")

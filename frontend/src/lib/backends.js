@@ -30,7 +30,7 @@ export function createInitialSettings() {
 }
 
 export function saveSettings(settings) {
-  localStorage.setItem('echomind.frontend.settings', JSON.stringify({ ...settings, backend: 'python', pythonToken: undefined }))
+  localStorage.setItem('serveflow.frontend.settings', JSON.stringify({ ...settings, backend: 'python', pythonToken: undefined }))
 }
 
 export function backendMeta(type, settings) {
@@ -86,7 +86,7 @@ export function clearDemoAuthority(settings) {
 }
 
 export async function runEvaluation(type, settings, body = null, options = {}) {
-  const taskKey = `echomind.eval:${type}:${backendMeta(type, settings).baseUrl}:${settings.userId}`
+  const taskKey = `serveflow.eval:${type}:${backendMeta(type, settings).baseUrl}:${settings.userId}`
   const savedJob = type === 'python' ? sessionStorage.getItem(taskKey) : null
   const initial = savedJob ? {job_id: savedJob, status: 'queued', completed: 0, total: 0} : await requestFor(type, settings, '/eval/run', {
     method: 'POST',
@@ -318,7 +318,7 @@ function normalizeBaseUrl(value) {
 
 function readSettings() {
   try {
-    return JSON.parse(localStorage.getItem('echomind.frontend.settings') || '{}')
+    return JSON.parse(localStorage.getItem('serveflow.frontend.settings') || '{}')
   } catch {
     return {}
   }
@@ -326,5 +326,5 @@ function readSettings() {
 
 function runtimeConfig() {
   if (typeof window === 'undefined') return {}
-  return window.__ECHOMIND_CONFIG__ || {}
+  return window.__SERVEFLOW_CONFIG__ || {}
 }

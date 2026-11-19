@@ -225,8 +225,8 @@ async def http_memory(memory, monkeypatch):
     import api.main as api
     from agents.agent_orchestrator import AgentOrchestrator, AgentType, GeneralAgent, ResponseComposer
 
-    monkeypatch.setenv("ECHOMIND_ENV", "development")
-    monkeypatch.delenv("ECHOMIND_API_TOKENS", raising=False)
+    monkeypatch.setenv("SERVEFLOW_ENV", "development")
+    monkeypatch.delenv("SERVEFLOW_API_TOKENS", raising=False)
     payloads, control = [], {"mode": "reply"}
     entered, finish = asyncio.Event(), asyncio.Event()
 
@@ -308,7 +308,7 @@ async def test_http_idempotent_retry_has_one_original_source_event(http_memory):
 async def test_http_source_events_follow_authenticated_identity_and_conversation(http_memory, monkeypatch):
     service = http_memory
     token_a, token_b = "controlled-token-a-at-least-24-chars", "controlled-token-b-at-least-24-chars"
-    monkeypatch.setenv("ECHOMIND_API_TOKENS", json.dumps({
+    monkeypatch.setenv("SERVEFLOW_API_TOKENS", json.dumps({
         token_a: {"user_id": "bound-a", "role": "user"},
         token_b: {"user_id": "bound-b", "role": "user"},
     }))

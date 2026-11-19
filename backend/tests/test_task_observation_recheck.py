@@ -32,7 +32,7 @@ def isolated(monkeypatch):
     monkeypatch.setattr(socket.socket, "connect_ex", denied)
     monkeypatch.setattr(socket, "create_connection", denied)
     for key in tuple(os.environ):
-        if key.startswith("ECHOMIND_"):
+        if key.startswith("SERVEFLOW_"):
             monkeypatch.delenv(key)
     monkeypatch.setenv("INTENT_EMBEDDING_PROVIDER", "local")
     monkeypatch.setenv("ORT_DISABLE_TELEMETRY", "1")
@@ -95,7 +95,7 @@ def test_new_version_freezes_same_business_questions_parameters_and_rubric_with_
     assert p["limits"] == business.LIMITS and p["plan"] == business.fixed_plan()
     assert p["cases_sha256"] == canonical_payload_hash({"cases": business.cases()})
     assert p["http_limits"] == business.engine.HTTP_LIMITS
-    assert p["effective_environment"]["ECHOMIND_LLM_TIMEOUT_S"] == 15
+    assert p["effective_environment"]["SERVEFLOW_LLM_TIMEOUT_S"] == 15
     assert p["review_policy"] == business.REVIEW_POLICY
     assert p["policy"] == {**business.POLICY, "observation": module.OBSERVATION_POLICY}
     assert len(p["initial_intent_requests"]) == 12 and sum(len(v["turn_ids"]) for v in p["plan"]) == 13

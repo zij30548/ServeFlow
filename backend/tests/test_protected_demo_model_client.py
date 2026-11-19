@@ -27,7 +27,7 @@ def offline(monkeypatch):
 @pytest.fixture
 def configured(tmp_path, monkeypatch):
     path = tmp_path.resolve() / "permits"
-    monkeypatch.setenv("ECHOMIND_ENV", "protected-demo")
+    monkeypatch.setenv("SERVEFLOW_ENV", "protected-demo")
     monkeypatch.setenv("ANTHROPIC_MODEL", q.MODEL)
     monkeypatch.setenv("ANTHROPIC_BASE_URL", BASE)
     monkeypatch.setenv("SERVEFLOW_DEMO_QUOTA_DIR", str(path))
@@ -46,7 +46,7 @@ def test_nonprotected_factory_transparently_preserves_original_sdk(monkeypatch):
     calls = []
     def original(*args, **kwargs): calls.append((args, kwargs));return "original SDK"
     monkeypatch.setattr(m.anthropic, "AsyncAnthropic", original)
-    monkeypatch.setenv("ECHOMIND_ENV", "development")
+    monkeypatch.setenv("SERVEFLOW_ENV", "development")
     assert m.AsyncAnthropic("a", api_key="not-real", base_url="http://controlled.invalid", max_retries=2) == "original SDK"
     assert calls == [(("a",), {"api_key": "not-real", "base_url": "http://controlled.invalid", "max_retries": 2})]
 
@@ -54,7 +54,7 @@ def test_nonprotected_factory_transparently_preserves_original_sdk(monkeypatch):
 def test_unsupported_platform_blocks_only_the_opt_in_quota(tmp_path, monkeypatch):
     monkeypatch.setattr(q,"fcntl",None)
     with pytest.raises(q.ProtectedDemoQuotaError):q.QuotaStore(tmp_path.resolve()/"new",3)
-    monkeypatch.setenv("ECHOMIND_ENV","development")
+    monkeypatch.setenv("SERVEFLOW_ENV","development")
     monkeypatch.setattr(m.anthropic,"AsyncAnthropic",lambda **kwargs:kwargs)
     assert m.AsyncAnthropic(api_key="ordinary") == {"api_key":"ordinary"}
 

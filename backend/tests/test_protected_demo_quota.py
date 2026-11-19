@@ -22,7 +22,7 @@ def offline(monkeypatch):
     monkeypatch.setattr(socket.socket, "connect", denied)
     monkeypatch.setattr(socket.socket, "connect_ex", denied)
     monkeypatch.setattr(socket, "create_connection", denied)
-    monkeypatch.setenv("ECHOMIND_ENV", "protected-demo")
+    monkeypatch.setenv("SERVEFLOW_ENV", "protected-demo")
 
 
 @pytest.fixture

@@ -13,8 +13,8 @@ from demo_business.store import DemoStoreError
 
 @pytest.fixture
 def demo(monkeypatch):
-    monkeypatch.setenv('ECHOMIND_ENV', 'development')
-    monkeypatch.setenv('ECHOMIND_API_TOKENS', '')
+    monkeypatch.setenv('SERVEFLOW_ENV', 'development')
+    monkeypatch.setenv('SERVEFLOW_API_TOKENS', '')
     store = SimpleNamespace(
         list_sample_orders=lambda customer: [{'order_id': 'DEMO-1001', 'scenario': '合成拆单订单'}],
         read_order=AsyncMock(return_value={'source': 'serveflow-mysql-demo-v1', 'is_demo': True,
@@ -63,7 +63,7 @@ async def test_wrong_origin_and_store_failure_are_safe(demo):
 
 @pytest.mark.asyncio
 async def test_demo_disabled_keeps_original_routes_compatible(monkeypatch):
-    monkeypatch.setenv('ECHOMIND_API_TOKENS', '')
+    monkeypatch.setenv('SERVEFLOW_API_TOKENS', '')
     monkeypatch.setattr(main, '_demo_store', None)
     monkeypatch.setattr(main, '_demo_sessions', None)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url='http://127.0.0.1:8816') as client:

@@ -37,7 +37,7 @@ def offline(monkeypatch):
     monkeypatch.setattr(socket, "create_connection", denied)
     monkeypatch.setattr(socket, "getaddrinfo", denied)
     for name in tuple(os.environ):
-        if name.startswith(("ANTHROPIC_", "ECHOMIND_", "SILICONFLOW_", "EVAL_JUDGE_", "SERVEFLOW_")):
+        if name.startswith(("ANTHROPIC_", "SERVEFLOW_", "SILICONFLOW_", "EVAL_JUDGE_", "SERVEFLOW_")):
             monkeypatch.delenv(name)
     monkeypatch.setattr(original.task_data, "build_live_data", denied)
     monkeypatch.setattr(original.engine, "_mysql_url", denied)

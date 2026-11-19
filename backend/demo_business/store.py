@@ -42,7 +42,7 @@ TABLE_COLUMNS = {
 def _allowed_hosts():
     # A fixed Compose service name is permitted only by the explicit perimeter
     # mode. Ordinary local/production callers retain the original loopback set.
-    return {"127.0.0.1", "localhost", "mysql"} if os.getenv("ECHOMIND_ENV", "development").lower() == "protected-demo" else {"127.0.0.1", "localhost"}
+    return {"127.0.0.1", "localhost", "mysql"} if os.getenv("SERVEFLOW_ENV", "development").lower() == "protected-demo" else {"127.0.0.1", "localhost"}
 
 
 TABLE_PREFIX = "sf_demo_"

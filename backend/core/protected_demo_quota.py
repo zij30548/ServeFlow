@@ -73,7 +73,7 @@ _REQUEST: ContextVar[RequestQuotaState | None] = ContextVar("protected_demo_mode
 
 
 def enabled():
-    return os.getenv("ECHOMIND_ENV", "development").lower() == "protected-demo"
+    return os.getenv("SERVEFLOW_ENV", "development").lower() == "protected-demo"
 
 
 @contextmanager

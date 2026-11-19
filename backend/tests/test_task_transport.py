@@ -445,7 +445,7 @@ def test_real_sdk_transport_and_orchestrator_are_connected(tmp_path, monkeypatch
     from test_task_runtime import ControlledSDK, ControlledData, case
     from evaluation.task_runtime import execute_case
     for key in tuple(__import__("os").environ):
-        if key.startswith(("ECHOMIND_", "SILICONFLOW_", "EVAL_JUDGE_")):
+        if key.startswith(("SERVEFLOW_", "SILICONFLOW_", "EVAL_JUDGE_")):
             monkeypatch.delenv(key)
     async def run():
         root = tmp_path / "integrated"; root.mkdir(mode=0o700)
@@ -583,7 +583,7 @@ def test_real_sdk_native_capture_fault_spends_only_initial_two_requests(tmp_path
     from evaluation.task_evidence import EvidenceError
     from evaluation.task_runtime import execute_case
     for key in tuple(__import__('os').environ):
-        if key.startswith(('ECHOMIND_','SILICONFLOW_','EVAL_JUDGE_')): monkeypatch.delenv(key)
+        if key.startswith(('SERVEFLOW_','SILICONFLOW_','EVAL_JUDGE_')): monkeypatch.delenv(key)
     class NonJSONData(ControlledData):
         async def order_reader(self, customer, order):
             value=await super().order_reader(customer,order)

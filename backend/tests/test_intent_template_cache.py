@@ -24,7 +24,7 @@ def offline(monkeypatch, tmp_path):
     monkeypatch.setattr(socket.socket, 'connect', deny)
     monkeypatch.setattr(socket.socket, 'connect_ex', deny)
     monkeypatch.setattr(socket, 'create_connection', deny)
-    monkeypatch.setenv('ECHOMIND_ENV', 'development')
+    monkeypatch.setenv('SERVEFLOW_ENV', 'development')
     monkeypatch.setenv('INTENT_EMBEDDING_PROVIDER', 'qwen')
     monkeypatch.setenv('QWEN_EMBEDDING_BASE_URL', BASE)
     monkeypatch.setenv('QWEN_EMBEDDING_API_KEY', KEY)

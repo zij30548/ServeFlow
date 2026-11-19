@@ -520,7 +520,7 @@ async def execute_task(case, arm, sdk, data, *, ensure_healthy, frame_case_id):
             "data_kind": DATA_KIND, "data_source_files": snapshot["source_files"],
             "order_data_mode": "controlled-order-fixture; no MySQL connection",
             "execution_scope": "single-turn production Orchestrator; supplied scripted history; no HTTP or Redis",
-            "arm_comparison": "A autonomous/free order text versus D fresh-read/typed protection on shared current safety foundations; not original EchoMind",
+            "arm_comparison": "A autonomous/free order text versus D fresh-read/typed protection on shared current safety foundations; not the original upstream version",
             "turns": [{"turn_id": "turn-1", "question": inp["message"], "history": inp["history"],
                        "request_id": request.request_id, "result": output, "tool_evidence": observed}],
             "answer": actual.response, "execution_status": actual.status,

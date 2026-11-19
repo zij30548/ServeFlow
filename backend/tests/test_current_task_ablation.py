@@ -35,7 +35,7 @@ def no_services(monkeypatch):
     monkeypatch.setattr(socket, "create_connection", denied)
     monkeypatch.setattr(socket, "getaddrinfo", denied)
     for key in tuple(os.environ):
-        if key.startswith(("ECHOMIND_", "SILICONFLOW_", "EVAL_JUDGE_")):
+        if key.startswith(("SERVEFLOW_", "SILICONFLOW_", "EVAL_JUDGE_")):
             monkeypatch.delenv(key)
 
 

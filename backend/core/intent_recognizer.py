@@ -303,7 +303,7 @@ class IntentRecognizer:
                 temperature=0.1,
                 messages=[{"role": "user", "content": prompt}],
                 **nonthinking_options(self.client, self.model),
-            ), timeout_s=max(0.1, float(os.getenv("ECHOMIND_INTENT_TIMEOUT_S", "8"))))
+            ), timeout_s=max(0.1, float(os.getenv("SERVEFLOW_INTENT_TIMEOUT_S", "8"))))
             phase = "intent.parse"
             raw = extract_text_content(resp.content)
             s, e = raw.find("{"), raw.rfind("}") + 1
