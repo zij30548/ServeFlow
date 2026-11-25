@@ -1,6 +1,6 @@
 # 智应客服协同系统
 
-面向复杂客服任务的多Agent协作系统。用户通过对话咨询，系统识别诉求、选择处理角色，按需查阅政策或读取业务工具，并展示处理结果。前端只有**对话**与**监控**两个工作界面。
+面向复杂客服任务的多Agent协作系统。用户通过对话咨询，系统识别诉求、选择处理角色，按需查阅政策或读取业务工具，并展示处理结果。网页版提供**对话**与**监控**。Qt/C++ 桌面坐席端提供对话、会话切换和会话内草稿。
 
 当前项目已替换原TripPilot旅行应用。它是客服开发／演示项目。[受保护客户演示部署](#受保护客户演示部署)已完成服务端运行、HTTPS、访问密码及新站证书续期验证，不开放真实商家交易或公众注册；浏览器界面和云端真实模型对话仍待确认，不能直接当作公开生产系统。
 
@@ -38,6 +38,7 @@ backend/
   knowledge/       合成演示政策
   demo_business/   可选MySQL演示
   tests/
+desktop/           Qt 6 / C++17 桌面坐席端（Qt Quick、Qt Network、Qt Test）
 frontend/
   src/             Vue界面
   tests/
@@ -92,6 +93,25 @@ npm run dev
 打开 **http://127.0.0.1:5173/**。浏览器通过同源`/api/python`访问后端；开发代理默认指向回环8816。如需更改，使用可信服务端变量`SERVEFLOW_BACKEND_ORIGIN`，不要把密钥写入前端变量或运行时配置。
 
 选择快捷问题只填写输入框，主动发送才进入模型链路。分类、Agent、检索改写／重排和后台记忆都可能产生模型费用。本地开发模式没有产品级硬额度；下面的受保护演示模式另有持久发送许可上限，不能把它当作通用生产计费系统。
+
+### 原生桌面坐席端（Qt/C++）
+
+需要 CMake 3.21+、C++17 编译器及 Qt 6.5+ SDK，包含 Qt Quick、Quick Controls 2、Network 和 Test。`CMAKE_PREFIX_PATH` 指向本机 Qt kit，示例使用 macOS。本机 Qt 6.8.3 链接 AGL，以下命令选择已安装的 macOS 15.4 SDK。其他 Qt kit 请使用与其兼容的 SDK。Qt 应用和网页共用现有 FastAPI 服务。
+
+```sh
+cmake -S desktop -B build/desktop -DCMAKE_PREFIX_PATH="$HOME/.local/share/serveflow-sdk/6.8.3/macos" \
+  -DCMAKE_OSX_SYSROOT="$(xcrun --sdk macosx15.4 --show-sdk-path)" -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build build/desktop --config Release --parallel 4
+ctest --test-dir build/desktop -C Release --output-on-failure
+open build/desktop/ServeFlow.app
+```
+
+桌面端默认连接 `https://serveflow.zijinglab.com`，输入已有的受邀演示账号和访问密码。使用自管网关时，可从命令行传入 `--origin https://你的域名`。请使用受保护的 HTTPS 网关，模型密钥和服务端令牌始终由后端配置。程序启动及输入草稿均不发送聊天请求，主动发送使用服务端现有额度。
+
+可以在 A 中提交消息后切到 B 编辑草稿，A 收到回复后在会话列表提示未读。每个回包按会话和操作 ID 归属。取消会停止客户端等待，服务端可能已经收到请求。当前会话、草稿及访问凭据仅在本次运行的内存中保留，退出后清除。
+
+若已安装现有后端开发依赖，可在上面的配置命令中追加 `-DSERVEFLOW_BACKEND_PYTHON="$PWD/backend/.venv/bin/python"`，构建后再运行 CTest。此时会额外启动原生窗口及临时回环服务。窗口登录后在会话 A 查询 `DEMO-1001` 的物流状态，切到 B 写草稿，待 A 收到回复后返回 A 核对结果，再询问配送政策。实际经过 FastAPI 会话、CSRF、订单 Workflow 和政策 Agent 的工具处理。分类、模型选工具及检索结果为受控输入，订单来自合成样本，测试状态在内存中。公网网关凭据和模型额度均不参与。Windows 分发包及跨启动草稿恢复属于后续工作。
 
 ### 可选千问意图Embedding
 

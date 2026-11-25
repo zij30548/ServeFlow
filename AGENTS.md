@@ -4,7 +4,8 @@ Read README.md before changing the application. ServeFlow is a customer-service
 assistant with dialogue and monitoring surfaces. The former TripPilot application
 is retired from this working tree; do not restore its planner or legacy UI.
 
-- Backend: Python 3.12, FastAPI, `backend/`. Frontend: Vue/Vite, `frontend/`.
+- Backend: Python 3.12, FastAPI, `backend/`. Web: Vue/Vite, `frontend/`.
+- Desktop: C++17 / Qt 6 Quick and Network, `desktop/`. Build out of source and run CTest. Native UI tests use the loopback fixture.
 - Keep role routing, tool permissions, native tool feedback, strict contracts,
   cancellation, operation IDs, session isolation and bounded execution intact.
 - Treat policy documents as reference material, business tools as record sources,

@@ -38,3 +38,6 @@ playwright-report/
 .DS_Store
 .idea/
 .vscode/
+
+# Out-of-source native builds
+/build/desktop/
